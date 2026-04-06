@@ -1,0 +1,29 @@
+{
+  "name": "eternal-legacy",
+  "version": "1.0.0",
+  "description": "Proyecto \"Eternal Legacy\" (nombre provisional) del cliente: Marco Antonio Gallegos Mora",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wnvp-softwares/eternal-legacy.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/wnvp-softwares/eternal-legacy/issues"
+  },
+  "homepage": "https://github.com/wnvp-softwares/eternal-legacy#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "multer": "^2.1.1",
+    "mysql2": "^3.20.0",
+    "sequelize": "^6.37.8"
+  }
+}
