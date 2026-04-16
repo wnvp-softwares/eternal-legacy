@@ -1,4 +1,4 @@
-const { Mensajeria } = require('../../models');
+const { Mensajeria } = require('../../models/index.model');
 
 const enviarMensaje = async (req, res) => {
     try {

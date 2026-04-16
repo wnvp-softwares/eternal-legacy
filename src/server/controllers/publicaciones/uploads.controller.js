@@ -1,4 +1,4 @@
-const { Upload } = require('../../models');
+const { Upload } = require('../../models/index.model');
 
 const subirArchivo = async (req, res) => {
     try {

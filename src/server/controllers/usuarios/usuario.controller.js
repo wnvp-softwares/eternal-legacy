@@ -1,4 +1,4 @@
-const { Usuario, InformacionPerfil, Arbol } = require('../../models');
+const { Usuario, InformacionPerfil, Arbol } = require('../../models/index.model');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -6,10 +6,10 @@ const crearUsuario = async (req, res) => {
     try {
         const { nombreUsuario, email, contrasena } = req.body;
 
-        const usuarioExistente = await Usuario.findOne({ 
-            $or: [{ email: email }, { nombreUsuario: nombreUsuario }] 
+        const usuarioExistente = await Usuario.findOne({
+            $or: [{ email: email }, { nombreUsuario: nombreUsuario }]
         });
-        
+
         if (usuarioExistente) {
             return res.status(400).json({ mensaje: 'Error: El usuario o correo ya existen.' });
         }
@@ -22,8 +22,8 @@ const crearUsuario = async (req, res) => {
             email,
             contrasena: contrasenaEncriptada
         });
-        
-        await nuevoUsuario.save(); 
+
+        await nuevoUsuario.save();
 
         const nuevoPerfil = new InformacionPerfil({
             biografia: "¡Hola! Soy nuevo en Eternal Legacy."
@@ -31,7 +31,7 @@ const crearUsuario = async (req, res) => {
         await nuevoPerfil.save();
 
         const nuevoArbol = new Arbol({
-            usuario: nuevoUsuario._id, 
+            usuario: nuevoUsuario._id,
             descripcion: `Árbol principal de ${nombreUsuario}`,
             privacidad: 'Privado'
         });
@@ -39,7 +39,7 @@ const crearUsuario = async (req, res) => {
 
         nuevoUsuario.informacionPerfil = nuevoPerfil._id;
         nuevoUsuario.arbolPertenencia = nuevoArbol._id;
-        await nuevoUsuario.save(); 
+        await nuevoUsuario.save();
 
         res.status(201).json({
             mensaje: '¡Usuario, Perfil y Árbol creados y conectados con éxito!',
@@ -75,8 +75,8 @@ const loginUsuario = async (req, res) => {
 
         // 3. Generar el Token (Gafete VIP)
         const token = jwt.sign(
-            { id: usuario._id }, 
-            process.env.JWT_SECRET, 
+            { id: usuario._id },
+            process.env.JWT_SECRET,
             { expiresIn: '30d' } // El token durará 30 días
         );
 
@@ -87,7 +87,7 @@ const loginUsuario = async (req, res) => {
                 nombreUsuario: usuario.nombreUsuario,
                 email: usuario.email
             },
-            token: token 
+            token: token
         });
 
     } catch (error) {
@@ -103,8 +103,8 @@ const actualizarFotoPerfil = async (req, res) => {
         const usuarioActualizado = await Usuario.findByIdAndUpdate(
             req.usuario.id,
             { imagenPerfil: uploadId },
-            { new: true } 
-        ).populate('imagenPerfil'); 
+            { new: true }
+        ).populate('imagenPerfil');
 
         res.status(200).json({
             mensaje: '¡Foto de perfil actualizada con éxito!',
@@ -119,5 +119,5 @@ const actualizarFotoPerfil = async (req, res) => {
 module.exports = {
     crearUsuario,
     loginUsuario,
-    actualizarFotoPerfil 
+    actualizarFotoPerfil
 };

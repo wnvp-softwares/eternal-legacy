@@ -1,4 +1,4 @@
-const { Hilo, Arbol, Nodo } = require('../../models');
+const { Hilo, Arbol, Nodo } = require('../../models/index.model');
 
 const crearHilo = async (req, res) => {
     try {

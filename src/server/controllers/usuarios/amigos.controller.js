@@ -1,4 +1,4 @@
-const { Amigo } = require('../../models');
+const { Amigo } = require('../../models/index.model');
 
 const enviarSolicitudAmistad = async (req, res) => {
     try {

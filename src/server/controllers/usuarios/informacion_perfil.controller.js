@@ -1,4 +1,4 @@
-const { Usuario, InformacionPerfil } = require('../../models');
+const { Usuario, InformacionPerfil } = require('../../models/index.model');
 
 // 1. Ver mi propio perfil
 const obtenerMiPerfil = async (req, res) => {
@@ -27,16 +27,16 @@ const actualizarMiPerfil = async (req, res) => {
     try {
         // Buscamos al usuario para saber cuál es el ID de su perfil
         const usuario = await Usuario.findById(req.usuario.id);
-        
+
         // Extraemos los datos que el usuario quiere actualizar desde el Body (Postman/Flutter)
         const { biografia, genero, ubicacionActual, ocupacionEducacion } = req.body;
 
         // Actualizamos el documento en la colección de InformacionPerfil
         // { new: true } le dice a Mongoose que nos devuelva el perfil ya actualizado
         const perfilActualizado = await InformacionPerfil.findByIdAndUpdate(
-            usuario.informacionPerfil, 
+            usuario.informacionPerfil,
             { biografia, genero, ubicacionActual, ocupacionEducacion },
-            { new: true } 
+            { new: true }
         );
 
         res.status(200).json({

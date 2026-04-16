@@ -1,4 +1,4 @@
-const { Publicacion } = require('../../models');
+const { Publicacion } = require('../../models/index.model');
 
 const crearPublicacion = async (req, res) => {
     try {
@@ -21,7 +21,7 @@ const obtenerPublicaciones = async (req, res) => {
         // .populate() nos trae el nombre del autor en lugar de solo su ID
         const publicaciones = await Publicacion.find()
             .sort({ createdAt: -1 })
-            .populate('autor', 'nombreUsuario'); 
+            .populate('autor', 'nombreUsuario');
         res.status(200).json(publicaciones);
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al obtener publicaciones' });

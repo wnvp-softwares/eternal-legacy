@@ -1,4 +1,4 @@
-const { Nodo, Usuario } = require('../../models');
+const { Nodo, Usuario } = require('../../models/index.model');
 
 const crearNodo = async (req, res) => {
     try {
@@ -34,7 +34,7 @@ const crearNodo = async (req, res) => {
 const obtenerMisNodos = async (req, res) => {
     try {
         const usuario = await Usuario.findById(req.usuario.id);
-        
+
         // Buscamos todos los nodos que pertenezcan a mi árbol
         // .sort({ createdAt: -1 }) los ordena del más nuevo al más viejo
         const nodos = await Nodo.find({ arbolPadre: usuario.arbolPertenencia }).sort({ createdAt: -1 });
