@@ -1,4 +1,4 @@
-const { Notificacion } = require('../../models');
+const { Notificacion } = require('../../models/index.model');
 
 // Función interna para crear notificaciones (no se suele llamar desde una ruta directa, pero la hacemos para pruebas)
 const crearNotificacionInterna = async (req, res) => {

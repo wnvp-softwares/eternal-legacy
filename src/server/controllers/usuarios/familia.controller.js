@@ -1,4 +1,4 @@
-const { Familia } = require('../../models');
+const { Familia } = require('../../models/index.model');
 
 const agregarFamiliar = async (req, res) => {
     try {

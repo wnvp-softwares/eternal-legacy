@@ -1,4 +1,4 @@
-const { Usuario, InformacionPerfil, Arbol } = require('../../models');
+const { Usuario, InformacionPerfil, Arbol } = require('../../models/index.model');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const enviarCodigoVerificacion = require('../../middlewares/mailer');
@@ -7,10 +7,10 @@ const crearUsuario = async (req, res) => {
     try {
         const { nombreUsuario, email, contrasena } = req.body;
 
-        const usuarioExistente = await Usuario.findOne({ 
-            $or: [{ email: email }, { nombreUsuario: nombreUsuario }] 
+        const usuarioExistente = await Usuario.findOne({
+            $or: [{ email: email }, { nombreUsuario: nombreUsuario }]
         });
-        
+
         if (usuarioExistente) {
             return res.status(400).json({ mensaje: 'Error: El usuario o correo ya existen.' });
         }
@@ -27,14 +27,14 @@ const crearUsuario = async (req, res) => {
             verificationCode: codigo, // Guardamos código
             isVerified: false        // No verificado por defecto
         });
-        
-        await nuevoUsuario.save(); 
+
+        await nuevoUsuario.save();
 
         // Lógica de perfil y árbol (la mantienes igual)
         const nuevoPerfil = new InformacionPerfil({ biografia: "¡Hola! Soy nuevo en Eternal Legacy." });
         await nuevoPerfil.save();
         const nuevoArbol = new Arbol({
-            usuario: nuevoUsuario._id, 
+            usuario: nuevoUsuario._id,
             descripcion: `Árbol principal de ${nombreUsuario}`,
             privacidad: 'Privado'
         });
@@ -43,9 +43,6 @@ const crearUsuario = async (req, res) => {
         nuevoUsuario.informacionPerfil = nuevoPerfil._id;
         nuevoUsuario.arbolPertenencia = nuevoArbol._id;
         await nuevoUsuario.save(); 
-
-        // ENVIAR EMAIL
-        await enviarCodigoVerificacion(email, codigo);
 
         res.status(201).json({
             mensaje: 'Usuario creado. Revisa tu correo para el código de confirmación.',
@@ -90,11 +87,27 @@ const loginUsuario = async (req, res) => {
         }
 
         const contrasenaValida = await bcrypt.compare(contrasena, usuario.contrasena);
-        if (!contrasenaValida) return res.status(400).json({ mensaje: 'Credenciales inválidas' });
+        if (!contrasenaValida) {
+            return res.status(400).json({ mensaje: 'Credenciales inválidas (Contraseña incorrecta)' });
+        }
 
-        const token = jwt.sign({ id: usuario._id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+        // 3. Generar el Token (Gafete VIP)
+        const token = jwt.sign(
+            { id: usuario._id }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: '30d' } // El token durará 30 días
+        );
 
-        res.status(200).json({ mensaje: 'Login exitoso', token });
+        res.status(200).json({
+            mensaje: 'Inicio de sesión exitoso',
+            usuario: {
+                id: usuario._id,
+                nombreUsuario: usuario.nombreUsuario,
+                email: usuario.email
+            },
+            token: token 
+        });
+
     } catch (error) {
         res.status(500).json({ mensaje: 'Error en login' });
     }
@@ -107,8 +120,8 @@ const actualizarFotoPerfil = async (req, res) => {
         const usuarioActualizado = await Usuario.findByIdAndUpdate(
             req.usuario.id,
             { imagenPerfil: uploadId },
-            { new: true } 
-        ).populate('imagenPerfil'); 
+            { new: true }
+        ).populate('imagenPerfil');
 
         res.status(200).json({
             mensaje: '¡Foto de perfil actualizada con éxito!',
@@ -123,6 +136,5 @@ const actualizarFotoPerfil = async (req, res) => {
 module.exports = {
     crearUsuario,
     loginUsuario,
-    actualizarFotoPerfil,
-    verificarCodigo
+    actualizarFotoPerfil 
 };

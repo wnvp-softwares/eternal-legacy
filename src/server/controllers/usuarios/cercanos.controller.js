@@ -1,4 +1,4 @@
-const { Cercano } = require('../../models');
+const { Cercano } = require('../../models/index.model');
 
 const agregarCercano = async (req, res) => {
     try {

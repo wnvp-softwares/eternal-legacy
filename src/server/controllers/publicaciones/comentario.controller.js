@@ -1,9 +1,9 @@
-const { Comentario, Publicacion } = require('../../models');
+const { Comentario, Publicacion } = require('../../models/index.model');
 
 const crearComentario = async (req, res) => {
     try {
         const { publicacionId, texto } = req.body;
-        
+
         // Verificamos que la publicación exista
         const publicacion = await Publicacion.findById(publicacionId);
         if (!publicacion) {

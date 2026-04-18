@@ -1,4 +1,4 @@
-const { Seguidor } = require('../../models');
+const { Seguidor } = require('../../models/index.model');
 
 const seguirUsuario = async (req, res) => {
     try {
