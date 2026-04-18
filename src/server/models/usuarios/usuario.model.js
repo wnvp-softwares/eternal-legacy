@@ -15,6 +15,15 @@ const usuarioSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    // --- CAMPOS NUEVOS PARA VERIFICACIÓN ---
+    verificationCode: {
+        type: String
+    },
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    // ---------------------------------------
     imagenPerfil: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Upload'
