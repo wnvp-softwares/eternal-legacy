@@ -43,6 +43,7 @@ const crearUsuario = async (req, res) => {
         nuevoUsuario.informacionPerfil = nuevoPerfil._id;
         nuevoUsuario.arbolPertenencia = nuevoArbol._id;
         await nuevoUsuario.save(); 
+        await enviarCodigoVerificacion(email, codigo);
 
         res.status(201).json({
             mensaje: 'Usuario creado. Revisa tu correo para el código de confirmación.',
@@ -136,5 +137,6 @@ const actualizarFotoPerfil = async (req, res) => {
 module.exports = {
     crearUsuario,
     loginUsuario,
-    actualizarFotoPerfil 
+    actualizarFotoPerfil,
+    verificarCodigo
 };
