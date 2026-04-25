@@ -1,0 +1,268 @@
+/* =========================================
+   DISEÑO DE PERFIL Y ETIQUETAS (HIGHLIGHTS)
+   ========================================= */
+.max-w-custom {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* Portada y Cabecera */
+.cabecera-perfil {
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.portada-perfil {
+    width: 100%;
+    height: 250px;
+    object-fit: cover;
+    background-position: center;
+    background-color: #e2e8f0;
+    position: relative;
+}
+
+.portada-contenedor {
+    position: relative;
+}
+
+.boton-editar-portada {
+    position: absolute;
+    bottom: 15px;
+    right: 20px;
+    background-color: rgba(255, 255, 255, 0.9);
+    color: #0D1B2A;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.boton-editar-portada:hover {
+    background-color: white;
+}
+
+/* Info del Usuario */
+.info-usuario-container {
+    padding: 0 24px 0px 24px;
+}
+
+.fila-superior-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: -60px; /* Sube la foto hacia la portada */
+    margin-bottom: 15px;
+    
+    /* --- MAGIA AQUÍ: Obligamos a la foto a renderizarse por encima de la portada --- */
+    position: relative;
+    z-index: 2; 
+}
+
+.foto-perfil-grande {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    border: 4px solid var(--fondo-tarjeta);
+    object-fit: cover;
+    background-color: white;
+}
+
+.boton-editar-perfil {
+    background-color: #0D1B2A;
+    color: white;
+    border: none;
+    padding: 8px 24px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.boton-editar-perfil:hover {
+    background-color: #1a2d42;
+}
+
+.nombre-perfil {
+    font-size: 1.8rem;
+    margin: 0;
+    color: var(--texto-principal);
+}
+
+.usuario-tag {
+    color: var(--texto-secundario);
+    margin: 0 0 15px 0;
+    font-size: 0.95rem;
+}
+
+.bio-perfil {
+    color: var(--texto-principal);
+    font-size: 0.95rem;
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.datos-extra-perfil {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    color: var(--texto-secundario);
+    font-size: 0.85rem;
+    margin-bottom: 10px; /* Reducido para quitar espacio en blanco */
+}
+
+.contenedor-etiquetas {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+    /* Agregamos padding-top 10px para que el scale(1.05) no corte la burbuja hacia arriba */
+    padding: 10px 5px 5px 5px; 
+    margin-bottom: 5px; /* Reducido para quitar espacio en blanco */
+}
+
+.datos-extra-perfil i {
+    color: var(--dorado);
+    margin-right: 5px;
+}
+
+/* =========================================
+   NUEVO: ETIQUETAS DESTACADAS (HIGHLIGHTS)
+   ========================================= */
+.contenedor-etiquetas {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.contenedor-etiquetas::-webkit-scrollbar {
+    height: 4px;
+}
+
+.contenedor-etiquetas::-webkit-scrollbar-thumb {
+    background-color: var(--borde-color);
+    border-radius: 4px;
+}
+
+.etiqueta-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    min-width: 75px;
+}
+
+.burbuja-etiqueta {
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    border: 2px solid var(--borde-color);
+    padding: 3px;
+    transition: transform 0.2s, border-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+/* Efecto al seleccionar o pasar el mouse */
+.burbuja-etiqueta:hover, .etiqueta-item.activo .burbuja-etiqueta {
+    transform: scale(1.05);
+    border-color: var(--dorado);
+}
+
+.burbuja-etiqueta img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* La burbuja para crear una nueva etiqueta */
+.burbuja-crear {
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+    font-size: 1.5rem;
+}
+
+.etiqueta-item:hover .burbuja-crear {
+    color: var(--dorado);
+}
+
+.etiqueta-item.activo .nombre-etiqueta {
+    font-weight: 700;
+    color: var(--dorado-oscuro);
+}
+
+.nombre-etiqueta {
+    font-size: 0.75rem;
+    color: var(--texto-principal);
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 75px;
+}
+
+/* =========================================
+   PESTAÑAS (TABS) INFERIORES
+   ========================================= */
+.tabs-perfil {
+    display: flex;
+    border-bottom: 1px solid var(--borde-color);
+    padding: 0 24px;
+}
+
+.tab-perfil {
+    background: none;
+    border: none;
+    padding: 16px 20px;
+    color: var(--texto-secundario);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: color 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.tab-perfil:hover {
+    color: var(--texto-principal);
+}
+
+.tab-perfil.activo {
+    color: var(--dorado);
+    border-bottom-color: var(--dorado);
+}
+
+/* Tarjeta de Publicación */
+.tarjeta-post {
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+/* Responsividad para móviles */
+@media (max-width: 576px) {
+    .fila-superior-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    .boton-editar-perfil {
+        width: 100%;
+    }
+    .tabs-perfil {
+        padding: 0 10px;
+        overflow-x: auto;
+    }
+}

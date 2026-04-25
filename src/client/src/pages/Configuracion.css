@@ -1,0 +1,204 @@
+/* =========================================
+   DISEÑO DE VENTANA DE CONFIGURACIÓN
+   ========================================= */
+.max-w-custom {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.titulo-configuracion {
+    color: var(--texto-principal);
+    margin-bottom: 24px;
+}
+
+.layout-configuracion {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* En tablets y PC, lo dividimos en dos columnas */
+@media (min-width: 768px) {
+    .layout-configuracion {
+        flex-direction: row;
+    }
+}
+
+/* --- MENÚ LATERAL (O SUPERIOR EN MÓVIL) --- */
+.menu-configuracion {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 10px;
+    
+    /* --- CORRECCIÓN CLAVE --- 
+       Evita que el menú empuje la pantalla hacia la derecha en celulares */
+    max-width: calc(100vw - 2rem); 
+}
+
+/* Estilizamos la barra de scroll para móviles */
+.menu-configuracion::-webkit-scrollbar {
+    height: 4px;
+}
+.menu-configuracion::-webkit-scrollbar-thumb {
+    background-color: var(--borde-color);
+    border-radius: 4px;
+}
+
+/* En PC el menú es vertical */
+@media (min-width: 768px) {
+    .menu-configuracion {
+        flex-direction: column;
+        width: 250px;
+        min-width: 250px;
+        overflow-x: visible;
+        padding-bottom: 0;
+        max-width: none; /* Quitamos el límite en PC */
+    }
+}
+
+.item-configuracion {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: none;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 12px;
+    color: var(--texto-secundario);
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    white-space: nowrap; 
+    text-align: left;
+}
+
+.item-configuracion:hover {
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+}
+
+.item-configuracion.activo {
+    background-color: #0D1B2A; 
+    color: white;
+    font-weight: 600;
+}
+
+/* --- PANEL DE CONTENIDO (Derecha) --- */
+.panel-configuracion {
+    flex-grow: 1;
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    padding: 30px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    /* CRÍTICO: Asegura que el panel nunca se desborde */
+    max-width: 100%; 
+    overflow: hidden;
+}
+
+.titulo-panel {
+    color: var(--texto-principal);
+    margin-bottom: 24px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--borde-color);
+    padding-bottom: 15px;
+}
+
+/* Formularios y Controles */
+.grupo-form {
+    margin-bottom: 20px;
+}
+
+.label-form {
+    display: block;
+    color: var(--texto-secundario);
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.input-config {
+    width: 100%;
+    background-color: var(--fondo-app);
+    border: 1px solid var(--borde-color);
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: var(--texto-principal);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.input-config:focus {
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 2px rgba(203, 161, 53, 0.15);
+}
+
+textarea.input-config {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.boton-guardar {
+    background-color: #0D1B2A;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: background-color 0.2s, transform 0.2s;
+    margin-top: 10px;
+}
+
+.boton-guardar:hover {
+    background-color: #1a2d42;
+    transform: translateY(-2px);
+}
+
+/* Opciones tipo Interruptor (Switches) */
+.form-check-input:checked {
+    background-color: var(--dorado);
+    border-color: var(--dorado);
+}
+
+.opcion-switch {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--borde-color);
+}
+
+.opcion-switch:last-child {
+    border-bottom: none;
+}
+
+.opcion-textos h6 {
+    margin: 0 0 4px 0;
+    color: var(--texto-principal);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.opcion-textos p {
+    margin: 0;
+    color: var(--texto-secundario);
+    font-size: 0.8rem;
+    padding-right: 15px;
+}
+
+/* Ajustes para móviles muy pequeños */
+@media (max-width: 576px) {
+    .panel-configuracion {
+        padding: 20px 15px; /* Ajustado para que el título no quede tan pegado */
+    }
+    
+    .opcion-switch {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+}

@@ -1,0 +1,161 @@
+/* =========================================
+   DISEÑO DE VENTANA DE RED (CONEXIONES)
+   ========================================= */
+
+.max-w-custom {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* Cabecera Responsiva */
+.cabecera-red {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 24px;
+}
+
+@media (min-width: 768px) {
+    .cabecera-red {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+}
+
+.titulo-seccion {
+    color: var(--texto-principal);
+    margin: 0;
+}
+
+/* Buscador de red */
+.buscador-red {
+    position: relative;
+    width: 100%;
+    max-width: 300px;
+}
+
+.buscador-red i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--texto-secundario);
+}
+
+.input-buscar-red {
+    width: 100%;
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 24px;
+    padding: 10px 16px 10px 40px;
+    color: var(--texto-principal);
+    font-size: 0.9rem;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.input-buscar-red:focus {
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 3px rgba(203, 161, 53, 0.15);
+}
+
+/* Pestañas de Navegación (Tabs) */
+.tabs-red {
+    display: flex;
+    border-bottom: 1px solid var(--borde-color);
+    margin-bottom: 30px;
+    overflow-x: auto; /* Para deslizar en celulares */
+    white-space: nowrap;
+}
+
+.tabs-red::-webkit-scrollbar {
+    display: none; /* Oculta la barra de scroll de los tabs para verse limpio */
+}
+
+.tab-red {
+    background: none;
+    border: none;
+    padding: 12px 20px;
+    color: var(--texto-secundario);
+    font-weight: 500;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: color 0.2s;
+    border-bottom: 2px solid transparent;
+}
+
+.tab-red:hover {
+    color: var(--texto-principal);
+}
+
+.tab-red.activo {
+    color: var(--dorado);
+    border-bottom-color: var(--dorado);
+}
+
+/* Tarjetas de Conexión */
+.tarjeta-conexion {
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    height: 100%;
+}
+
+.tarjeta-conexion:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.04);
+}
+
+.foto-conexion {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 16px;
+    border: 2px solid var(--fondo-app);
+    padding: 2px;
+}
+
+.nombre-conexion {
+    color: var(--texto-principal);
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+}
+
+.relacion-conexion {
+    color: var(--dorado-oscuro);
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.info-conexion {
+    color: var(--texto-secundario);
+    font-size: 0.75rem;
+    margin-bottom: 20px;
+}
+
+.boton-ver-perfil {
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    border: none;
+    border-radius: 20px;
+    padding: 8px 24px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    width: 100%;
+    transition: background-color 0.2s;
+    margin-top: auto; /* Empuja el botón al fondo siempre */
+}
+
+.boton-ver-perfil:hover {
+    background-color: var(--borde-color);
+}

@@ -1,0 +1,208 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+/* VARIABLES GLOBALES (Modo Claro/Oscuro) */
+:root {
+    --fondo-app: #f8f9fa;
+    --fondo-tarjeta: #ffffff;
+    --texto-principal: #0D1B2A;
+    --texto-secundario: #6c757d;
+    --borde-color: #f0f0f0;
+    --dorado: #CBA135;
+    --dorado-oscuro: #b88e28;
+    --hover-menu: #f4f5f7;
+    --input-bg: #f3f4f6;
+}
+
+body {
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+.fuente-elegante {
+    font-family: 'Playfair Display', serif;
+    letter-spacing: -0.3px;
+}
+
+/* NAVBAR SUPERIOR */
+.navbar-superior {
+    background-color: var(--fondo-tarjeta);
+    height: 70px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.logo-texto {
+    font-size: 1.25rem;
+    color: var(--texto-principal);
+}
+
+.icono-logo {
+    color: var(--dorado);
+    font-size: 1.8rem;
+}
+
+.contenedor-busqueda {
+    position: relative;
+    width: 100%;
+    max-width: 450px;
+}
+
+.barra-busqueda {
+    background-color: var(--input-bg);
+    border: none;
+    border-radius: 20px;
+    padding: 10px 16px 10px 45px;
+    width: 100%;
+    color: var(--texto-principal);
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+    outline: none;
+}
+
+.barra-busqueda:focus {
+    background-color: var(--fondo-tarjeta);
+    box-shadow: 0 0 0 2px rgba(203, 161, 53, 0.3);
+}
+
+.icono-busqueda {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--texto-secundario);
+}
+
+.iconos-nav i {
+    font-size: 1.3rem;
+    color: var(--texto-secundario);
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.iconos-nav i:hover {
+    color: var(--texto-principal);
+}
+
+.badge-notificacion {
+    position: absolute;
+    top: -5px;
+    right: -8px;
+    font-size: 0.65rem;
+    padding: 3px 6px;
+    font-weight: bold;
+    border: 2px solid var(--fondo-tarjeta);
+}
+
+.foto-perfil-nav {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    object-fit: cover;
+    cursor: pointer;
+}
+
+/* ESTRUCTURA Y SIDEBAR */
+.layout-principal {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.sidebar-izquierda {
+    background-color: var(--fondo-tarjeta);
+    width: 250px;
+    position: sticky;
+    top: 70px;
+    height: calc(100vh - 70px);
+    overflow-y: auto;
+}
+
+.item-menu {
+    display: flex;
+    align-items: center;
+    padding: 12px 24px;
+    color: var(--texto-secundario);
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.2s;
+    border-radius: 0 25px 25px 0;
+    margin-right: 16px;
+    margin-bottom: 4px;
+}
+
+.item-menu i {
+    font-size: 1.2rem;
+    margin-right: 16px;
+    width: 20px;
+    text-align: center;
+}
+
+.item-menu:hover {
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+}
+
+.item-menu.activo {
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+    font-weight: 600;
+}
+
+.item-menu.activo i {
+    color: var(--dorado);
+}
+
+.contenido-central {
+    background-color: var(--fondo-app);
+}
+
+/* =========================================
+   DROPDOWN PERFIL (Menú al hacer clic en foto)
+   ========================================= */
+.dropdown-perfil {
+    position: absolute;
+    top: 50px; /* Lo empujamos debajo de la foto */
+    right: 0;
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 12px;
+    width: 220px;
+    z-index: 1050; /* Lo mantiene por encima del resto de la página */
+    overflow: hidden;
+}
+
+.info-dropdown {
+    padding: 15px 20px;
+    background-color: var(--fondo-app);
+}
+
+.item-dropdown {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    color: var(--texto-principal);
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    cursor: pointer;
+    background-color: transparent;
+}
+
+.item-dropdown:hover {
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+}
+
+.item-dropdown.text-danger:hover {
+    background-color: #fef2f2; /* Fondo rojo muy pálido al pasar el mouse */
+}
+
+.item-dropdown i {
+    font-size: 1.1rem;
+}

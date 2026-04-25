@@ -1,0 +1,161 @@
+/* =========================================
+   DISEÑO DE VENTANA DE NOTIFICACIONES
+   ========================================= */
+
+.max-w-custom {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* Cabecera */
+.cabecera-notificaciones {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.titulo-seccion {
+    color: var(--texto-principal);
+    margin: 0;
+}
+
+.boton-marcar-leidas {
+    background: none;
+    border: none;
+    color: var(--dorado-oscuro);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s;
+    padding: 0;
+}
+
+.boton-marcar-leidas:hover {
+    color: var(--dorado);
+    text-decoration: underline;
+}
+
+/* Contenedor Principal (Centrado) */
+.contenedor-lista-notificaciones {
+    max-width: 800px; /* Evita que las notificaciones se estiren de lado a lado en PC */
+    margin: 0 auto;   /* Centra el bloque */
+}
+
+.tarjeta-notificaciones {
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    overflow: hidden; /* Mantiene los bordes curvos de la tarjeta padre */
+}
+
+/* Item de Notificación individual */
+.item-notificacion {
+    display: flex;
+    align-items: center;
+    padding: 20px 24px;
+    background-color: var(--fondo-tarjeta);
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.item-notificacion:hover {
+    background-color: var(--hover-menu);
+}
+
+.item-notificacion.con-borde {
+    border-bottom: 1px solid var(--borde-color);
+}
+
+.item-notificacion.no-leida {
+    background-color: var(--fondo-app); /* Tono ligeramente diferente para resaltar las nuevas */
+}
+
+/* Avatar y Badge (Ícono sobrepuesto) */
+.avatar-notificacion-container {
+    position: relative;
+    margin-right: 18px;
+    flex-shrink: 0;
+}
+
+.avatar-notificacion {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.badge-tipo {
+    position: absolute;
+    bottom: -2px;
+    right: -4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.65rem;
+    border: 2px solid var(--fondo-tarjeta);
+}
+
+/* Contenido y Textos */
+.contenido-notificacion {
+    flex-grow: 1;
+    padding-right: 15px;
+}
+
+.texto-notificacion {
+    color: var(--texto-secundario);
+    font-size: 0.95rem;
+    margin: 0 0 4px 0;
+    line-height: 1.4;
+}
+
+.texto-notificacion .text-dark {
+    color: var(--texto-principal) !important;
+}
+
+.tiempo-notificacion {
+    color: #9ca3af;
+    font-size: 0.8rem;
+    margin: 0;
+}
+
+/* Punto Dorado de "No Leído" */
+.punto-no-leido {
+    width: 10px;
+    height: 10px;
+    background-color: var(--dorado);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Responsividad para Móviles */
+@media (max-width: 576px) {
+    .cabecera-notificaciones {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .item-notificacion {
+        padding: 15px;
+    }
+    
+    .avatar-notificacion {
+        width: 42px;
+        height: 42px;
+    }
+    
+    .badge-tipo {
+        width: 18px;
+        height: 18px;
+        font-size: 0.55rem;
+    }
+    
+    .texto-notificacion {
+        font-size: 0.85rem;
+    }
+}

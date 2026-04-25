@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Clases en Español */
+.fuente-elegante {
+    font-family: 'Playfair Display', serif;
+    letter-spacing: -0.5px;
+}
+
+.contenedor-login {
+    min-height: 100vh;
+    background-color: #ffffff;
+}
+
+.lado-izquierdo {
+    background-image: linear-gradient(rgba(13, 27, 42, 0.6), rgba(13, 27, 42, 0.9)), url('../assets/bg-login.jpg'); 
+    background-size: cover;
+    background-position: center;
+}
+
+.icono-infinito {
+    color: #CBA135; 
+    font-size: 4rem;
+    line-height: 1;
+    margin-bottom: 2rem;
+}
+
+/* CORRECCIÓN: Agregamos !important para vencer el azul de Bootstrap */
+.texto-dorado {
+    color: #CBA135 !important;
+    text-decoration: none !important;
+}
+
+.texto-dorado:hover {
+    color: #b88e28 !important;
+    text-decoration: underline !important;
+}
+
+.boton-oscuro {
+    background-color: #0D1B2A; 
+    color: white;
+    border-radius: 0.75rem; 
+    padding: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.boton-oscuro:hover {
+    background-color: #1a2d42;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.grupo-input-personalizado {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.icono-input {
+    position: absolute;
+    left: 1.2rem;
+    color: #9ca3af;
+    z-index: 10;
+    font-size: 1.1rem;
+    transition: color 0.2s ease;
+}
+
+.input-personalizado {
+    width: 100%;
+    padding: 0.85rem 1rem 0.85rem 3rem; 
+    border-radius: 0.75rem;
+    border: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+    transition: all 0.2s ease;
+    outline: none;
+    color: #374151;
+}
+
+.input-personalizado:focus {
+    border-color: #CBA135;
+    box-shadow: 0 0 0 3px rgba(203, 161, 53, 0.15);
+    background-color: #ffffff;
+}
+
+.grupo-input-personalizado:focus-within .icono-input {
+    color: #CBA135;
+}
+
+/* NUEVO: Animación fluida de deslizamiento y aparición */
+@keyframes aparecerSuave {
+    0% {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.animacion-formulario {
+    animation: aparecerSuave 0.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}

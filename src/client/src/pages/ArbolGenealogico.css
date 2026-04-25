@@ -1,0 +1,264 @@
+/* =========================================
+   ESTILOS DEL ÁRBOL GENEALÓGICO
+   ========================================= */
+
+.contenedor-arbol {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    /* Altura matemática exacta: 100vh - 70px(Navbar) - 55px(Menú inferior móvil) */
+    height: calc(100vh - 70px - 55px);
+    z-index: 10;
+    background-color: var(--fondo-app);
+    display: flex;
+    flex-direction: column;
+}
+
+.cabecera-arbol {
+    padding: 1.5rem 1.5rem 0 1.5rem;
+    flex-shrink: 0;
+}
+
+.titulo-seccion {
+    color: var(--texto-principal);
+}
+
+.tarjeta-arbol {
+    background-color: var(--fondo-tarjeta);
+    border-top: 1px solid var(--borde-color);
+    flex: 1; 
+    min-height: 0; /* CRÍTICO: Previene que la tarjeta crezca más allá de la pantalla */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; 
+    margin-top: 1rem;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -4px 10px rgba(0,0,0,0.02);
+}
+
+.controles-arbol {
+    border: 1px solid var(--borde-color);
+}
+
+.btn-filtro {
+    background: transparent;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--texto-secundario);
+    transition: all 0.2s;
+}
+
+.btn-filtro.activo {
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.leyenda-roles {
+    color: var(--texto-secundario);
+}
+
+.badge-leyenda {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    color: white;
+}
+
+.badge-leyenda.creador { background-color: var(--dorado); }
+.badge-leyenda.admin { background-color: #94a3b8; }
+
+.btn-zoom {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    color: var(--texto-principal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+.btn-zoom:hover { background-color: var(--hover-menu); }
+
+/* =========================================
+   LIENZO HORIZONTAL (Línea de Tiempo)
+   ========================================= */
+.lienzo-arbol {
+    flex: 1; 
+    min-height: 0; /* CRÍTICO: Habilita el scroll interno real y frena el crecimiento infinito */
+    display: flex;
+    flex-direction: row;
+    align-items: center; 
+    padding: 3rem 4rem;
+    overflow: auto; 
+    background-image: radial-gradient(var(--borde-color) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+.lienzo-arbol::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.lienzo-arbol::-webkit-scrollbar-track {
+    background: transparent;
+}
+.lienzo-arbol::-webkit-scrollbar-thumb {
+    background-color: var(--borde-color);
+    border-radius: 4px;
+}
+.lienzo-arbol::-webkit-scrollbar-thumb:hover {
+    background-color: var(--texto-secundario);
+}
+
+.generacion {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    position: relative;
+    flex-shrink: 0; 
+}
+
+.conexion-generacion {
+    min-width: 4rem;
+    height: 3px;
+    background-color: var(--dorado);
+    margin: 0 1.5rem;
+    border-radius: 2px;
+    position: relative;
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.conexion-generacion::before,
+.conexion-generacion::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--dorado);
+}
+.conexion-generacion::before { left: -2px; }
+.conexion-generacion::after { right: -2px; }
+
+/* =========================================
+   TARJETAS DE NODO (Los familiares)
+   ========================================= */
+.nodo-tarjeta {
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 140px;
+    position: relative;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    z-index: 2;
+}
+
+.nodo-tarjeta:hover {
+    transform: translateY(-5px);
+    border-color: var(--dorado);
+    box-shadow: 0 8px 16px rgba(203, 161, 53, 0.15) !important;
+}
+
+.foto-contenedor {
+    position: relative;
+    margin-bottom: 0.8rem;
+}
+
+.foto-nodo {
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--fondo-app);
+    padding: 2px;
+    background-color: white;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.badge-rol {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: white;
+    border: 2px solid var(--fondo-tarjeta);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.badge-rol.creador { background-color: var(--dorado); }
+.badge-rol.admin { background-color: #94a3b8; }
+
+.nombre-nodo {
+    color: var(--texto-principal);
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.rol-nodo {
+    color: var(--dorado-oscuro);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Responsividad para móviles y PC */
+@media (max-width: 768px) {
+    .lienzo-arbol {
+        padding: 2rem;
+    }
+    .conexion-generacion {
+        min-width: 2.5rem;
+    }
+    .nodo-tarjeta {
+        min-width: 120px;
+        padding: 0.8rem;
+    }
+    .foto-nodo {
+        width: 55px;
+        height: 55px;
+    }
+    .tarjeta-arbol {
+        border-radius: 20px 20px 0 0;
+        margin-bottom: 0;
+    }
+}
+
+@media (min-width: 1200px) {
+    .contenedor-arbol {
+        position: relative;
+        height: calc(100vh - 70px - 3rem); /* PC: 100vh - Navbar - Paddings */
+    }
+    .cabecera-arbol {
+        padding: 0 0 1.5rem 0;
+    }
+    .tarjeta-arbol {
+        border-radius: 16px;
+        border: 1px solid var(--borde-color);
+        margin-top: 0;
+    }
+}
