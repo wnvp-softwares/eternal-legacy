@@ -330,7 +330,7 @@ export default function Login() {
           
           <div className="d-flex align-items-center gap-2 mt-5 ms-5 mb-5 d-lg-none" style={{ color: '#0D1B2A' }}>
             <i className="bi bi-infinity fs-1texto-dorado fs-1"></i>
-            <span className="fuente-elegante fw-bold fs-3">Eternal Legacy</span>
+            <span className="fuente-elegante fw-bold fs-3">Legacy</span>
           </div>
 
           <div className="w-100 mx-auto p-4 p-sm-5 mt-lg-auto mb-lg-auto" style={{ maxWidth: '480px' }}>

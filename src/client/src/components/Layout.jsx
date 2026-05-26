@@ -16,7 +16,7 @@ export default function Layout() {
       <nav className="navbar-superior d-flex align-items-center justify-content-between px-3 px-md-4 border-bottom">
         <div className="d-flex align-items-center gap-2" style={{ width: '250px' }}>
           <i className="bi bi-infinity icono-logo"></i>
-          <span className="fuente-elegante fw-bold logo-texto d-none d-sm-block">Eternal Legacy</span>
+          <span className="fuente-elegante fw-bold logo-texto d-none d-sm-block">Legacy</span>
         </div>
 
         <div className="flex-grow-1 d-flex justify-content-center d-none d-md-flex">

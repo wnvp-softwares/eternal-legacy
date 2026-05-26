@@ -208,7 +208,7 @@ export default function Configuracion() {
             <div className="opcion-switch border-0 pb-0">
               <div className="opcion-textos">
                 <h6>Tema de la Aplicación</h6>
-                <p>Elige cómo quieres que se vea Eternal Legacy.</p>
+                <p>Elige cómo quieres que se vea Legacy.</p>
               </div>
             </div>
             

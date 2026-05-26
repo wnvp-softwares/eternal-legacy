@@ -7,7 +7,6 @@
     top: 0;
     left: 0;
     right: 0;
-    /* Altura matemática exacta: 100vh - 70px(Navbar) - 55px(Menú inferior móvil) */
     height: calc(100vh - 70px - 55px);
     z-index: 10;
     background-color: var(--fondo-app);
@@ -20,6 +19,17 @@
     flex-shrink: 0;
 }
 
+/* --- NUEVO: ESTILO DEL ANTETÍTULO --- */
+.antetitulo-familia {
+    display: block;
+    color: var(--dorado);
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 0.2rem;
+}
+
 .titulo-seccion {
     color: var(--texto-principal);
 }
@@ -28,9 +38,9 @@
     background-color: var(--fondo-tarjeta);
     border-top: 1px solid var(--borde-color);
     flex: 1; 
-    min-height: 0; /* CRÍTICO: Previene que la tarjeta crezca más allá de la pantalla */
+    min-height: 0; 
     display: flex;
-    flex-direction: column;
+    flex-direction: row; 
     overflow: hidden; 
     margin-top: 1rem;
     border-radius: 20px 20px 0 0;
@@ -91,11 +101,108 @@
 .btn-zoom:hover { background-color: var(--hover-menu); }
 
 /* =========================================
+   PANEL LATERAL DERECHO (Invitaciones y Biografía)
+   ========================================= */
+.panel-lateral-derecho {
+    width: 320px; 
+    background-color: var(--fondo-tarjeta);
+    display: flex;
+    flex-direction: column;
+    border-color: var(--borde-color) !important;
+    flex-shrink: 0;
+    z-index: 5;
+    position: relative;
+}
+
+.buscador-invitaciones input {
+    font-size: 0.85rem;
+    color: var(--texto-principal);
+}
+
+.buscador-invitaciones input:focus {
+    box-shadow: 0 0 0 2px rgba(203, 161, 53, 0.2);
+    outline: none;
+}
+
+.contenido-scroll {
+    overflow-y: auto;
+}
+
+.contenido-scroll::-webkit-scrollbar {
+    width: 4px;
+}
+.contenido-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--borde-color);
+    border-radius: 4px;
+}
+
+.sugerencia-item {
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.sugerencia-item:hover {
+    background-color: var(--hover-menu);
+}
+
+.sugerencia-item .btn-outline-primary {
+    border-color: var(--dorado);
+    color: var(--dorado);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.sugerencia-item .btn-outline-primary:hover {
+    background-color: var(--dorado);
+    color: white !important;
+}
+
+.foto-perfil-chica {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--borde-color);
+}
+
+/* Elementos de la Biografía */
+.btn-cerrar-bio {
+    background: transparent;
+    border: none;
+    color: var(--texto-secundario);
+    font-size: 1.2rem;
+    transition: color 0.2s;
+    z-index: 10;
+    padding: 0;
+}
+
+.btn-cerrar-bio:hover {
+    color: #e74c3c;
+}
+
+.foto-perfil-bio {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid white;
+}
+
+@media (max-width: 991px) {
+    .panel-lateral-derecho {
+        display: none !important;
+    }
+}
+
+/* =========================================
    LIENZO HORIZONTAL (Línea de Tiempo)
    ========================================= */
 .lienzo-arbol {
     flex: 1; 
-    min-height: 0; /* CRÍTICO: Habilita el scroll interno real y frena el crecimiento infinito */
+    min-height: 0; 
     display: flex;
     flex-direction: row;
     align-items: center; 
@@ -123,35 +230,118 @@
 .generacion {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 2rem; 
     position: relative;
     flex-shrink: 0; 
 }
 
+/* =========================================
+   NUEVO ESTILO DE CONEXIÓN: CORCHETE Y FLECHA DINÁMICO
+   ========================================= */
+
 .conexion-generacion {
-    min-width: 4rem;
-    height: 3px;
-    background-color: var(--dorado);
-    margin: 0 1.5rem;
-    border-radius: 2px;
+    width: 3.5rem;
     position: relative;
-    opacity: 0.6;
+    margin: 0 1.5rem;
     flex-shrink: 0;
+    opacity: 0.7;
 }
 
+/* Estilo base para las curvas del corchete */
 .conexion-generacion::before,
 .conexion-generacion::after {
     content: '';
     position: absolute;
+    left: 0;
+    width: 100%;
+    border-color: var(--dorado);
+    border-width: 3px;
+    border-style: solid;
+    z-index: 1;
+}
+
+/* --- Pseudo-elementos para diferentes tamaños de corchete --- */
+
+/* Corchete para 2 nodos (Arthur y Rosa) */
+.conexion-generacion.corchete-2 {
+    height: 340px; 
+}
+.conexion-generacion.corchete-2::before {
+    height: 50%;
+    top: 0;
+    border-top: 3px solid var(--dorado);
+    border-right: 3px solid var(--dorado);
+    border-left: none;
+    border-bottom: none;
+    border-radius: 0 20px 0 0;
+}
+.conexion-generacion.corchete-2::after {
+    height: 50%;
+    bottom: 0;
+    border-bottom: 3px solid var(--dorado);
+    border-right: 3px solid var(--dorado);
+    border-left: none;
+    border-top: none;
+    border-radius: 0 0 20px 0;
+}
+
+/* Corchete para 3 nodos (Carlos, Elena y Maria) */
+.conexion-generacion.corchete-3 {
+    height: 520px; 
+}
+.conexion-generacion.corchete-3::before {
+    height: 50%;
+    top: 0;
+    border-top: 3px solid var(--dorado);
+    border-right: 3px solid var(--dorado);
+    border-left: none;
+    border-bottom: none;
+    border-radius: 0 20px 0 0;
+}
+.conexion-generacion.corchete-3::after {
+    height: 50%;
+    bottom: 0;
+    border-bottom: 3px solid var(--dorado);
+    border-right: 3px solid var(--dorado);
+    border-left: none;
+    border-top: none;
+    border-radius: 0 0 20px 0;
+}
+
+/* --- Elementos Comunes (Flecha y Puntos conectores) --- */
+
+/* Flecha central apuntando a la derecha */
+.flecha-conexion {
+    position: absolute;
     top: 50%;
+    right: -12px;
     transform: translateY(-50%);
+    width: 0; 
+    height: 0; 
+    border-top: 7px solid transparent;
+    border-bottom: 7px solid transparent;
+    border-left: 12px solid var(--dorado);
+    z-index: 2;
+}
+
+/* Puntos conectores, se ajustan a la parte superior e inferior del bloque */
+.conexion-generacion .punto-conexion-top,
+.conexion-generacion .punto-conexion-bottom {
+    position: absolute;
+    left: -4px;
     width: 8px;
     height: 8px;
-    border-radius: 50%;
     background-color: var(--dorado);
+    border-radius: 50%;
+    z-index: 3;
 }
-.conexion-generacion::before { left: -2px; }
-.conexion-generacion::after { right: -2px; }
+
+/* Ajuste de puntos para corchetes fijos */
+.conexion-generacion.corchete-2 .punto-conexion-top { top: 0; transform: translateY(-4px); }
+.conexion-generacion.corchete-2 .punto-conexion-bottom { bottom: 0; transform: translateY(4px); }
+
+.conexion-generacion.corchete-3 .punto-conexion-top { top: 0; transform: translateY(-4px); }
+.conexion-generacion.corchete-3 .punto-conexion-bottom { bottom: 0; transform: translateY(4px); }
 
 /* =========================================
    TARJETAS DE NODO (Los familiares)
@@ -168,6 +358,7 @@
     position: relative;
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     z-index: 2;
+    cursor: pointer; 
 }
 
 .nodo-tarjeta:hover {
@@ -251,7 +442,7 @@
 @media (min-width: 1200px) {
     .contenedor-arbol {
         position: relative;
-        height: calc(100vh - 70px - 3rem); /* PC: 100vh - Navbar - Paddings */
+        height: calc(100vh - 70px - 3rem); 
     }
     .cabecera-arbol {
         padding: 0 0 1.5rem 0;
@@ -260,5 +451,15 @@
         border-radius: 16px;
         border: 1px solid var(--borde-color);
         margin-top: 0;
+    }
+}
+
+.controles-zoom {
+    right: 1rem;
+}
+
+@media (min-width: 992px) {
+    .controles-zoom {
+        right: calc(320px + 1rem); 
     }
 }
