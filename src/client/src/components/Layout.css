@@ -113,8 +113,11 @@ body {
 }
 
 .sidebar-izquierda {
-    background-color: var(--fondo-tarjeta);
-    width: 250px;
+    background-color: var(--fondo-tarjeta); 
+    /* 1. Aumentamos ligeramente el ancho para que respire la negrita */
+    width: 270px;
+    min-width: 270px; 
+    flex-shrink: 0;   
     position: sticky;
     top: 70px;
     height: calc(100vh - 70px);
@@ -132,6 +135,8 @@ body {
     border-radius: 0 25px 25px 0;
     margin-right: 16px;
     margin-bottom: 4px;
+    /* 2. LA MAGIA: Prohíbe que el texto se rompa en dos líneas */
+    white-space: nowrap; 
 }
 
 .item-menu i {
@@ -158,6 +163,7 @@ body {
 
 .contenido-central {
     background-color: var(--fondo-app);
+    min-width: 0;
 }
 
 /* =========================================
