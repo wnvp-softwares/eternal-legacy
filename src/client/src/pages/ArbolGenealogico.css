@@ -1,7 +1,31 @@
 /* =========================================
-   ESTILOS DEL ÁRBOL GENEALÓGICO
+   VARIABLES GLOBALES (PREPARACIÓN MODO OSCURO)
    ========================================= */
+:root {
+    --fondo-app: #f8fafc;
+    --fondo-tarjeta: #ffffff;
+    --texto-principal: #0f172a;
+    --texto-secundario: #64748b;
+    --dorado: #cda434;
+    --dorado-oscuro: #a68220;
+    --borde-color: #e2e8f0;
+    --hover-menu: #f1f5f9;
+}
 
+[data-tema="oscuro"] {
+    --fondo-app: #0f172a;
+    --fondo-tarjeta: #1e293b;
+    --texto-principal: #f8fafc;
+    --texto-secundario: #94a3b8;
+    --dorado: #eab308;
+    --dorado-oscuro: #ca8a04;
+    --borde-color: #334155;
+    --hover-menu: #334155;
+}
+
+/* =========================================
+   ESTILOS DEL ÁRBOL GENEALÓGICO (VISTA FINAL)
+   ========================================= */
 .contenedor-arbol {
     position: absolute;
     top: 0;
@@ -12,498 +36,629 @@
     background-color: var(--fondo-app);
     display: flex;
     flex-direction: column;
+    transition: background-color 0.3s ease;
 }
 
 .cabecera-arbol {
-    padding: 1.5rem 1.5rem 0 1.5rem;
+    padding: 1rem 1.5rem 0.5rem 1.5rem;
     flex-shrink: 0;
 }
 
 .antetitulo-familia {
     display: block;
     color: var(--dorado);
-    font-size: 0.75rem;
+    font-size: 0.70rem;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 2px;
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.1rem;
 }
 
 .titulo-seccion {
     color: var(--texto-principal);
+    font-size: 1.8rem;
+    transition: color 0.3s ease;
 }
 
-.tarjeta-arbol {
-    background-color: var(--fondo-tarjeta);
-    border-top: 1px solid var(--borde-color);
-    flex: 1; 
-    min-height: 0; 
+/* --- CONTROLES SUPERIORES --- */
+.barra-controles-superior {
     display: flex;
-    flex-direction: row; 
-    overflow: hidden; 
-    margin-top: 1rem;
-    border-radius: 20px 20px 0 0;
-    box-shadow: 0 -4px 10px rgba(0,0,0,0.02);
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
-.controles-arbol {
+.interruptor-edicion {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--fondo-tarjeta);
     border: 1px solid var(--borde-color);
-}
-
-.btn-filtro {
-    background: transparent;
-    border: none;
-    padding: 6px 16px;
+    padding: 4px 12px 4px 16px;
     border-radius: 20px;
     font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--texto-secundario);
-    transition: all 0.2s;
-}
-
-.btn-filtro.activo {
-    background-color: var(--fondo-app);
+    font-weight: 600;
     color: var(--texto-principal);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.leyenda-roles {
-    color: var(--texto-secundario);
-}
-
-.badge-leyenda {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.65rem;
-    color: white;
-}
-
-.badge-leyenda.creador { background-color: var(--dorado); }
-.badge-leyenda.admin { background-color: #94a3b8; }
-
-.btn-zoom {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background-color: var(--fondo-tarjeta);
-    border: 1px solid var(--borde-color);
-    color: var(--texto-principal);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s;
-}
-.btn-zoom:hover { background-color: var(--hover-menu); }
-
-/* =========================================
-   PANEL LATERAL DERECHO (Invitaciones y Biografía)
-   ========================================= */
-.panel-lateral-derecho {
-    width: 320px; 
-    background-color: var(--fondo-tarjeta);
-    display: flex;
-    flex-direction: column;
-    border-color: var(--borde-color) !important;
-    flex-shrink: 0;
-    z-index: 5;
-    position: relative;
-    overflow: hidden; /* CRÍTICO: Previene que el contenido interno rompa los límites */
-}
-
-.buscador-invitaciones input {
-    font-size: 0.85rem;
-    color: var(--texto-principal);
-}
-
-.buscador-invitaciones input:focus {
-    box-shadow: 0 0 0 2px rgba(203, 161, 53, 0.2);
-    outline: none;
-}
-
-.contenido-scroll {
-    overflow-y: auto;
-}
-
-.contenido-scroll::-webkit-scrollbar {
-    width: 4px;
-}
-.contenido-scroll::-webkit-scrollbar-thumb {
-    background-color: var(--borde-color);
-    border-radius: 4px;
-}
-
-.sugerencia-item {
-    transition: background-color 0.2s;
     cursor: pointer;
 }
 
-.sugerencia-item:hover {
+.switch-deslizador {
+    width: 36px;
+    height: 20px;
+    background-color: var(--borde-color);
+    border-radius: 10px;
+    position: relative;
+    transition: all 0.3s;
+}
+
+.switch-deslizador::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    transition: all 0.3s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.interruptor-edicion.activo .switch-deslizador {
+    background-color: var(--dorado);
+}
+
+.interruptor-edicion.activo .switch-deslizador::after {
+    left: 18px;
+}
+
+.boton-accion-arbol {
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    color: var(--texto-principal);
+    padding: 5px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.boton-accion-arbol:hover {
     background-color: var(--hover-menu);
 }
 
-.sugerencia-item .btn-outline-primary {
-    border-color: var(--dorado);
-    color: var(--dorado);
-    background: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-.sugerencia-item .btn-outline-primary:hover {
+.boton-accion-arbol.activo {
     background-color: var(--dorado);
-    color: white !important;
-}
-
-.foto-perfil-chica {
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 1px solid var(--borde-color);
-}
-
-.btn-cerrar-bio {
-    background: transparent;
-    border: none;
-    color: var(--texto-secundario);
-    font-size: 1.2rem;
-    transition: color 0.2s;
-    z-index: 10;
-    padding: 0;
-}
-
-.btn-cerrar-bio:hover {
-    color: #e74c3c;
-}
-
-.foto-perfil-bio {
-    width: 110px;
-    height: 110px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid white;
-}
-
-@media (max-width: 991px) {
-    .panel-lateral-derecho {
-        display: none !important;
-    }
-}
-
-/* =========================================
-   LIENZO HORIZONTAL (Línea de Tiempo)
-   ========================================= */
-.lienzo-arbol {
-    flex: 1; 
-    min-height: 0; 
-    min-width: 0; /* CRÍTICO: Permite que el panel derecho respire y activa el scroll del árbol */
-    display: flex;
-    flex-direction: row;
-    padding: 0 4rem; 
-    overflow: auto; 
-    background-image: radial-gradient(var(--borde-color) 1px, transparent 1px);
-    background-size: 20px 20px;
-}
-
-.lienzo-arbol::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-.lienzo-arbol::-webkit-scrollbar-track {
-    background: transparent;
-}
-.lienzo-arbol::-webkit-scrollbar-thumb {
-    background-color: var(--borde-color);
-    border-radius: 4px;
-}
-.lienzo-arbol::-webkit-scrollbar-thumb:hover {
-    background-color: var(--texto-secundario);
-}
-
-.generacion {
-    display: flex;
-    flex-direction: column;
-    justify-content: center; 
-    gap: 1.5rem; 
-    position: relative;
-    flex-shrink: 0; 
-    padding: 3rem 0 2rem 0; /* Espaciado superior reducido drásticamente */
-}
-
-/* =========================================
-   ETIQUETA DE GENERACIÓN EN EL TECHO
-   ========================================= */
-.etiqueta-generacion {
-    position: absolute;
-    top: 0.5rem; /* Pegado casi al techo de la tarjeta */
-    left: 50%;
-    transform: translateX(-50%);
-    color: var(--dorado-oscuro);
-    font-family: 'Playfair Display', serif;
-    font-weight: 700;
-    font-size: 0.80rem;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    white-space: nowrap;
-    background-color: var(--fondo-tarjeta);
-    padding: 6px 20px;
-    border-radius: 20px;
-    border: 1px solid var(--borde-color);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
-    z-index: 5;
-}
-
-/* =========================================
-   NUEVO ESTILO ORTOGONAL (Ángulos Rectos)
-   ========================================= */
-
-.conexion-generacion {
-    width: 3rem;
-    position: relative;
-    margin: 0 1.2rem;
-    flex-shrink: 0;
-    opacity: 0.6;
-    align-self: center; 
-}
-
-.conexion-generacion::before,
-.conexion-generacion::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    width: 100%;
+    color: white;
     border-color: var(--dorado);
-    border-width: 2px; 
-    border-style: solid;
-    z-index: 1;
-    border-radius: 0 !important; 
 }
 
-.conexion-generacion.ortogonal-2 {
-    height: 96px; 
-}
-.conexion-generacion.ortogonal-2::before {
-    height: 50%;
-    top: 0;
-    border-top: 2px solid var(--dorado);
-    border-right: 2px solid var(--dorado);
-    border-left: none;
-    border-bottom: none;
-}
-.conexion-generacion.ortogonal-2::after {
-    height: 50%;
-    bottom: 0;
-    border-bottom: 2px solid var(--dorado);
-    border-right: 2px solid var(--dorado);
-    border-left: none;
-    border-top: none;
-}
-
-.conexion-generacion.ortogonal-3 {
-    height: 192px; 
-}
-.conexion-generacion.ortogonal-3::before {
-    height: 50%;
-    top: 0;
-    border-top: 2px solid var(--dorado);
-    border-right: 2px solid var(--dorado);
-    border-left: none;
-    border-bottom: none;
-}
-.conexion-generacion.ortogonal-3::after {
-    height: 50%;
-    bottom: 0;
-    border-bottom: 2px solid var(--dorado);
-    border-right: 2px solid var(--dorado);
-    border-left: none;
-    border-top: none;
-}
-
-.flecha-conexion {
-    position: absolute;
-    top: 50%;
-    right: -10px;
-    transform: translateY(-50%);
-    width: 0; 
-    height: 0; 
-    border-top: 6px solid transparent;
-    border-bottom: 6px solid transparent;
-    border-left: 10px solid var(--dorado);
-    z-index: 2;
-}
-
-.conexion-generacion .punto-conexion-top,
-.conexion-generacion .punto-conexion-bottom {
-    position: absolute;
-    left: -3px;
-    width: 6px;
-    height: 6px;
-    background-color: var(--dorado);
-    border-radius: 50%;
-    z-index: 3;
-}
-
-.conexion-generacion.ortogonal-2 .punto-conexion-top { top: 0; transform: translateY(-3px); }
-.conexion-generacion.ortogonal-2 .punto-conexion-bottom { bottom: 0; transform: translateY(3px); }
-
-.conexion-generacion.ortogonal-3 .punto-conexion-top { top: 0; transform: translateY(-3px); }
-.conexion-generacion.ortogonal-3 .punto-conexion-bottom { bottom: 0; transform: translateY(3px); }
-
-/* =========================================
-   TARJETAS DE NODO
-   ========================================= */
-.nodo-tarjeta {
-    background-color: var(--fondo-tarjeta);
-    border: 1px solid var(--borde-color);
-    border-radius: 8px; 
-    padding: 0.8rem 1rem;
+.leyenda-roles-superior {
     display: flex;
-    flex-direction: row; 
-    align-items: center;
-    min-width: 220px;
-    max-width: 240px;
-    position: relative;
-    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-    z-index: 2;
-    cursor: pointer; 
+    gap: 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--texto-principal);
 }
 
-.nodo-tarjeta:hover {
-    transform: translateY(-3px);
-    border-color: var(--dorado);
-    box-shadow: 0 6px 12px rgba(203, 161, 53, 0.12) !important;
-}
-
-.foto-contenedor {
-    position: relative;
-    margin-bottom: 0;
-    margin-right: 12px;
-    flex-shrink: 0;
-}
-
-.foto-nodo {
-    width: 45px; 
-    height: 45px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid var(--fondo-app);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.badge-rol {
-    position: absolute;
-    bottom: -2px;
-    right: -2px;
+.etiqueta-leyenda {
     width: 18px;
     height: 18px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.55rem;
+    font-size: 0.60rem;
+    color: white;
+}
+
+.etiqueta-leyenda.creador { background-color: var(--dorado); }
+.etiqueta-leyenda.admin { background-color: var(--texto-secundario); }
+
+/* =========================================
+   ÁREA DE TRABAJO (LIENZO Y PANELES)
+   ========================================= */
+.area-trabajo {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    padding: 0 1.5rem 1.5rem 1.5rem;
+    gap: 1rem;
+}
+
+.contenedor-lienzo {
+    flex: 1;
+    min-width: 0;
+    background-color: var(--fondo-tarjeta);
+    border: 2px solid var(--borde-color);
+    border-radius: 24px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.lienzo-arbol {
+    flex: 1;
+    padding: 6rem 3rem 4rem 3rem; 
+    overflow: auto;
+    background-image: radial-gradient(var(--borde-color) 1px, transparent 1px);
+    background-size: 20px 20px;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+}
+
+.lienzo-arbol::-webkit-scrollbar { width: 10px; height: 10px; }
+.lienzo-arbol::-webkit-scrollbar-track { background: transparent; }
+.lienzo-arbol::-webkit-scrollbar-thumb { background-color: var(--borde-color); border-radius: 5px; }
+
+/* =========================================
+   ESTRUCTURA DEL ÁRBOL (SISTEMA DE CELDAS)
+   ========================================= */
+.columna-generacion {
+    position: relative;
+    min-width: 240px;
+}
+
+.columna-conector { 
+    width: 50px; 
+    position: relative; 
+}
+
+.etiqueta-generacion {
+    position: absolute;
+    top: -4rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--dorado-oscuro);
+    font-weight: 800;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background-color: var(--fondo-tarjeta);
+    padding: 6px 20px;
+    border-radius: 20px;
+    border: 1px solid var(--dorado-oscuro);
+    z-index: 5;
+    transition: background-color 0.3s ease;
+}
+
+/* =========================================
+   NUEVA ESTRUCTURA UNIFICADA DE TARJETAS
+   ========================================= */
+.tarjeta-nodo-unificada {
+    background-color: var(--fondo-tarjeta);
+    border: 1.5px solid var(--texto-principal);
+    border-radius: 24px;
+    display: flex;
+    flex-direction: column;
+    width: 240px; 
+    position: relative;
+    padding: 4px;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background-color 0.3s;
+    z-index: 2;
+}
+
+.tarjeta-nodo-unificada:hover {
+    transform: translateY(-2px);
+    border-color: var(--dorado);
+    box-shadow: 0 6px 14px rgba(203, 161, 53, 0.15);
+    z-index: 10;
+}
+
+.fila-persona {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0.6rem 2.5rem 0.6rem 0.8rem;
+    cursor: pointer;
+    border-radius: 20px;
+    transition: background-color 0.2s;
+    position: relative;
+}
+
+.fila-persona:hover {
+    background-color: var(--hover-menu);
+}
+
+.icono-union-borde {
+    position: absolute;
+    right: 12px; 
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    z-index: 4;
+}
+
+.icono-anillos {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.anillo {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--dorado);
+    border-radius: 50%;
+    display: inline-block;
+}
+.anillo:nth-child(2) {
+    margin-left: -5px;
+}
+
+.foto-contenedor {
+    position: relative;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.avatar-iniciales {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--texto-principal);
+    border: 2px solid var(--fondo-app);
+    transition: border-color 0.3s ease;
+}
+
+.etiqueta-rol {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.5rem;
     color: white;
     border: 1px solid var(--fondo-tarjeta);
 }
-
-.badge-rol.creador { background-color: var(--dorado); }
-.badge-rol.admin { background-color: #94a3b8; }
+.etiqueta-rol.creador { background-color: var(--dorado); }
+.etiqueta-rol.admin { background-color: var(--texto-secundario); }
 
 .info-nodo {
-    text-align: left;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    flex-grow: 1;
+    overflow: hidden;
 }
 
 .nombre-nodo {
     color: var(--texto-principal);
-    font-family: 'Playfair Display', serif; 
-    font-size: 0.95rem;
-    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.90rem;
+    font-weight: 800;
     margin-bottom: 2px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
 }
 
 .fecha-nodo {
-    color: var(--texto-secundario);
+    color: var(--texto-principal);
     font-size: 0.75rem;
     font-weight: 500;
-    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
 }
 
-.btn-expandir {
+/* DAGA GENEALÓGICA RESTAURADA */
+.icono-fallecido {
+    color: var(--texto-principal);
+    font-size: 1.05rem; 
+    margin-left: 6px;
+    font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+}
+
+.boton-expandir-flotante {
     position: absolute;
     right: -10px;
     top: 50%;
     transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background-color: var(--fondo-tarjeta);
     color: var(--dorado);
-    border: 1px solid var(--dorado);
+    font-size: 1rem;
+    background: var(--fondo-tarjeta);
+    z-index: 4;
+    cursor: pointer;
+    border-radius: 50%;
+}
+
+/* =========================================
+   CONECTORES ORTOGONALES ABSOLUTOS
+   ========================================= */
+.linea-horizontal { height: 2px; background-color: var(--dorado); position: absolute; transform: translateY(-50%); z-index: 1; }
+.linea-vertical { width: 2px; background-color: var(--dorado); position: absolute; transform: translateX(-50%); z-index: 1; }
+.punto-inicio { width: 6px; height: 6px; border-radius: 50%; background-color: var(--dorado); position: absolute; left: 0; transform: translate(-50%, -50%); z-index: 2; }
+.flecha-fin { width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid var(--dorado); position: absolute; right: 0; transform: translate(50%, -50%); z-index: 2; }
+
+/* =========================================
+   LEYENDA DE ESTADOS Y CONTROLES ZOOM
+   ========================================= */
+.leyenda-estados-flotante {
+    position: absolute;
+    left: 1.5rem;
+    bottom: 1.5rem;
+    background-color: var(--fondo-tarjeta);
+    border: 2px solid var(--borde-color);
+    border-radius: 12px;
+    padding: 1rem;
+    z-index: 5;
+    width: 280px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+}
+
+.leyenda-estados-flotante.minimizada { width: auto; padding: 0.6rem 1rem; }
+.cabecera-leyenda { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--borde-color); padding-bottom: 0.5rem; margin-bottom: 0.8rem; }
+.leyenda-estados-flotante.minimizada .cabecera-leyenda { border-bottom: none; margin-bottom: 0; padding-bottom: 0; gap: 1rem; }
+.titulo-leyenda { font-size: 0.70rem; font-weight: 700; color: var(--texto-secundario); text-transform: uppercase; letter-spacing: 1px; margin: 0; }
+.boton-alternar-leyenda { background: transparent; border: none; color: var(--texto-secundario); padding: 0; display: flex; align-items: center; font-size: 1.2rem; cursor: pointer; transition: color 0.2s; }
+.boton-alternar-leyenda:hover { color: var(--texto-principal); }
+.leyenda-estados-flotante.minimizada .cuadricula-simbologia { display: none; }
+.cuadricula-simbologia { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.elemento-simbologia { display: flex; align-items: center; gap: 8px; font-size: 0.70rem; color: var(--texto-principal); font-weight: 500; }
+.elemento-simbologia i, .elemento-simbologia span { font-size: 0.90rem; }
+
+.controles-zoom { position: absolute; right: 1.5rem; bottom: 1.5rem; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+.boton-zoom { width: 36px; height: 36px; border-radius: 50%; background-color: var(--texto-principal); color: var(--fondo-tarjeta); border: none; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 1.2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+.boton-zoom:hover { opacity: 0.8; }
+.boton-zoom.cuadrado { border-radius: 8px; }
+
+/* =========================================
+   PANEL LATERAL DERECHO (DINÁMICO)
+   ========================================= */
+.panel-lateral-derecho {
+    width: 320px;
+    background-color: var(--fondo-tarjeta);
+    border: 2px solid var(--borde-color);
+    border-radius: 24px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    z-index: 5;
+    position: relative;
+    overflow: hidden;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.scroll-contenido { overflow-y: auto; overflow-x: hidden; }
+.scroll-contenido::-webkit-scrollbar { width: 4px; }
+.scroll-contenido::-webkit-scrollbar-thumb { background-color: var(--borde-color); border-radius: 4px; }
+
+.boton-cerrar-panel {
+    background: transparent;
+    border: none;
+    color: var(--texto-secundario);
+    font-size: 1.4rem;
+    transition: color 0.2s;
+    z-index: 10;
+    padding: 0;
+    cursor: pointer;
+}
+.boton-cerrar-panel:hover { color: #e74c3c; }
+
+.btn-cerrar-absoluto {
+    position: absolute;
+    right: 1.2rem;
+    top: 1.2rem;
+}
+
+.avatar-iniciales-biografia {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.6rem;
-    font-weight: bold;
-    padding: 0;
-    z-index: 3;
-    transition: all 0.2s;
+    font-size: 2.2rem;
+    font-weight: 500;
+    color: var(--texto-principal);
+    border: 3px solid var(--fondo-app);
+    margin: 0 auto;
 }
 
-.nodo-tarjeta:hover .btn-expandir {
+.capa-mas-fotos {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+}
+.capa-mas-fotos:hover { background-color: rgba(0, 0, 0, 0.7); }
+
+.icono-estado-familia {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* =========================================
+   ESTILOS PARA PANEL DE FILTROS (MÁS PEQUEÑOS)
+   ========================================= */
+.grupo-botones-filtro {
+    display: flex;
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 12px;
+    overflow: hidden;
+    padding: 3px; 
+    gap: 3px;     
+}
+
+.btn-filtro {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 4px 0; 
+    font-size: 0.70rem; 
+    font-weight: 500;
+    color: var(--texto-secundario);
+    border-radius: 8px;
+    transition: all 0.2s;
+    text-align: center;
+    cursor: pointer;
+}
+
+.btn-filtro.activo {
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    font-weight: 700;
+    border-color: var(--borde-color);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.select-filtro {
+    width: 100%;
+    padding: 6px 10px; 
+    border: 1px solid var(--borde-color);
+    border-radius: 10px; 
+    font-size: 0.75rem; 
+    color: var(--texto-principal);
+    background-color: var(--fondo-tarjeta);
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 14px;
+}
+.select-filtro:focus {
+    outline: none;
+    border-color: var(--dorado);
+}
+
+.btn-limpiar-filtros {
+    background: transparent;
+    border: none;
+    color: var(--texto-secundario);
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.btn-limpiar-filtros:hover {
+    color: var(--texto-principal);
+}
+
+/* =========================================
+   NUEVO: BARRA INFERIOR FLOTANTE DE EDICIÓN
+   ========================================= */
+.barra-edicion-flotante {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 30px;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    z-index: 20;
+    animation: deslizarArriba 0.3s ease-out;
+}
+
+@keyframes deslizarArriba {
+    from { transform: translate(-50%, 20px); opacity: 0; }
+    to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.btn-herramienta-edicion {
+    background: transparent;
+    border: none;
+    color: var(--texto-secundario);
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.5rem 0.8rem;
+    border-radius: 20px;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+.btn-herramienta-edicion:hover {
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+}
+.btn-herramienta-edicion.peligro:hover {
+    background-color: #fee2e2;
+    color: #ef4444;
+}
+
+.btn-guardar-edicion {
     background-color: var(--dorado);
     color: white;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+.btn-guardar-edicion:hover {
+    background-color: var(--dorado-oscuro);
 }
 
-/* Responsividad para móviles y PC */
+.separador-vertical {
+    width: 1px;
+    height: 24px;
+    background-color: var(--borde-color);
+}
+
+/* =========================================
+   DISEÑO RESPONSIVO
+   ========================================= */
+@media (max-width: 991px) {
+    .panel-lateral-derecho { display: none !important; }
+    .area-trabajo { flex-direction: column; padding: 0 1rem 1rem 1rem; }
+    .leyenda-estados-flotante { display: none; }
+    .barra-edicion-flotante {
+        width: 90%;
+        overflow-x: auto;
+        justify-content: flex-start;
+    }
+}
+
 @media (max-width: 768px) {
-    .lienzo-arbol {
-        padding: 0 2rem;
-    }
-    .conexion-generacion {
-        min-width: 2rem;
-    }
-    .nodo-tarjeta {
-        min-width: 200px;
-        padding: 0.6rem 0.8rem;
-    }
-    .tarjeta-arbol {
-        border-radius: 20px 20px 0 0;
-        margin-bottom: 0;
-    }
-}
-
-@media (min-width: 1200px) {
-    .contenedor-arbol {
-        position: relative;
-        /* Reducimos la altura para asegurar que nunca se corte en PC */
-        height: calc(100vh - 70px - 5.5rem); 
-    }
-    .cabecera-arbol {
-        padding: 0 0 1.5rem 0;
-    }
-    .tarjeta-arbol {
-        border-radius: 16px;
-        border: 1px solid var(--borde-color);
-        margin-top: 0;
-        margin-bottom: 0; 
-    }
-}
-
-.controles-zoom {
-    right: 1rem;
-    bottom: 1.5rem; /* Subimos un poco los controles de zoom para alejarlos del borde */
-}
-
-@media (min-width: 992px) {
-    .controles-zoom {
-        right: calc(320px + 1rem); 
-    }
+    .cabecera-arbol { padding: 1rem; }
+    .barra-controles-superior { gap: 0.5rem; justify-content: flex-start; }
+    .lienzo-arbol { padding: 4rem 1.5rem 2rem 1.5rem; }
+    .tarjeta-nodo-unificada { width: 200px; }
+    .controles-zoom { right: 1rem; bottom: 1rem; }
 }
