@@ -79,7 +79,6 @@ const Celda = ({ fila, children }) => (
   </div>
 );
 
-// MODIFICADO: Adaptado para soportar "Modo Eliminación" Individual y Uniones
 const TarjetaPareja = ({ pareja1, pareja2, tipoUnion, esModoEdicion, alSeleccionar, modoRelacionar, esDestinoValido, onOrigenClick, onDestinoClick, modoEliminar, alEliminar, nodosOcultos = [], anillosOcultos = [], alEliminarUnion }) => {
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
 
@@ -93,10 +92,8 @@ const TarjetaPareja = ({ pareja1, pareja2, tipoUnion, esModoEdicion, alSeleccion
   const p1Oculto = nodosOcultos.includes(pareja1.id);
   const p2Oculto = pareja2 && nodosOcultos.includes(pareja2.id);
 
-  // Si ambos están ocultos, la tarjeta entera desaparece
   if (p1Oculto && (!pareja2 || p2Oculto)) return null;
 
-  // Los anillos desaparecen si uno de los dos es eliminado, o si el usuario hizo clic en las tijeras de los anillos
   const mostrarAnillos = pareja2 && tipoUnion && !modoRelacionar && !anillosOcultos.includes(pareja1.id) && !p1Oculto && !p2Oculto;
 
   return (
@@ -136,7 +133,6 @@ const TarjetaPareja = ({ pareja1, pareja2, tipoUnion, esModoEdicion, alSeleccion
   );
 };
 
-// MODIFICADO: Adaptado para soportar "Modo Eliminación" Individual
 const TarjetaIndividual = ({ persona, esModoEdicion, alSeleccionar, modoColocacion, alColocarPareja, modoRelacionar, esDestinoValido, onOrigenClick, onDestinoClick, modoEliminar, alEliminar, nodosOcultos = [] }) => {
   if (nodosOcultos.includes(persona.id)) return null;
 
@@ -173,10 +169,7 @@ const TarjetaIndividual = ({ persona, esModoEdicion, alSeleccionar, modoColocaci
 };
 
 const ConectorDinamico = ({ genIn, filaIn, filasOut, modoEliminar, lineasOcultas = [], alEliminarLinea }) => {
-  
-  // Filtrar las salidas que el usuario ha borrado usando las tijeras
   const salidasActivas = filasOut.filter(fOut => !lineasOcultas.includes(`${genIn}-${filaIn}-${fOut}`));
-
   if (salidasActivas.length === 0) return null;
 
   const yIn = filaIn * ESPACIADO_Y + (ESPACIADO_Y / 2);
@@ -194,7 +187,6 @@ const ConectorDinamico = ({ genIn, filaIn, filasOut, modoEliminar, lineasOcultas
         const idLinea = `${genIn}-${filaIn}-${fOutOriginal}`;
         return (
           <React.Fragment key={i}>
-            {/* LÍNEA HORIZONTAL INTERACTIVA PARA BORRAR */}
             <div className={`linea-horizontal ${modoEliminar ? 'linea-rama' : ''}`} 
                  style={{ top: `${y}px`, width: '50%', left: '50%' }}
                  onClick={(e) => { if(modoEliminar) { e.stopPropagation(); alEliminarLinea(idLinea); } }}
@@ -210,9 +202,13 @@ const ConectorDinamico = ({ genIn, filaIn, filasOut, modoEliminar, lineasOcultas
 export default function ArbolGenealogico() {
   const [esUsuarioAdmin, establecerEsUsuarioAdmin] = useState(true);
 
+  // Paneles Laterales
   const [nodoSeleccionado, establecerNodoSeleccionado] = useState(null);
   const [mostrarFiltros, establecerMostrarFiltros] = useState(false);
   const [mostrarInvitar, establecerMostrarInvitar] = useState(false);
+  
+  // NUEVO ESTADO: Panel de Eventos
+  const [mostrarEventos, establecerMostrarEventos] = useState(false);
 
   // Estados: Colocación
   const [modoColocacion, establecerModoColocacion] = useState(false);
@@ -225,11 +221,14 @@ export default function ArbolGenealogico() {
   const [origenRelacion, establecerOrigenRelacion] = useState(null); 
   const [relacionesDinamicas, establecerRelacionesDinamicas] = useState([]); 
 
-  // NUEVO ESTADO: Eliminación (Nodos, Anillos, Líneas)
+  // Estado: Eliminación
   const [modoEliminar, establecerModoEliminar] = useState(false);
   const [nodosOcultos, establecerNodosOcultos] = useState([]);
   const [anillosOcultos, establecerAnillosOcultos] = useState([]);
   const [lineasOcultas, establecerLineasOcultas] = useState([]);
+
+  // NUEVO ESTADO: Menú de Exportación
+  const [mostrarMenuExportar, establecerMostrarMenuExportar] = useState(false);
 
   const [esModoEdicion, establecerModoEdicion] = useState(false);
   const [nivelZoom, establecerNivelZoom] = useState(1);
@@ -251,8 +250,14 @@ export default function ArbolGenealogico() {
     { id: 103, nombre: 'Carlos Ruiz', relacion: 'Amigo', iniciales: 'CR', color: '#cbd5e1' },
   ];
 
+  // Datos simulados para Eventos
+  const proximosEventos = [
+    { id: 1, titulo: 'Boda de los Abuelos', fecha: '12 OCT', detalle: '58º Aniversario - Salón Principal' },
+    { id: 2, titulo: 'Cumpleaños de Daniela', fecha: '25 NOV', detalle: 'Cumple 80 años - Casa de Juan' }
+  ];
+
   // ==========================================
-  // FUNCIONES DE EDICIÓN (Colocar, Relacionar, Eliminar)
+  // FUNCIONES DE EDICIÓN
   // ==========================================
   const iniciarColocacion = (datosFamiliar) => {
     establecerPersonaEnColocacion({
@@ -271,6 +276,7 @@ export default function ArbolGenealogico() {
     establecerMostrarInvitar(false);
     establecerModoRelacionar(false);
     establecerModoEliminar(false);
+    establecerMostrarEventos(false);
   };
 
   const colocarEnGeneracion = (numGeneracion) => {
@@ -294,6 +300,7 @@ export default function ArbolGenealogico() {
     establecerModoEliminar(false);
     establecerMostrarInvitar(false);
     establecerMostrarFiltros(false);
+    establecerMostrarEventos(false);
     establecerNodoSeleccionado(null);
   };
 
@@ -320,10 +327,10 @@ export default function ArbolGenealogico() {
     establecerOrigenRelacion(null);
     establecerMostrarInvitar(false);
     establecerMostrarFiltros(false);
+    establecerMostrarEventos(false);
     establecerNodoSeleccionado(null);
   };
 
-  // NUEVO: Funciones para borrar (Ocultar dinámicamente)
   const manejarEliminacion = (idPersona, nombrePersona) => {
       const confirmado = window.confirm(`¿Estás seguro de que deseas eliminar a ${nombrePersona} del árbol? Esta acción no se puede deshacer.`);
       if (confirmado) {
@@ -427,7 +434,6 @@ export default function ArbolGenealogico() {
     );
   }
 
-  // Clases dinámicas del lienzo para efectos visuales
   let claseLienzo = '';
   if (modoRelacionar && origenRelacion) claseLienzo = 'lienzo-oscurecido';
   if (modoEliminar) claseLienzo = 'lienzo-eliminar';
@@ -458,7 +464,6 @@ export default function ArbolGenealogico() {
         </div>
       )}
 
-      {/* NUEVO BANNER: MODO ELIMINACIÓN */}
       {modoEliminar && (
         <div className="mensaje-colocacion-flotante rojo">
           <span>Modo Eliminación: <strong>Selecciona una persona o vínculo</strong> para borrar</span>
@@ -486,15 +491,31 @@ export default function ArbolGenealogico() {
           )}
 
           <button
-            className={`boton-accion-arbol ${mostrarFiltros && !nodoSeleccionado && !mostrarInvitar ? 'activo' : ''}`}
+            className={`boton-accion-arbol ${mostrarFiltros && !nodoSeleccionado && !mostrarInvitar && !mostrarEventos ? 'activo' : ''}`}
             onClick={() => {
               establecerMostrarFiltros(!mostrarFiltros);
               establecerNodoSeleccionado(null);
               establecerMostrarInvitar(false);
+              establecerMostrarEventos(false);
             }}
           >
             <i className="bi bi-funnel"></i> Filtros
           </button>
+
+          {/* NUEVO BOTÓN: EVENTOS (Solo Admin) */}
+          {esUsuarioAdmin && (
+             <button
+                className={`boton-accion-arbol ${mostrarEventos && !nodoSeleccionado && !mostrarInvitar && !mostrarFiltros ? 'activo' : ''}`}
+                onClick={() => {
+                  establecerMostrarEventos(!mostrarEventos);
+                  establecerMostrarFiltros(false);
+                  establecerNodoSeleccionado(null);
+                  establecerMostrarInvitar(false);
+                }}
+             >
+                <i className="bi bi-calendar-event"></i> Eventos
+             </button>
+          )}
 
           <div className="leyenda-roles-superior ms-md-3">
             <span className="d-flex align-items-center gap-1"><div className="etiqueta-leyenda creador"><i className="bi bi-star-fill"></i></div> Creador</span>
@@ -509,7 +530,7 @@ export default function ArbolGenealogico() {
         {/* LIENZO ENMARCADO */}
         <div className="contenedor-lienzo">
 
-          <div className={`lienzo-arbol ${claseLienzo}`}>
+          <div className={`lienzo-arbol ${claseLienzo}`} onClick={() => establecerMostrarMenuExportar(false)}>
             <div style={{ display: 'flex', transform: `scale(${nivelZoom})`, transformOrigin: 'top left', transition: 'transform 0.2s ease-out' }}>
 
               {/* === COLUMNA FANTASMA: ANCESTROS === */}
@@ -535,7 +556,7 @@ export default function ArbolGenealogico() {
                 <div className="etiqueta-generacion">GENERACIÓN I</div>
                 <Celda fila={2.5}>
                   <TarjetaPareja pareja1={Arturo} pareja2={Bertha} tipoUnion="casados" esModoEdicion={esModoEdicion}
-                    alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }}
+                    alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }}
                     modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion}
                     onOrigenClick={() => manejarClicOrigen(1, 2.5)} onDestinoClick={() => manejarClicDestino(1, 2.5)}
                     modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion}
@@ -554,21 +575,21 @@ export default function ArbolGenealogico() {
               <div className="columna-generacion" style={{ height: `${ALTURA_LIENZO}px` }}>
                 <div className="etiqueta-generacion">GENERACIÓN II</div>
                 <Celda fila={0.5}>
-                  <TarjetaPareja pareja1={Benjamin} pareja2={Anna} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 0.5)} onDestinoClick={() => manejarClicDestino(2, 0.5)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} />
+                  <TarjetaPareja pareja1={Benjamin} pareja2={Anna} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 0.5)} onDestinoClick={() => manejarClicDestino(2, 0.5)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} />
                 </Celda>
                 <Celda fila={2}>
-                  <TarjetaPareja pareja1={Jorge} pareja2={Pilar} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 2)} onDestinoClick={() => manejarClicDestino(2, 2)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} />
+                  <TarjetaPareja pareja1={Jorge} pareja2={Pilar} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 2)} onDestinoClick={() => manejarClicDestino(2, 2)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} />
                 </Celda>
                 <Celda fila={3.5}>
-                  <TarjetaPareja pareja1={Pedro} pareja2={Silvia} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 3.5)} onDestinoClick={() => manejarClicDestino(2, 3.5)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} />
+                  <TarjetaPareja pareja1={Pedro} pareja2={Silvia} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 3.5)} onDestinoClick={() => manejarClicDestino(2, 3.5)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} />
                 </Celda>
                 <Celda fila={5}>
                   {(() => {
                     const parejaExtra = parejasAñadidas.find(p => p.destinoId === Gilberto.id);
                     if (parejaExtra) {
-                      return <TarjetaPareja pareja1={Gilberto} pareja2={parejaExtra.nuevaPersona} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 5)} onDestinoClick={() => manejarClicDestino(2, 5)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} />;
+                      return <TarjetaPareja pareja1={Gilberto} pareja2={parejaExtra.nuevaPersona} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 5)} onDestinoClick={() => manejarClicDestino(2, 5)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} />;
                     }
-                    return <TarjetaIndividual persona={Gilberto} esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoColocacion={modoColocacion} alColocarPareja={colocarComoPareja} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 5)} onDestinoClick={() => manejarClicDestino(2, 5)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} />;
+                    return <TarjetaIndividual persona={Gilberto} esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoColocacion={modoColocacion} alColocarPareja={colocarComoPareja} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(2, 5)} onDestinoClick={() => manejarClicDestino(2, 5)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} />;
                   })()}
                 </Celda>
                 {renderNuevosYPlaceholders(2)}
@@ -585,11 +606,11 @@ export default function ArbolGenealogico() {
               {/* GENERACIÓN III */}
               <div className="columna-generacion" style={{ height: `${ALTURA_LIENZO}px` }}>
                 <div className="etiqueta-generacion">GENERACIÓN III</div>
-                <Celda fila={0}><TarjetaPareja pareja1={Raul} pareja2={Karla} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 0)} onDestinoClick={() => manejarClicDestino(3, 0)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
-                <Celda fila={1}><TarjetaPareja pareja1={Jhonny} pareja2={Liliana} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 1)} onDestinoClick={() => manejarClicDestino(3, 1)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
-                <Celda fila={2}><TarjetaPareja pareja1={Carlos} pareja2={Odeth} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 2)} onDestinoClick={() => manejarClicDestino(3, 2)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
-                <Celda fila={3}><TarjetaPareja pareja1={JuanP} pareja2={Miriam} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 3)} onDestinoClick={() => manejarClicDestino(3, 3)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
-                <Celda fila={4}><TarjetaPareja pareja1={PedroV} pareja2={Sofia} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 4)} onDestinoClick={() => manejarClicDestino(3, 4)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={0}><TarjetaPareja pareja1={Raul} pareja2={Karla} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 0)} onDestinoClick={() => manejarClicDestino(3, 0)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={1}><TarjetaPareja pareja1={Jhonny} pareja2={Liliana} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 1)} onDestinoClick={() => manejarClicDestino(3, 1)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={2}><TarjetaPareja pareja1={Carlos} pareja2={Odeth} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 2)} onDestinoClick={() => manejarClicDestino(3, 2)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={3}><TarjetaPareja pareja1={JuanP} pareja2={Miriam} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 3)} onDestinoClick={() => manejarClicDestino(3, 3)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={4}><TarjetaPareja pareja1={PedroV} pareja2={Sofia} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(3, 4)} onDestinoClick={() => manejarClicDestino(3, 4)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
                 {renderNuevosYPlaceholders(3)}
               </div>
 
@@ -605,11 +626,11 @@ export default function ArbolGenealogico() {
               {/* GENERACIÓN IV */}
               <div className="columna-generacion" style={{ height: `${ALTURA_LIENZO}px`, marginRight: modoColocacion ? '0' : '3rem' }}>
                 <div className="etiqueta-generacion">GENERACIÓN IV</div>
-                <Celda fila={0}><TarjetaPareja pareja1={Pol} pareja2={Jennifer} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 0)} onDestinoClick={() => manejarClicDestino(4, 0)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
-                <Celda fila={1}><TarjetaPareja pareja1={JuanYo} pareja2={Daniela} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 1)} onDestinoClick={() => manejarClicDestino(4, 1)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
-                <Celda fila={2}><TarjetaPareja pareja1={JorgeJr} pareja2={Juana} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 2)} onDestinoClick={() => manejarClicDestino(4, 2)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
-                <Celda fila={3}><TarjetaPareja pareja1={Aldo} pareja2={Patricia} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 3)} onDestinoClick={() => manejarClicDestino(4, 3)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
-                <Celda fila={4}><TarjetaPareja pareja1={Segio} pareja2={Andrea} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 4)} onDestinoClick={() => manejarClicDestino(4, 4)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={0}><TarjetaPareja pareja1={Pol} pareja2={Jennifer} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 0)} onDestinoClick={() => manejarClicDestino(4, 0)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={1}><TarjetaPareja pareja1={JuanYo} pareja2={Daniela} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 1)} onDestinoClick={() => manejarClicDestino(4, 1)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={2}><TarjetaPareja pareja1={JorgeJr} pareja2={Juana} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 2)} onDestinoClick={() => manejarClicDestino(4, 2)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={3}><TarjetaPareja pareja1={Aldo} pareja2={Patricia} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 3)} onDestinoClick={() => manejarClicDestino(4, 3)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
+                <Celda fila={4}><TarjetaPareja pareja1={Segio} pareja2={Andrea} tipoUnion="casados" esModoEdicion={esModoEdicion} alSeleccionar={(nodo) => { establecerNodoSeleccionado(nodo); establecerMostrarFiltros(false); establecerMostrarInvitar(false); establecerMostrarEventos(false); }} modoRelacionar={modoRelacionar} esDestinoValido={modoRelacionar && origenRelacion} onOrigenClick={() => manejarClicOrigen(4, 4)} onDestinoClick={() => manejarClicDestino(4, 4)} modoEliminar={modoEliminar} alEliminar={manejarEliminacion} nodosOcultos={nodosOcultos} anillosOcultos={anillosOcultos} alEliminarUnion={manejarEliminacionUnion} /></Celda>
                 {renderNuevosYPlaceholders(4)}
               </div>
 
@@ -660,8 +681,31 @@ export default function ArbolGenealogico() {
             </div>
           </div>
 
-          {/* CONTROLES ZOOM */}
+          {/* CONTROLES ZOOM Y NUEVO BOTÓN EXPORTAR */}
           <div className="controles-zoom">
+            <div style={{ position: 'relative' }}>
+                <button 
+                  className="boton-zoom mb-2" 
+                  style={{ backgroundColor: 'var(--fondo-tarjeta)', color: 'var(--texto-principal)' }} 
+                  onClick={() => establecerMostrarMenuExportar(!mostrarMenuExportar)}
+                  title="Exportar Árbol"
+                >
+                    <i className="bi bi-download"></i>
+                </button>
+                
+                {/* Menú Desplegable de Exportación */}
+                {mostrarMenuExportar && (
+                    <div className="menu-exportar">
+                        <div className="item-exportar" onClick={() => establecerMostrarMenuExportar(false)}>
+                            <i className="bi bi-file-earmark-pdf text-danger"></i> Descargar como PDF
+                        </div>
+                        <div className="item-exportar" onClick={() => establecerMostrarMenuExportar(false)}>
+                            <i className="bi bi-image text-primary"></i> Descargar como Imagen
+                        </div>
+                    </div>
+                )}
+            </div>
+
             <button className="boton-zoom" onClick={acercarZoom}><i className="bi bi-plus"></i></button>
             <button className="boton-zoom" onClick={alejarZoom}><i className="bi bi-dash"></i></button>
             <button className="boton-zoom cuadrado" onClick={restablecerZoom}><i className="bi bi-arrows-fullscreen" style={{ fontSize: '0.9rem' }}></i></button>
@@ -679,6 +723,7 @@ export default function ArbolGenealogico() {
                   establecerNodoSeleccionado(null);
                   establecerModoRelacionar(false);
                   establecerModoEliminar(false);
+                  establecerMostrarEventos(false);
                 }}
               >
                 <i className="bi bi-person-plus"></i> Añadir familiar
@@ -694,7 +739,6 @@ export default function ArbolGenealogico() {
               </button>
               <div className="separador-vertical"></div>
 
-              {/* BOTÓN ELIMINAR IMPLEMENTADO */}
               <button 
                 className={`btn-herramienta-edicion peligro ${modoEliminar ? 'activo' : ''}`} 
                 title="Quitar una persona del árbol"
@@ -716,7 +760,7 @@ export default function ArbolGenealogico() {
         </div>
 
         {/* --- PANELES LATERALES DERECHOS CONDICIONALES --- */}
-        {(nodoSeleccionado || mostrarFiltros || mostrarInvitar) && !modoColocacion && !modoRelacionar && !modoEliminar && (
+        {(nodoSeleccionado || mostrarFiltros || mostrarInvitar || mostrarEventos) && !modoColocacion && !modoRelacionar && !modoEliminar && (
           <div className="panel-lateral-derecho d-none d-lg-flex">
 
             {nodoSeleccionado ? (
@@ -959,6 +1003,32 @@ export default function ArbolGenealogico() {
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : mostrarEventos ? (
+              // 4. NUEVO: PANEL DE EVENTOS FAMILIARES
+              <div className="d-flex flex-column h-100 position-relative">
+                 <div className="p-4 border-bottom d-flex justify-content-between align-items-center" style={{ borderColor: 'var(--borde-color)' }}>
+                    <h5 className="fw-bold m-0" style={{ color: 'var(--texto-principal)' }}><i className="bi bi-calendar-event me-2"></i>Eventos Familiares</h5>
+                    <button className="boton-cerrar-panel" onClick={() => establecerMostrarEventos(false)}><i className="bi bi-x-lg"></i></button>
+                 </div>
+                 
+                 <div className="scroll-contenido p-4 flex-grow-1">
+                    <p className="text-muted fw-bold mb-3 text-uppercase" style={{ fontSize: '0.65rem', letterSpacing: '1px' }}>Próximos Eventos</p>
+                    
+                    {proximosEventos.map(evento => (
+                       <div key={evento.id} className="tarjeta-evento">
+                          <div className="evento-fecha">{evento.fecha}</div>
+                          <div className="evento-titulo">{evento.titulo}</div>
+                          <div className="evento-detalle"><i className="bi bi-geo-alt"></i> {evento.detalle}</div>
+                       </div>
+                    ))}
+                 </div>
+                 
+                 <div className="p-4 border-top" style={{ borderColor: 'var(--borde-color)', backgroundColor: 'var(--fondo-tarjeta)' }}>
+                    <button className="btn w-100 rounded-pill" style={{ backgroundColor: 'var(--dorado)', color: 'white', fontWeight: 'bold', padding: '10px 0' }}>
+                        <i className="bi bi-plus-lg me-2"></i> Crear Nuevo Evento
+                    </button>
+                 </div>
               </div>
             ) : null}
 

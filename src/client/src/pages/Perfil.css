@@ -22,28 +22,42 @@
     background-position: center;
     background-color: #e2e8f0;
     position: relative;
+    display: block;
 }
 
 .portada-contenedor {
     position: relative;
 }
 
+/* Botón Sutil Glassmorphism */
 .boton-editar-portada {
     position: absolute;
-    bottom: 15px;
-    right: 20px;
-    background-color: rgba(255, 255, 255, 0.9);
-    color: #0D1B2A;
-    border: none;
-    padding: 6px 16px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    transition: background 0.2s;
+    top: 15px;
+    right: 15px;
+    width: 40px;
+    height: 40px;
+    background-color: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: all 0.3s ease;
+    opacity: 0;
+}
+
+.portada-contenedor:hover .boton-editar-portada {
+    opacity: 1;
 }
 
 .boton-editar-portada:hover {
-    background-color: white;
+    background-color: rgba(255, 255, 255, 0.9);
+    color: var(--texto-principal);
 }
 
 /* Info del Usuario */
@@ -55,12 +69,10 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-top: -60px; /* Sube la foto hacia la portada */
+    margin-top: -60px;
     margin-bottom: 15px;
-    
-    /* --- MAGIA AQUÍ: Obligamos a la foto a renderizarse por encima de la portada --- */
     position: relative;
-    z-index: 2; 
+    z-index: 2;
 }
 
 .foto-perfil-grande {
@@ -70,21 +82,29 @@
     border: 4px solid var(--fondo-tarjeta);
     object-fit: cover;
     background-color: white;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
+/* Botón Editar Perfil Discreto */
 .boton-editar-perfil {
-    background-color: #0D1B2A;
-    color: white;
-    border: none;
-    padding: 8px 24px;
-    border-radius: 20px;
-    font-weight: 600;
-    font-size: 0.9rem;
-    transition: background 0.2s;
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+    border: 1px solid var(--borde-color);
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: all 0.2s;
+    margin-bottom: 20px;
 }
 
 .boton-editar-perfil:hover {
-    background-color: #1a2d42;
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
 }
 
 .nombre-perfil {
@@ -112,16 +132,7 @@
     gap: 15px;
     color: var(--texto-secundario);
     font-size: 0.85rem;
-    margin-bottom: 10px; /* Reducido para quitar espacio en blanco */
-}
-
-.contenedor-etiquetas {
-    display: flex;
-    gap: 15px;
-    overflow-x: auto;
-    /* Agregamos padding-top 10px para que el scale(1.05) no corte la burbuja hacia arriba */
-    padding: 10px 5px 5px 5px; 
-    margin-bottom: 5px; /* Reducido para quitar espacio en blanco */
+    margin-bottom: 10px;
 }
 
 .datos-extra-perfil i {
@@ -130,14 +141,14 @@
 }
 
 /* =========================================
-   NUEVO: ETIQUETAS DESTACADAS (HIGHLIGHTS)
+   ETIQUETAS AESTHETIC (DIAPOSITIVAS)
    ========================================= */
 .contenedor-etiquetas {
     display: flex;
-    gap: 15px;
+    gap: 12px;
     overflow-x: auto;
-    padding-bottom: 10px;
-    margin-bottom: 20px;
+    padding-bottom: 15px;
+    margin-bottom: 10px;
 }
 
 .contenedor-etiquetas::-webkit-scrollbar {
@@ -150,65 +161,94 @@
 }
 
 .etiqueta-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
     cursor: pointer;
-    min-width: 75px;
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+
+.etiqueta-item:hover,
+.etiqueta-item.activo {
+    transform: translateY(-4px);
 }
 
 .burbuja-etiqueta {
-    width: 65px;
-    height: 65px;
-    border-radius: 50%;
-    border: 2px solid var(--borde-color);
-    padding: 3px;
-    transition: transform 0.2s, border-color 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 85px;
+    height: 125px;
+    border-radius: 12px;
+    position: relative;
     overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    border: 2px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background-color: var(--fondo-app);
 }
 
-/* Efecto al seleccionar o pasar el mouse */
-.burbuja-etiqueta:hover, .etiqueta-item.activo .burbuja-etiqueta {
-    transform: scale(1.05);
+.etiqueta-item.activo .burbuja-etiqueta {
     border-color: var(--dorado);
+    box-shadow: 0 6px 15px rgba(203, 161, 53, 0.25);
 }
 
 .burbuja-etiqueta img {
     width: 100%;
     height: 100%;
-    border-radius: 50%;
     object-fit: cover;
 }
 
-/* La burbuja para crear una nueva etiqueta */
-.burbuja-crear {
-    background-color: var(--fondo-app);
-    color: var(--texto-secundario);
-    font-size: 1.5rem;
-}
-
-.etiqueta-item:hover .burbuja-crear {
-    color: var(--dorado);
-}
-
-.etiqueta-item.activo .nombre-etiqueta {
-    font-weight: 700;
-    color: var(--dorado-oscuro);
+.degradado-etiqueta {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60%;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+    pointer-events: none;
 }
 
 .nombre-etiqueta {
+    position: absolute;
+    bottom: 10px;
+    left: 5px;
+    right: 5px;
+    color: white;
     font-size: 0.75rem;
-    color: var(--texto-principal);
-    font-weight: 500;
+    font-weight: 600;
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 75px;
+    z-index: 2;
+    letter-spacing: 0.5px;
+}
+
+.burbuja-crear {
+    border: 2px dashed var(--borde-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--texto-secundario);
+    box-shadow: none;
+    background-color: transparent;
+}
+
+.burbuja-crear i {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+}
+
+.burbuja-crear span {
+    position: static;
+    color: var(--texto-secundario);
+    font-weight: 600;
+}
+
+.etiqueta-item:hover .burbuja-crear {
+    border-color: var(--dorado);
+    color: var(--dorado);
+}
+
+.etiqueta-item:hover .burbuja-crear span {
+    color: var(--dorado);
 }
 
 /* =========================================
@@ -242,7 +282,7 @@
     border-bottom-color: var(--dorado);
 }
 
-/* Tarjeta de Publicación */
+/* Tarjeta Base de Publicación */
 .tarjeta-post {
     background-color: var(--fondo-tarjeta);
     border: 1px solid var(--borde-color);
@@ -251,18 +291,255 @@
     margin-bottom: 24px;
 }
 
-/* Responsividad para móviles */
+/* =========================================
+   DISEÑO UNIFICADO DE PUBLICACIONES
+   ========================================= */
+.foto-perfil-post { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; }
+.nombre-autor { font-weight: 600; color: var(--texto-principal); margin: 0; }
+.info-autor { font-size: 0.8rem; color: var(--texto-secundario); margin: 0; }
+
+.etiqueta-tipo-publicacion {
+    font-size: 0.70rem; font-weight: 800; color: var(--texto-secundario);
+    letter-spacing: 2px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
+}
+
+.etiqueta-historica-inferior {
+    font-size: 0.75rem; font-weight: 700; color: var(--dorado-oscuro);
+    letter-spacing: 3px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px; margin-top: 2px;
+}
+.etiqueta-historica-inferior i { font-size: 0.85rem; letter-spacing: normal; }
+.etiqueta-historica-inferior .anio-historico { color: var(--texto-secundario); font-weight: 500; letter-spacing: 1px; }
+
+.etiqueta-contexto-familiar {
+    font-size: 0.75rem; font-weight: 600; color: var(--texto-principal);
+    display: flex; align-items: center; gap: 6px; margin-top: 2px;
+}
+.etiqueta-contexto-familiar .resaltado { color: var(--dorado-oscuro); cursor: pointer; }
+.etiqueta-contexto-familiar .resaltado:hover { text-decoration: underline; }
+
+.texto-post.historico {
+    font-size: 1rem; font-weight: 400; line-height: 1.5;
+    color: var(--texto-principal); margin-top: 15px; margin-bottom: 20px;
+}
+
+.contenedor-polaroid {
+    background-color: #ffffff; padding: 12px 12px 35px 12px;
+    border-radius: 4px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+    margin-top: 10px; position: relative; overflow: hidden;
+}
+.imagen-post-historico {
+    width: 100%; max-height: 600px; border-radius: 2px;
+    object-fit: cover; aspect-ratio: 4/5; display: block; transition: transform 0.4s ease;
+}
+.contenedor-polaroid:hover .imagen-post-historico { transform: scale(1.03); }
+
+.contenedor-moderno {
+    position: relative; margin-top: 10px; border-radius: 12px;
+    overflow: hidden; background-color: var(--borde-color);
+}
+.imagen-post-moderna {
+    width: 100%; max-height: 600px; display: block;
+    object-fit: cover; aspect-ratio: 4/5;
+}
+
+.carrusel-indicadores {
+    position: absolute; bottom: 12px; left: 0; width: 100%;
+    display: flex; justify-content: center; gap: 6px; z-index: 2;
+}
+.carrusel-dot {
+    width: 6px; height: 6px; background-color: var(--borde-color);
+    border-radius: 50%; transition: background-color 0.2s;
+}
+.carrusel-dot.activo { background-color: var(--dorado); }
+
+.carrusel-indicadores-moderno {
+    position: absolute; bottom: 12px; left: 0; width: 100%;
+    display: flex; justify-content: center; gap: 6px; z-index: 2;
+}
+.carrusel-dot-moderno {
+    width: 6px; height: 6px; background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 50%; transition: background-color 0.2s;
+}
+.carrusel-dot-moderno.activo { background-color: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+
+.boton-interaccion {
+    background: none; border: none; color: var(--texto-secundario);
+    font-size: 1rem; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: color 0.2s;
+}
+.boton-interaccion:hover { color: var(--dorado); }
+
+/* =========================================
+   LÍNEA DEL TIEMPO (HILO DORADO)
+   ========================================= */
+.timeline-contenedor {
+    position: relative;
+    padding: 20px 0 60px 0;
+    margin: 20px auto 0;
+    max-width: 850px; 
+}
+
+.timeline-hilo {
+    position: absolute;
+    top: 0;
+    bottom: 50px;
+    left: 20%;
+    width: 4px;
+    background: linear-gradient(180deg, rgba(203,161,53,0) 0%, rgba(203,161,53,0.8) 5%, rgba(203,161,53,1) 50%, rgba(203,161,53,0.8) 95%, rgba(203,161,53,0) 100%);
+    transform: translateX(-50%);
+    border-radius: 2px;
+    z-index: 1;
+    animation: resplandor-hilo 2.5s infinite alternate ease-in-out;
+}
+
+@keyframes resplandor-hilo {
+    0% {
+        box-shadow: 0 0 8px rgba(203, 161, 53, 0.4), 0 0 2px rgba(255, 255, 255, 0.2);
+        opacity: 0.8;
+    }
+    100% {
+        box-shadow: 0 0 20px rgba(203, 161, 53, 1), 0 0 8px rgba(255, 255, 255, 0.8);
+        opacity: 1;
+    }
+}
+
+.timeline-item {
+    position: relative;
+    width: 80%;
+    margin-left: 20%;
+    margin-bottom: 60px;
+    z-index: 2;
+    padding-left: 45px; 
+    padding-right: 0;
+}
+
+.timeline-nodo {
+    position: absolute;
+    top: 30px;
+    left: -35px; 
+    width: 70px;
+    height: 70px;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 2px solid var(--dorado);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Playfair Display', serif;
+    font-weight: 800;
+    font-size: 1.15rem;
+    color: var(--dorado-oscuro);
+    z-index: 10;
+    animation: latido-nodo 3s infinite alternate ease-in-out;
+}
+
+@keyframes latido-nodo {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 4px 15px rgba(203, 161, 53, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.7);
+    }
+    100% {
+        transform: scale(1.08);
+        box-shadow: 0 4px 25px rgba(203, 161, 53, 0.8), inset 0 0 20px rgba(255, 255, 255, 1);
+    }
+}
+
+/* =========================================
+   NUEVO: GALERÍA DE FOTOS (GRID)
+   ========================================= */
+.galeria-contenedor {
+    padding: 10px 0 40px 0;
+}
+
+.galeria-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px; /* Espaciado entre fotos en PC */
+}
+
+.galeria-item {
+    position: relative;
+    aspect-ratio: 1 / 1; /* Cuadrado perfecto siempre */
+    overflow: hidden;
+    border-radius: 8px; 
+    cursor: pointer;
+    background-color: var(--borde-color);
+}
+
+.galeria-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Centra y recorta la foto para llenar el cuadrado */
+    transition: transform 0.4s ease;
+}
+
+.galeria-item:hover .galeria-img {
+    transform: scale(1.08);
+}
+
+/* Indicador de que tiene múltiples fotos (Carrusel) */
+.galeria-icono-multi {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    color: white;
+    font-size: 1.2rem;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    z-index: 2;
+}
+
+/* Overlay Oscuro con Contadores (Hover) */
+.galeria-overlay {
+    position: absolute;
+    top: 0; 
+    left: 0; 
+    right: 0; 
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    color: white;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 3;
+}
+
+.galeria-item:hover .galeria-overlay {
+    opacity: 1;
+}
+
+.galeria-estilos-texto {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+/* Responsividad general */
+@media (max-width: 768px) {
+    .boton-editar-portada { opacity: 1; }
+    
+    .timeline-contenedor { max-width: 100%; }
+    .timeline-hilo { left: 35px; }
+    .timeline-item { width: 100%; margin-left: 0; margin-bottom: 40px; padding-left: 90px; padding-right: 0; }
+    .timeline-nodo { left: 0; }
+}
+
 @media (max-width: 576px) {
-    .fila-superior-info {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 15px;
-    }
-    .boton-editar-perfil {
-        width: 100%;
-    }
-    .tabs-perfil {
-        padding: 0 10px;
-        overflow-x: auto;
-    }
+    .fila-superior-info { flex-direction: row; align-items: flex-end; }
+    .tabs-perfil { padding: 0 10px; overflow-x: auto; }
+    .contenedor-polaroid { padding: 8px 8px 28px 8px; }
+    
+    /* Adaptación de Galería para móviles (como Instagram) */
+    .galeria-grid { gap: 3px; }
+    .galeria-item { border-radius: 2px; } /* Bordes casi cuadrados en celular */
+    .galeria-icono-multi { top: 6px; right: 8px; font-size: 1rem; }
+    .galeria-overlay { gap: 10px; }
+    .galeria-estilos-texto { font-size: 0.95rem; gap: 4px; }
 }

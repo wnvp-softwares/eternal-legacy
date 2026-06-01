@@ -22,6 +22,75 @@
     object-fit: cover;
 }
 
+/* =========================================
+   NUEVA BARRA DISPARADORA COMPACTA
+   ========================================= */
+.tarjeta-disparador {
+    padding: 12px 20px;
+}
+
+.input-simulado-compacto {
+    background-color: var(--hover-menu);
+    border-radius: 25px;
+    padding: 10px 18px;
+    color: var(--texto-secundario);
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: none;
+}
+
+.input-simulado-compacto:hover {
+    background-color: var(--borde-color);
+}
+
+.btn-icono-compacto {
+    background: transparent;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.btn-icono-compacto:hover {
+    background-color: var(--hover-menu);
+}
+
+.btn-icono-compacto.historia {
+    color: #3498db;
+}
+
+.btn-icono-compacto.foto {
+    color: var(--dorado);
+}
+
+/* Ajustes responsivos para móviles */
+@media (max-width: 576px) {
+    .tarjeta-disparador {
+        padding: 12px 15px;
+    }
+
+    .input-simulado-compacto {
+        font-size: 0.85rem;
+        padding: 10px 14px;
+    }
+
+    .btn-icono-compacto {
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+    }
+}
+
 .input-crear-post {
     background-color: var(--input-bg);
     border: none;
@@ -102,6 +171,7 @@
 
 .imagen-post {
     width: 100%;
+    max-height: 600px; /* Límite de altura para monitores */
     border-radius: 12px;
     margin-top: 16px;
     object-fit: cover;
@@ -111,7 +181,7 @@
     background: none;
     border: none;
     color: var(--texto-secundario);
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-weight: 500;
     display: flex;
     align-items: center;
@@ -186,4 +256,434 @@
 
 .boton-agregar:hover {
     background-color: #fcefd4;
+}
+
+/* =========================================
+   VENTANA MODAL DE PUBLICACIÓN
+   ========================================= */
+.modal-backdrop-custom {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background-color: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.modal-publicacion {
+    background-color: var(--fondo-tarjeta);
+    width: 100%;
+    max-width: 600px;
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    position: relative;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-cabecera {
+    border-bottom: 1px solid var(--borde-color);
+    padding: 0;
+}
+
+.btn-cerrar-modal {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    background: var(--hover-menu);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--texto-secundario);
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.btn-cerrar-modal:hover {
+    background-color: #f1f5f9;
+    color: #e74c3c;
+}
+
+.modal-tabs {
+    display: flex;
+    width: 80%;
+}
+
+.tab-publicacion {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 20px 0;
+    font-weight: 600;
+    color: var(--texto-secundario);
+    font-size: 0.95rem;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-publicacion.activo {
+    color: var(--dorado);
+    border-bottom-color: var(--dorado);
+}
+
+.tab-publicacion i {
+    margin-right: 8px;
+}
+
+.modal-cuerpo {
+    padding: 20px;
+}
+
+.selector-privacidad {
+    background-color: var(--hover-menu);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--texto-secundario);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.selector-privacidad:hover:not(:disabled) {
+    background-color: var(--borde-color);
+}
+
+.selector-privacidad.locked {
+    background-color: #fef8eb;
+    color: var(--dorado-oscuro);
+    border-color: rgba(203, 161, 53, 0.3);
+    cursor: default;
+}
+
+.textarea-publicacion {
+    width: 100%;
+    border: none;
+    resize: none;
+    min-height: 120px;
+    font-size: 1.1rem;
+    color: var(--texto-principal);
+    background: transparent;
+    padding: 10px 0;
+    outline: none;
+}
+
+.textarea-publicacion::placeholder {
+    color: var(--texto-secundario);
+    opacity: 0.7;
+}
+
+.herramientas-publicacion {
+    border: 1px solid var(--borde-color);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    background-color: var(--fondo-app);
+}
+
+.herramientas-publicacion span {
+    font-weight: 600;
+    color: var(--texto-principal);
+    font-size: 0.9rem;
+}
+
+.grupo-iconos-herramientas {
+    display: flex;
+    gap: 8px;
+}
+
+.icono-herramienta {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    background: transparent;
+    border: none;
+}
+
+.icono-herramienta:hover {
+    background-color: var(--hover-menu);
+}
+
+.icono-herramienta.foto {
+    color: #2ecc71;
+}
+
+.icono-herramienta.fecha {
+    color: #f39c12;
+}
+
+.icono-herramienta.etiqueta {
+    color: #9b59b6;
+}
+
+.icono-herramienta.persona {
+    color: #3498db;
+}
+
+.btn-publicar-modal {
+    width: 100%;
+    background-color: var(--dorado);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 12px;
+    font-weight: 700;
+    font-size: 1rem;
+    margin-top: 20px;
+    transition: background-color 0.2s;
+}
+
+.btn-publicar-modal:hover {
+    background-color: var(--dorado-oscuro);
+}
+
+.btn-publicar-modal:disabled {
+    background-color: var(--borde-color);
+    color: var(--texto-secundario);
+    cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+    .modal-publicacion {
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-cuerpo {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .textarea-publicacion {
+        flex-grow: 1;
+    }
+
+    .btn-publicar-modal {
+        margin-top: auto;
+        margin-bottom: 20px;
+    }
+}
+
+
+/* =========================================
+   DISEÑO UNIFICADO DE PUBLICACIONES
+   ========================================= */
+
+/* Tipo de publicación (Arriba del nombre) */
+.etiqueta-tipo-publicacion {
+    font-size: 0.70rem;
+    font-weight: 800;
+    color: var(--texto-secundario);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+/* Sello de Archivo, Ícono y Fecha (Debajo del nombre - Histórico) */
+.etiqueta-historica-inferior {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--dorado-oscuro);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.etiqueta-historica-inferior i {
+    font-size: 0.85rem;
+    letter-spacing: normal;
+}
+
+.etiqueta-historica-inferior .anio-historico {
+    color: var(--texto-secundario);
+    font-weight: 500;
+    letter-spacing: 1px;
+}
+
+/* Tipografía Unificada para el cuerpo del texto */
+.texto-post.historico {
+    font-size: 1rem;
+    font-weight: 400; /* Letra NORMAL, sin negritas ni Serif */
+    line-height: 1.5;
+    color: var(--texto-principal);
+    margin-top: 15px;
+    margin-bottom: 20px;
+}
+
+/* Marco Polaroid / Foto Impresa (Para Históricos) */
+.contenedor-polaroid {
+    background-color: #ffffff;
+    padding: 12px 12px 35px 12px;
+    border-radius: 4px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+    margin-top: 10px;
+    position: relative;
+    overflow: hidden;
+}
+
+.imagen-post-historico {
+    width: 100%;
+    max-height: 600px; /* Límite de altura para monitores */
+    border-radius: 2px;
+    object-fit: cover;
+    aspect-ratio: 4/5;
+    display: block;
+    transition: transform 0.4s ease;
+}
+
+.contenedor-polaroid:hover .imagen-post-historico {
+    transform: scale(1.03);
+}
+
+/* Indicadores de Carrusel (Puntitos) - Polaroid */
+.carrusel-indicadores {
+    position: absolute;
+    bottom: 12px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    z-index: 2;
+}
+
+.carrusel-dot {
+    width: 6px;
+    height: 6px;
+    background-color: var(--borde-color);
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.carrusel-dot.activo {
+    background-color: var(--dorado);
+}
+
+/* =========================================
+   NUEVO: ESTILOS PARA "MOMENTO FAMILIAR"
+   ========================================= */
+
+/* Etiqueta de Contexto (Debajo del nombre - Familiar) */
+.etiqueta-contexto-familiar {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--texto-principal);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.etiqueta-contexto-familiar .resaltado {
+    color: var(--dorado-oscuro);
+    cursor: pointer;
+}
+
+.etiqueta-contexto-familiar .resaltado:hover {
+    text-decoration: underline;
+}
+
+/* Contenedor Moderno para Fotos Familiares (Estilo Instagram) */
+.contenedor-moderno {
+    position: relative;
+    margin-top: 10px;
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: var(--borde-color);
+}
+
+.imagen-post-moderna {
+    width: 100%;
+    max-height: 600px; /* Límite de altura para monitores */
+    display: block;
+    object-fit: cover;
+    aspect-ratio: 4/5;
+}
+
+/* Indicadores de Carrusel (Puntitos) - Moderno */
+.carrusel-indicadores-moderno {
+    position: absolute;
+    bottom: 12px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    z-index: 2;
+}
+
+.carrusel-dot-moderno {
+    width: 6px;
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.carrusel-dot-moderno.activo {
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+@media (max-width: 576px) {
+    .contenedor-polaroid {
+        padding: 8px 8px 28px 8px;
+    }
 }
