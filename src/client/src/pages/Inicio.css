@@ -569,13 +569,14 @@
 
 /* Marco Polaroid / Foto Impresa (Para Históricos) */
 .contenedor-polaroid {
-    background-color: #ffffff;
+    background-color: var(--fondo-tarjeta);
     padding: 12px 12px 35px 12px;
     border-radius: 4px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
     margin-top: 10px;
     position: relative;
     overflow: hidden;
+    border: 1px solid var(--borde-color);
 }
 
 .imagen-post-historico {
@@ -583,7 +584,6 @@
     max-height: 600px; /* Límite de altura para monitores */
     border-radius: 2px;
     object-fit: cover;
-    aspect-ratio: 4/5;
     display: block;
     transition: transform 0.4s ease;
 }
@@ -654,7 +654,6 @@
     max-height: 600px; /* Límite de altura para monitores */
     display: block;
     object-fit: cover;
-    aspect-ratio: 4/5;
 }
 
 /* Indicadores de Carrusel (Puntitos) - Moderno */
@@ -685,5 +684,79 @@
 @media (max-width: 576px) {
     .contenedor-polaroid {
         padding: 8px 8px 28px 8px;
+    }
+}
+
+/* --- ESTILOS DE LOS BOTONES DEL MODAL --- */
+.modal-pie {
+    border-top: 1px solid var(--borde-color);
+    padding: 16px 20px;
+}
+
+.btn-multimedia-modal {
+    background-color: transparent;
+    color: var(--texto-secundario);
+    border: 1px solid var(--borde-color);
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+}
+
+.btn-multimedia-modal:hover {
+    background-color: var(--hover-menu);
+    color: var(--dorado);
+    border-color: var(--dorado);
+}
+
+.boton-publicar-modal {
+    background-color: var(--dorado);
+    color: white;
+    border: none;
+    padding: 8px 24px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: background-color 0.2s ease;
+}
+
+.boton-publicar-modal:hover {
+    background-color: var(--dorado-oscuro);
+}
+
+.boton-publicar-modal:disabled {
+    background-color: var(--borde-color);
+    color: var(--texto-secundario);
+    cursor: not-allowed;
+}
+
+.input-publicacion {
+    background-color: transparent !important;
+    border: none !important;
+    color: var(--texto-principal) !important;
+    font-size: 1.1rem;
+    resize: none;
+    box-shadow: none !important;
+    padding: 0;
+}
+
+.input-publicacion::placeholder {
+    color: var(--texto-secundario);
+    opacity: 0.7;
+}
+
+@media (max-width: 576px) {
+    .modal-pie {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .btn-multimedia-modal, 
+    .boton-publicar-modal {
+        width: 100%;
+        justify-content: center;
     }
 }

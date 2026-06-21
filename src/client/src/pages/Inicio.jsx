@@ -105,8 +105,6 @@ export default function Inicio() {
     }
   };
 
-  // --- NUEVAS FUNCIONES DE INTERACCIÓN ---
-
   // REACCIONAR (DAR ME GUSTA)
   const manejarLike = async (pubId) => {
     try {
@@ -222,7 +220,14 @@ export default function Inicio() {
                 <button className="btn-multimedia-modal" type="button" onClick={() => fileInputRef.current.click()}>
                     <i className="bi bi-image me-2"></i> {archivoAdjunto ? 'Cambiar archivo' : 'Agregar Foto/Video'}
                 </button>
-                <button className="boton-publicar-modal" type="button" onClick={manejarPublicar}>Publicar Legado</button>
+                <button 
+                  className="boton-publicar-modal" 
+                  type="button" 
+                  onClick={manejarPublicar}
+                  disabled={textoPublicacion.trim() === ''}
+                >
+                  Publicar Legado
+                </button>
             </div>
           </div>
         </div>
@@ -233,104 +238,170 @@ export default function Inicio() {
         <div className="col-12 col-lg-8">
           
           <div className="tarjeta p-3 mb-4 shadow-sm disparador-modal d-flex align-items-center gap-3" onClick={() => setModalAbierto(true)}>
-            <img src={`https://ui-avatars.com/api/?name=${usuarioLogueado?.nombreUsuario || 'Usuario'}&background=0D1B2A&color=fff`} alt="Perfil" className="foto-perfil-chica" />
-            <div className="falso-input flex-grow-1">Preserva un nuevo recuerdo o momento familiar...</div>
-            <button className="boton-icono-publicar" type="button"><i className="bi bi-plus-lg"></i></button>
+            <img src={`https://ui-avatars.com/api/?name=${usuarioLogueado?.nombreUsuario || 'Usuario'}&background=0D1B2A&color=fff`} alt="Perfil" className="foto-perfil-post" />
+            <div className="input-simulado-compacto flex-grow-1">Preserva un nuevo recuerdo o momento familiar...</div>
+            <button className="btn-icono-compacto historia" type="button"><i className="bi bi-plus-lg"></i></button>
           </div>
 
           {cargando && <p className="text-center text-muted py-3">Cargando memorias familiares...</p>}
           {error && <p className="text-center text-danger py-3">{error}</p>}
           {!cargando && publicaciones.length === 0 && <p className="text-center text-muted py-3">El muro está vacío.</p>}
 
-          {publicaciones.map((pub) => (
-            <div key={pub._id} className="tarjeta shadow-sm pb-3 mb-4">
-              <div className="tarjeta-cabecera p-3 d-flex align-items-center justify-content-between">
-                <div className="d-flex align-items-center gap-3">
-                  <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-chica" />
-                  <div>
-                    <h2 className="nombre-usuario-muro mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</h2>
-                    <p className="fecha-publicacion mb-0">
-                      {new Date(pub.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
+          {/* MAPEO RE-DISEÑADO CON NUESTRA ESTRUCTURA DUAL */}
+          {publicaciones.map((pub) => {
+            const fechaFormateada = new Date(pub.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+            const tieneMultimedia = pub.multimedia && pub.multimedia.length > 0 && pub.multimedia[0];
+            const urlMultimedia = tieneMultimedia ? `http://localhost:3000${pub.multimedia[0].urlArchivo}` : null;
+            const esVideo = tieneMultimedia && pub.multimedia[0].formato?.startsWith('video/');
+
+            return (
+              <div key={pub._id} className="tarjeta shadow-sm mb-4">
+                
+                {pub.tipo === 'historico' ? (
+                  /* ================= DISEÑO HISTÓRICO ================= */
+                  <>
+                    <div className="d-flex justify-content-between align-items-start mb-2">
+                      <div className="d-flex gap-3 align-items-center">
+                        <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-post" />
+                        <div>
+                          <div className="etiqueta-tipo-publicacion">
+                            <span>RECUERDO HISTÓRICO</span>
+                          </div>
+                          <div className="d-flex align-items-baseline gap-2 mt-1">
+                              <p className="nombre-autor fs-5 mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</p>
+                              <span className="info-autor mb-0">{fechaFormateada}</span>
+                          </div>
+                          <div className="etiqueta-historica-inferior">
+                              <i className="bi bi-globe-americas text-muted" title="Público"></i>
+                              <span>{pub.etiqueta?.nombre || 'Sin Etiqueta'}</span>
+                              {pub.anio && <span className="anio-historico">• {pub.anio}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
+                    </div>
+
+                    <p className="texto-post historico">{pub.contenido}</p>
+                    
+                    {tieneMultimedia && (
+                      <div className="contenedor-polaroid">
+                          <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
+                              {esVideo ? (
+                                  <video src={urlMultimedia} className="imagen-post-historico w-100" controls controlsList="nodownload" />
+                              ) : (
+                                  <img src={urlMultimedia} alt="Recuerdo" className="imagen-post-historico" />
+                              )}
+                          </div>
+                          <div className="carrusel-indicadores">
+                              <span className="carrusel-dot activo"></span>
+                          </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* ================= DISEÑO MODERNO (Familiar o Default) ================= */
+                  <>
+                    <div className="d-flex justify-content-between align-items-start mb-2">
+                      <div className="d-flex gap-3 align-items-center">
+                        <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-post" />
+                        <div>
+                          <div className="etiqueta-tipo-publicacion">
+                            <span>MOMENTO FAMILIAR</span>
+                          </div>
+                          <div className="d-flex align-items-baseline gap-2 mt-1">
+                              <p className="nombre-autor fs-5 mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</p>
+                              <span className="info-autor mb-0">{fechaFormateada}</span>
+                          </div>
+                          <div className="etiqueta-contexto-familiar">
+                              <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i>
+                              <span>Con Familia</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
+                    </div>
+
+                    <p className="texto-post historico">{pub.contenido}</p>
+                    
+                    {tieneMultimedia && (
+                      <div className="contenedor-moderno">
+                          {esVideo ? (
+                              <video src={urlMultimedia} className="imagen-post-moderna w-100" controls controlsList="nodownload" />
+                          ) : (
+                              <img src={urlMultimedia} alt="Recuerdo" className="imagen-post-moderna" />
+                          )}
+                          <div className="carrusel-indicadores-moderno">
+                              <span className="carrusel-dot-moderno activo"></span>
+                          </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* --- INTERACCIONES MANTENIDAS DEL BACKEND --- */}
+                <div className="d-flex justify-content-between mt-4 pt-3 border-top">
+                  <div className="d-flex gap-4">
+                    <button className="boton-interaccion" type="button" onClick={() => manejarLike(pub._id)}>
+                      <i className={`bi bi-heart${pub.reacciones ? '-fill text-danger' : ''}`}></i> {pub.reacciones || 0}
+                    </button>
+                    <button className="boton-interaccion" type="button" onClick={() => toggleComentarios(pub._id)}>
+                      <i className="bi bi-chat"></i> {comentariosPorPub[pub._id]?.length || 'Comentar'}
+                    </button>
+                  </div>
+                  <div className="d-flex gap-3">
+                    <button className="boton-interaccion" title="Guardar Recuerdo"><i className="bi bi-bookmark"></i></button>
+                    <button className="boton-interaccion"><i className="bi bi-share"></i> {pub.compartido || 0}</button>
                   </div>
                 </div>
-                <span className={`badge-tipo ${pub.tipo === 'historico' ? 'badge-historico' : 'badge-familiar'}`}>
-                  {pub.tipo === 'historico' ? 'Recuerdo Histórico' : 'Momento Familiar'}
-                </span>
-              </div>
 
-              <div className="tarjeta-cuerpo px-3 pt-2">
-                <p className="texto-publicacion-muro">{pub.contenido}</p>
-                {pub.multimedia && pub.multimedia.length > 0 && pub.multimedia[0] && (
-                  <div className="multimedia-publicacion-contenedor mt-3 text-center bg-dark rounded overflow-hidden">
-                    {pub.multimedia[0].formato?.startsWith('video/') ? (
-                      <video src={`http://localhost:3000${pub.multimedia[0].urlArchivo}`} className="w-100" style={{ maxHeight: '420px' }} controls />
-                    ) : (
-                      <img src={`http://localhost:3000${pub.multimedia[0].urlArchivo}`} alt="Adjunto" className="img-fluid" style={{ maxHeight: '420px', objectFit: 'contain' }} />
-                    )}
+                {/* --- SECCIÓN DESPLEGABLE DE COMENTARIOS ADAPTADA A MODO OSCURO --- */}
+                {comentarioAbierto[pub._id] && (
+                  <div className="mt-3 border-top pt-3" style={{ borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
+                    <div className="lista-comentarios mb-3" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      {comentariosPorPub[pub._id]?.length > 0 ? (
+                        comentariosPorPub[pub._id].map(com => (
+                          <div key={com._id} className="p-2 rounded-3 mb-2 border shadow-sm" style={{ backgroundColor: 'var(--fondo-app)', fontSize: '0.85rem' }}>
+                            <span className="fw-bold d-block" style={{ color: 'var(--texto-principal)' }}>{com.autor?.nombreUsuario}</span>
+                            <p className="mb-0" style={{ color: 'var(--texto-secundario)' }}>{com.texto}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="small mb-2 ps-1" style={{ color: 'var(--texto-secundario)' }}>Aún no hay comentarios en esta historia familiar...</p>
+                      )}
+                    </div>
+                    <div className="d-flex gap-2 pb-2">
+                      <input 
+                        type="text" 
+                        className="form-control form-control-sm" 
+                        placeholder="Escribe un comentario..."
+                        style={{ backgroundColor: 'var(--input-bg)', color: 'var(--texto-principal)', borderColor: 'var(--borde-color)' }}
+                        value={nuevoComentarioTexto[pub._id] || ''}
+                        onChange={(e) => setNuevoComentarioTexto(prev => ({ ...prev, [pub._id]: e.target.value }))}
+                        onKeyDown={(e) => { if(e.key === 'Enter') enviarComentario(pub._id); }}
+                      />
+                      <button className="btn btn-sm text-white px-3" onClick={() => enviarComentario(pub._id)} style={{ backgroundColor: 'var(--dorado)', border: 'none' }}>
+                        Enviar
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-
-              {/* INTERACCIONES */}
-              <div className="tarjeta-acciones border-top mt-3 pt-2 px-3 d-flex justify-content-between">
-                <button className="boton-accion-muro d-flex align-items-center gap-2" type="button" onClick={() => manejarLike(pub._id)}>
-                  <i className="bi bi-heart-fill text-danger"></i> {pub.reacciones || 0}
-                </button>
-                <button className="boton-accion-muro d-flex align-items-center gap-2" type="button" onClick={() => toggleComentarios(pub._id)}>
-                  <i className="bi bi-chat-square-text"></i> Comentar
-                </button>
-                <button className="boton-accion-muro d-flex align-items-center gap-2" type="button">
-                  <i className="bi bi-share"></i> {pub.compartido || 0}
-                </button>
-              </div>
-
-              {/* SECCIÓN DESPLEGABLE DE COMENTARIOS */}
-              {comentarioAbierto[pub._id] && (
-                <div className="px-3 mt-3 border-top pt-3">
-                  <div className="lista-comentarios mb-3" style={{ maxHeigth: '200px', overflowY: 'auto' }}>
-                    {comentariosPorPub[pub._id]?.length > 0 ? (
-                      comentariosPorPub[pub._id].map(com => (
-                        <div key={com._id} className="bg-light p-2 rounded-3 mb-2" style={{ fontSize: '0.85rem' }}>
-                          <span className="fw-bold text-dark d-block">{com.autor?.nombreUsuario}</span>
-                          <p className="mb-0 text-secondary">{com.texto}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-muted small mb-2 ps-1">Aún no hay comentarios en esta historia familiar...</p>
-                    )}
-                  </div>
-                  <div className="d-flex gap-2">
-                    <input 
-                      type="text" 
-                      className="form-control form-control-sm" 
-                      placeholder="Escribe un comentario familiar..."
-                      value={nuevoComentarioTexto[pub._id] || ''}
-                      onChange={(e) => setNuevoComentarioTexto(prev => ({ ...prev, [pub._id]: e.target.value }))}
-                      onKeyDown={(e) => { if(e.key === 'Enter') enviarComentario(pub._id); }}
-                    />
-                    <button className="btn btn-sm text-white px-3" onClick={() => enviarComentario(pub._id)} style={{ backgroundColor: '#0D1B2A' }}>
-                      Enviar
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* WIDGETS LATERALES */}
         <div className="col-12 col-lg-4 d-none d-lg-block">
-          <div className="tarjeta p-3 shadow-sm mb-4 widget-lateral">
+          <div className="tarjeta shadow-sm mb-4">
             <h3 className="titulo-widget">Próximos Aniversarios</h3>
-            <div className="d-flex align-items-center gap-3 mt-3">
-              <div className="calendario-icono text-center p-2 rounded-3">
-                <span className="d-block small text-uppercase font-weight-bold" style={{ fontSize: '0.7rem', color: '#B58D3D' }}>Jun</span>
-                <span className="d-block fs-5 fw-bold" style={{ color: '#0D1B2A', marginTop: '-4px' }}>24</span>
+            <div className="d-flex align-items-center gap-3 mt-3 hover-widget p-2 rounded-3">
+              <div className="fecha-calendario">
+                <span className="mes-calendario">Jun</span>
+                <span className="dia-calendario">24</span>
               </div>
               <div>
-                <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.9rem' }}>Cumpleaños de Abuela Elena</p>
-                <p className="mb-0 text-muted" style={{ fontSize: '0.8rem' }}>Cumpliría 88 años • Recordatorio</p>
+                <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.95rem' }}>Cumpleaños de Abuela Elena</p>
+                <p className="mb-0 text-muted small">Cumpliría 88 años • Recordatorio</p>
               </div>
             </div>
           </div>
