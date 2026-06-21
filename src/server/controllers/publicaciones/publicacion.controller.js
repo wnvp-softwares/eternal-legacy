@@ -1,31 +1,98 @@
-const { Publicacion } = require('../../models/index.model');
+const { Publicacion, Upload } = require('../../models/index.model');
 
+// CREAR PUBLICACIÓN CON ARCHIVO MULTIMEDIA REAL (RELACIONAL)
 const crearPublicacion = async (req, res) => {
     try {
-        const { tipo, contenido } = req.body;
+        const { tipo, contenido } = req.body || {};
+
+        if (!contenido || contenido.trim() === '') {
+            return res.status(400).json({ mensaje: 'El contenido no puede estar vacío.' });
+        }
+
+        const idsMultimedia = [];
+
+        // Si Multer interceptó un archivo, creamos primero su documento en la colección Upload
+        if (req.file) {
+            // Creamos la URL pública relativa (ejemplo: /uploads/17189...-foto.jpg)
+            const urlArchivo = `/uploads/${req.file.filename}`;
+
+            const nuevoUpload = new Upload({
+                propietario: req.usuario.id,
+                urlArchivo: urlArchivo,
+                formato: req.file.mimetype,
+                pesoBytes: req.file.size
+            });
+
+            const uploadGuardado = await nuevoUpload.save();
+            // Guardamos el ID del documento generado para relacionarlo
+            idsMultimedia.push(uploadGuardado._id);
+        }
+
         const nuevaPublicacion = new Publicacion({
-            autor: req.usuario.id, // Viene del token
-            tipo: tipo || 'Texto',
-            contenido: contenido
+            autor: req.usuario.id,
+            tipo: tipo || 'historico',
+            contenido: contenido,
+            multimedia: idsMultimedia, // Guardamos el array de IDs de la colección Upload
+            reacciones: 0,
+            compartido: 0
         });
+
         await nuevaPublicacion.save();
-        res.status(201).json({ mensaje: 'Publicación creada', publicacion: nuevaPublicacion });
+
+        // Traemos la publicación completa con los datos de su autor y los detalles del archivo multimedia
+        const publicacionCompleta = await Publicacion.findById(nuevaPublicacion._id)
+            .populate('autor', 'nombreUsuario')
+            .populate('multimedia');
+
+        res.status(201).json({
+            mensaje: 'Publicación creada con éxito',
+            publicacion: publicacionCompleta
+        });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al crear publicación' });
+        console.error('❌ Error al crear publicación:', error);
+        res.status(500).json({ mensaje: 'Error interno al crear la publicación.' });
     }
 };
 
+// OBTENER LAS PUBLICACIONES DEL MURO (CON POPULATE COMPLETO)
 const obtenerPublicaciones = async (req, res) => {
     try {
-        // Obtenemos todas las publicaciones ordenadas de la más nueva a la más vieja
-        // .populate() nos trae el nombre del autor en lugar de solo su ID
         const publicaciones = await Publicacion.find()
             .sort({ createdAt: -1 })
-            .populate('autor', 'nombreUsuario');
+            .populate('autor', 'nombreUsuario')
+            .populate('multimedia'); // Trae urlArchivo, formato, peso, etc.
+
         res.status(200).json(publicaciones);
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al obtener publicaciones' });
+        console.error('❌ Error al obtener publicaciones:', error);
+        res.status(500).json({ mensaje: 'Error al obtener las publicaciones del servidor.' });
     }
 };
 
-module.exports = { crearPublicacion, obtenerPublicaciones };
+// REACCIONAR A UNA PUBLICACIÓN (LIKE)
+const reaccionarPublicacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const publicacionActualizada = await Publicacion.findByIdAndUpdate(
+            id,
+            { $inc: { reacciones: 1 } },
+            { returnDocument: 'after' } // 👈 CAMBIA 'new: true' POR ESTO
+        );
+
+        if (!publicacionActualizada) {
+            return res.status(404).json({ mensaje: 'Publicación no encontrada' });
+        }
+
+        res.status(200).json({
+            mensaje: 'Reacción registrada',
+            reacciones: publicacionActualizada.reacciones
+        });
+    } catch (error) {
+        console.error('❌ Error al reaccionar:', error);
+        res.status(500).json({ mensaje: 'Error al procesar la reacción' });
+    }
+};
+
+// No olvides exportarla al final de tu archivo junto con las otras:
+module.exports = { crearPublicacion, obtenerPublicaciones, reaccionarPublicacion };

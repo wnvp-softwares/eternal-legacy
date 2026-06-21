@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const router = express.Router();
 const cors = require('cors');
 const path = require('path');
 const conectarDB = require('./configs/database.config');
@@ -9,6 +10,7 @@ const app = express();
 conectarDB();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Hacer pública la carpeta de uploads para ver las fotos
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

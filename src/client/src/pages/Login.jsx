@@ -4,11 +4,11 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Login.css';
 
 export default function Login() {
-  const [esLogin, setEsLogin] = useState(true); 
+  const [esLogin, setEsLogin] = useState(true);
   const navigate = useNavigate();
 
   // ESTADOS DEL FORMULARIO Y NAVEGACIÓN
-  const [paso, setPaso] = useState('formulario'); 
+  const [paso, setPaso] = useState('formulario');
   const [formulario, setFormulario] = useState({
     nombre: '',
     email: '',
@@ -52,7 +52,7 @@ export default function Login() {
   };
 
   const manejarCambioCodigo = (elemento, index) => {
-    if (isNaN(elemento.value)) return; 
+    if (isNaN(elemento.value)) return;
 
     const nuevoCodigo = [...codigo];
     nuevoCodigo[index] = elemento.value;
@@ -69,20 +69,45 @@ export default function Login() {
     }
   };
 
-  const manejarEnvio = (e) => {
+  const manejarEnvio = async (e) => {
     e.preventDefault();
     setError('');
+
+    const API_URL = 'http://localhost:3000/api/usuarios';
 
     if (esLogin) {
       if (!formulario.email || !formulario.password) {
         setError('Por favor, completa todos los campos.');
         return;
       }
-      
+
       setPaso('espera_verificacion');
-      setTimeout(() => {
-        navigate('/inicio'); 
-      }, 2000);
+
+      try {
+        const respuesta = await fetch(`${API_URL}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: formulario.email,
+            password: formulario.password
+          })
+        });
+
+        const datos = await respuesta.json();
+
+        if (!respuesta.ok) {
+          throw new Error(datos.mensaje || 'Error al iniciar sesión.');
+        }
+
+        // Guardamos el token y los datos esenciales del usuario en el navegador
+        localStorage.setItem('token', datos.token);
+        localStorage.setItem('usuario', JSON.stringify(datos.usuario));
+
+        navigate('/inicio');
+      } catch (err) {
+        setError(err.message);
+        setPaso('formulario');
+      }
 
     } else {
       if (!formulario.nombre || !formulario.email || !formulario.password || !formulario.confirmarPassword) {
@@ -93,19 +118,41 @@ export default function Login() {
         setError('Las contraseñas no coinciden.');
         return;
       }
-      
-      setPaso('espera_correo'); 
-      setTimeout(() => {
-        setPaso('verificacion'); 
-        setTiempoRestante(300); // Reiniciamos el reloj a 5 minutos exactos al llegar a esta pantalla
-      }, 2000);
+
+      setPaso('espera_correo');
+
+      try {
+        const respuesta = await fetch(`${API_URL}/registro`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: formulario.nombre,
+            email: formulario.email,
+            password: formulario.password
+          })
+        });
+
+        const datos = await respuesta.json();
+
+        if (!respuesta.ok) {
+          throw new Error(datos.mensaje || 'Error en el registro.');
+        }
+
+        // Si todo sale bien, pasamos a la pantalla del código de 6 dígitos
+        setPaso('verificacion');
+        setTiempoRestante(300); // Reiniciamos el temporizador a 5 minutos exactos
+      } catch (err) {
+        setError(err.message);
+        setPaso('formulario');
+      }
     }
   };
 
-  const verificarCuenta = (e) => {
+  const verificarCuenta = async (e) => {
     e.preventDefault();
+    setError('');
     const codigoCompleto = codigo.join('');
-    
+
     if (codigoCompleto.length < 6) {
       setError('Por favor, ingresa los 6 dígitos completos.');
       return;
@@ -116,10 +163,33 @@ export default function Login() {
       return;
     }
 
-    setPaso('espera_verificacion'); 
-    setTimeout(() => {
-      navigate('/inicio'); 
-    }, 2000);
+    setPaso('espera_verificacion');
+
+    try {
+      const respuesta = await fetch('http://localhost:3000/api/usuarios/verificar-codigo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formulario.email,
+          codigo: codigoCompleto
+        })
+      });
+
+      const datos = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || 'Error de verificación.');
+      }
+
+      // Guardamos la sesión iniciada de manera automática gracias al token agregado
+      localStorage.setItem('token', datos.token);
+      localStorage.setItem('usuario', JSON.stringify(datos.usuario));
+
+      navigate('/inicio');
+    } catch (err) {
+      setError(err.message);
+      setPaso('verificacion');
+    }
   };
 
 
@@ -146,7 +216,7 @@ export default function Login() {
           <i className="bi bi-envelope-check mb-3 d-block" style={{ fontSize: '4rem', color: '#d9b34c' }}></i>
           <h2 className="fuente-elegante fw-bold fs-2 mb-2" style={{ color: '#0D1B2A' }}>Revisa tu correo</h2>
           <p className="text-muted small">
-            Hemos enviado un código de 6 dígitos a <br/>
+            Hemos enviado un código de 6 dígitos a <br />
             <strong className="text-dark">{formulario.email}</strong>
           </p>
         </div>
@@ -183,7 +253,7 @@ export default function Login() {
         <div className="text-center mt-5 pt-3 border-top">
           <p className="small text-muted mb-1">
             ¿No recibiste el código?{' '}
-            <button 
+            <button
               type="button"
               className="btn btn-link texto-dorado p-0 small fw-bold text-decoration-none"
               onClick={() => {
@@ -217,8 +287,8 @@ export default function Login() {
             {esLogin ? 'Bienvenido de nuevo' : 'Crea tu legado'}
           </h2>
           <p className="text-muted small">
-            {esLogin 
-              ? 'Ingresa a tu cuenta para continuar la historia.' 
+            {esLogin
+              ? 'Ingresa a tu cuenta para continuar la historia.'
               : 'Únete para empezar a documentar tus raíces familiares.'}
           </p>
         </div>
@@ -235,10 +305,10 @@ export default function Login() {
               <label className="form-label small fw-medium text-secondary ms-1 mb-1">Nombre completo</label>
               <div className="grupo-input-personalizado">
                 <i className="bi bi-person icono-input"></i>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="nombre"
-                  className="input-personalizado" 
+                  className="input-personalizado"
                   placeholder="Ej. Elena Morales"
                   value={formulario.nombre}
                   onChange={manejarCambio}
@@ -251,10 +321,10 @@ export default function Login() {
             <label className="form-label small fw-medium text-secondary ms-1 mb-1">Correo electrónico</label>
             <div className="grupo-input-personalizado">
               <i className="bi bi-envelope icono-input"></i>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 name="email"
-                className="input-personalizado" 
+                className="input-personalizado"
                 placeholder="correo@familia.com"
                 value={formulario.email}
                 onChange={manejarCambio}
@@ -269,10 +339,10 @@ export default function Login() {
             </div>
             <div className="grupo-input-personalizado">
               <i className="bi bi-lock icono-input"></i>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 name="password"
-                className="input-personalizado" 
+                className="input-personalizado"
                 placeholder="••••••••"
                 value={formulario.password}
                 onChange={manejarCambio}
@@ -285,10 +355,10 @@ export default function Login() {
               <label className="form-label small fw-medium text-secondary ms-1 mb-1">Confirmar contraseña</label>
               <div className="grupo-input-personalizado">
                 <i className="bi bi-check2-circle icono-input"></i>
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   name="confirmarPassword"
-                  className="input-personalizado" 
+                  className="input-personalizado"
                   placeholder="••••••••"
                   value={formulario.confirmarPassword}
                   onChange={manejarCambio}
@@ -298,7 +368,7 @@ export default function Login() {
           )}
 
           <button type="submit" className="boton-oscuro w-100 d-flex justify-content-center align-items-center gap-2 mt-4">
-            {esLogin ? 'Iniciar sesión' : 'Crear cuenta'} 
+            {esLogin ? 'Iniciar sesión' : 'Crear cuenta'}
             <i className="bi bi-arrow-right"></i>
           </button>
         </form>
@@ -309,7 +379,7 @@ export default function Login() {
   return (
     <div className="container-fluid contenedor-login p-0">
       <div className="row min-vh-100 g-0">
-        
+
         {/* --- LADO IZQUIERDO --- */}
         <div className="col-none col-lg-6 lado-izquierdo d-none d-lg-flex flex-column justify-content-center p-5">
           <div className="p-5" style={{ maxWidth: '650px' }}>
@@ -327,7 +397,7 @@ export default function Login() {
 
         {/* --- LADO DERECHO --- */}
         <div className="col-12 col-lg-6 d-flex flex-column bg-white shadow-lg">
-          
+
           <div className="d-flex align-items-center gap-2 mt-5 ms-5 mb-5 d-lg-none" style={{ color: '#0D1B2A' }}>
             <i className="bi bi-infinity fs-1texto-dorado fs-1"></i>
             <span className="fuente-elegante fw-bold fs-3">Legacy</span>
@@ -342,7 +412,7 @@ export default function Login() {
             <div className="text-center mt-5 mt-lg-auto pb-5 border-0">
               <p className="small texto-gris d-inline-flex align-items-center justify-content-center m-0">
                 {esLogin ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
-                <button 
+                <button
                   type="button"
                   // Aquí aplicamos directamente texto-dorado y quitamos los estilos anteriores
                   className="btn btn-link texto-dorado p-0 ms-2 fw-bold text-decoration-none"

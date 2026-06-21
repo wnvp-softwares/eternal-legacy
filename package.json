@@ -4,7 +4,8 @@
   "description": "Proyecto \"Eternal Legacy\" (nombre provisional) del cliente: Marco Antonio Gallegos Mora",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/server/server.js",
+    "dev": "nodemon src/server/server.js"
   },
   "repository": {
     "type": "git",
@@ -28,6 +29,10 @@
     "multer": "^2.1.1",
     "mysql2": "^3.20.0",
     "nodemailer": "^8.0.5",
+    "nodemon": "^3.1.14",
     "sequelize": "^6.37.8"
+  },
+  "devDependencies": {
+    "nodemon": "3.1.14" 
   }
 }

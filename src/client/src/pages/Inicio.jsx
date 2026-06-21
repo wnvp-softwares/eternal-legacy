@@ -1,298 +1,339 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './Inicio.css';
 
 export default function Inicio() {
-  // Estado para controlar la visibilidad de la ventana modal
   const [modalAbierto, setModalAbierto] = useState(false);
-  
-  // Estado para controlar la pestaña activa ('historico' o 'familiar')
   const [tipoPublicacion, setTipoPublicacion] = useState('historico');
-  
-  // Estado para el texto ingresado
   const [textoPublicacion, setTextoPublicacion] = useState('');
+
+  // ESTADOS PARA EL MANEJO DE MULTIMEDIA
+  const [archivoAdjunto, setArchivoAdjunto] = useState(null);
+  const [vistaPrevia, setVistaPrevia] = useState('');
+  const fileInputRef = useRef(null);
+  
+  // ESTADOS PARA LAS PUBLICACIONES DEL MURO
+  const token = localStorage.getItem('token');
+  const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+
+  const [publicaciones, setPublicaciones] = useState([]);
+  const [cargando, setCargando] = useState(token ? true : false);
+  const [error, setError] = useState(token ? '' : 'No has iniciado sesión.');
+
+  // --- NUEVOS ESTADOS PARA INTERACCIÓN (MAPEOS POR PUBLICACIÓN ID) ---
+  const [comentariosPorPub, setComentariosPorPub] = useState({}); 
+  const [comentarioAbierto, setComentarioAbierto] = useState({}); 
+  const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState({});
+
+  // 1. CARGAR PUBLICACIONES AL INICIAR
+  useEffect(() => {
+    if (!token) return;
+
+    const fetchPublicaciones = async () => {
+      try {
+        const respuesta = await fetch('http://localhost:3000/api/publicaciones/muro', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const datos = await respuesta.json();
+        
+        if (respuesta.ok) {
+          setPublicaciones(datos);
+        } else {
+          setError(datos.mensaje || 'Error al cargar el muro.');
+        }
+      } catch (err) {
+        setError('No se pudo conectar con el servidor.');
+        console.error(err);
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    fetchPublicaciones();
+  }, [token]);
+
+  // Manejo de la multimedia local
+  const manejarCambioArchivo = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setArchivoAdjunto(file);
+      setVistaPrevia(URL.createObjectURL(file));
+    }
+  };
+
+  const limpiarMultimedia = () => {
+    setArchivoAdjunto(null);
+    setVistaPrevia('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // CREAR NUEVA PUBLICACIÓN
+  const manejarPublicar = async () => {
+    if (!textoPublicacion.trim()) {
+      alert('Por favor, escribe un mensaje para tu legado físico.');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('tipo', tipoPublicacion);
+      formData.append('contenido', textoPublicacion);
+      if (archivoAdjunto) {
+        formData.append('archivo', archivoAdjunto);
+      }
+
+      const respuesta = await fetch('http://localhost:3000/api/publicaciones/crear', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+
+      const datos = await respuesta.json();
+
+      if (respuesta.ok) {
+        setPublicaciones([datos.publicacion, ...publicaciones]);
+        setTextoPublicacion('');
+        limpiarMultimedia();
+        setModalAbierto(false);
+      } else {
+        alert(datos.mensaje || 'Hubo un error al publicar.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de red al intentar conectar con el servidor.');
+    }
+  };
+
+  // --- NUEVAS FUNCIONES DE INTERACCIÓN ---
+
+  // REACCIONAR (DAR ME GUSTA)
+  const manejarLike = async (pubId) => {
+    try {
+      const respuesta = await fetch(`http://localhost:3000/api/publicaciones/${pubId}/reaccionar`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json();
+      if (respuesta.ok) {
+        setPublicaciones(prev => prev.map(p => p._id === pubId ? { ...p, reacciones: datos.reacciones } : p));
+      }
+    } catch (err) {
+      console.error("Error al reaccionar:", err);
+    }
+  };
+
+  // DESPLEGAR / OCULTAR COMENTARIOS
+  const toggleComentarios = async (pubId) => {
+    setComentarioAbierto(prev => ({ ...prev, [pubId]: !prev[pubId] }));
+
+    if (!comentarioAbierto[pubId]) {
+      try {
+        const respuesta = await fetch(`http://localhost:3000/api/comentarios/publicacion/${pubId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const datos = await respuesta.json();
+        if (respuesta.ok) {
+          setComentariosPorPub(prev => ({ ...prev, [pubId]: datos }));
+        }
+      } catch (err) {
+        console.error("Error al cargar comentarios:", err);
+      }
+    }
+  };
+
+  // GUARDAR UN COMENTARIO EN LA BD
+  const enviarComentario = async (pubId) => {
+    const texto = nuevoComentarioTexto[pubId];
+    if (!texto || !texto.trim()) return;
+
+    try {
+      const respuesta = await fetch('http://localhost:3000/api/comentarios/crear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ publicacionId: pubId, texto: texto })
+      });
+      const datos = await respuesta.json();
+
+      if (respuesta.ok) {
+        const comentarioRender = {
+          ...datos.comentario,
+          autor: { nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo' }
+        };
+
+        setComentariosPorPub(prev => ({
+          ...prev,
+          [pubId]: [...(prev[pubId] || []), comentarioRender]
+        }));
+
+        setNuevoComentarioTexto(prev => ({ ...prev, [pubId]: '' }));
+      }
+    } catch (err) {
+      console.error("Error al enviar comentario:", err);
+    }
+  };
 
   return (
     <div className="container-fluid max-w-custom p-0">
       
-      {/* =========================================
-          VENTANA MODAL DE PUBLICACIÓN (OVERLAY)
-          ========================================= */}
+      {/* MODAL OVERLAY */}
       {modalAbierto && (
         <div className="modal-backdrop-custom" onClick={() => setModalAbierto(false)}>
           <div className="modal-publicacion" onClick={(e) => e.stopPropagation()}>
-            
             <button className="btn-cerrar-modal" onClick={() => setModalAbierto(false)}>
                 <i className="bi bi-x"></i>
             </button>
-
             <div className="modal-cabecera">
                 <div className="modal-tabs">
-                    <button 
-                        className={`tab-publicacion ${tipoPublicacion === 'historico' ? 'activo' : ''}`}
-                        onClick={() => setTipoPublicacion('historico')}
-                    >
+                    <button className={`tab-publicacion ${tipoPublicacion === 'historico' ? 'activo' : ''}`} onClick={() => setTipoPublicacion('historico')}>
                         <i className="bi bi-clock-history"></i> Recuerdo Histórico
                     </button>
-                    <button 
-                        className={`tab-publicacion ${tipoPublicacion === 'familiar' ? 'activo' : ''}`}
-                        onClick={() => setTipoPublicacion('familiar')}
-                    >
-                        <i className="bi bi-people-fill"></i> Momento Familiar
+                    <button className={`tab-publicacion ${tipoPublicacion === 'familiar' ? 'activo' : ''}`} onClick={() => setTipoPublicacion('familiar')}>
+                        <i className="bi bi-people"></i> Momento Familiar
                     </button>
                 </div>
             </div>
-
-            <div className="modal-cuerpo">
-                
-                <div className="d-flex gap-3 align-items-center mb-3">
-                    <img src="https://ui-avatars.com/api/?name=Diego+Fregoso&background=0D1B2A&color=fff" alt="Perfil" className="foto-perfil-post" style={{width: '46px', height: '46px'}} />
-                    <div>
-                        <p className="nombre-autor fs-6">Diego Fregoso</p>
-                        
-                        {tipoPublicacion === 'historico' ? (
-                            <button className="selector-privacidad mt-1">
-                                <i className="bi bi-globe-americas"></i> Público <i className="bi bi-caret-down-fill" style={{fontSize: '0.6rem'}}></i>
-                            </button>
-                        ) : (
-                            <button className="selector-privacidad locked mt-1" disabled>
-                                <i className="bi bi-shield-lock-fill"></i> Solo Familia
-                            </button>
-                        )}
-                    </div>
-                </div>
-
+            <div className="modal-cuerpo mt-3">
                 <textarea 
-                    className="textarea-publicacion" 
-                    placeholder={tipoPublicacion === 'historico' 
-                        ? "Escribe un capítulo nuevo en tu historia, Diego..." 
-                        : "Comparte un momento especial con tu árbol familiar..."}
+                    className="form-control input-publicacion" 
+                    rows="3" 
+                    placeholder={tipoPublicacion === 'historico' ? "¿Qué historia o legado deseas preservar hoy?..." : "¿Qué está pasando en tu núcleo familiar hoy?..."}
                     value={textoPublicacion}
                     onChange={(e) => setTextoPublicacion(e.target.value)}
-                    autoFocus
                 ></textarea>
-
-                <div className="herramientas-publicacion shadow-sm">
-                    <span className="d-none d-sm-block">Agrega a tu publicación</span>
-                    <div className="grupo-iconos-herramientas">
-                        <button className="icono-herramienta foto" title="Subir Foto/Video"><i className="bi bi-image"></i></button>
-                        <button className="icono-herramienta fecha" title="Fecha del Recuerdo"><i className="bi bi-calendar-event"></i></button>
-                        <button className="icono-herramienta etiqueta" title="Añadir Categoría/Etiqueta"><i className="bi bi-tags-fill"></i></button>
-                        <button className="icono-herramienta persona" title={tipoPublicacion === 'familiar' ? "Etiquetar a un Familiar" : "Etiquetar Personas"}>
-                            <i className={tipoPublicacion === 'familiar' ? "bi bi-diagram-3-fill" : "bi bi-person-fill-add"}></i>
-                        </button>
-                    </div>
-                </div>
-
-                <button 
-                    className="btn-publicar-modal" 
-                    disabled={textoPublicacion.trim() === ''}
-                    onClick={() => {
-                        alert("¡Publicación creada exitosamente!");
-                        setModalAbierto(false);
-                        setTextoPublicacion('');
-                    }}
-                >
-                    Publicar
+                {vistaPrevia && (
+                  <div className="contenedor-vista-previa mt-3 position-relative text-center bg-light rounded p-2 border">
+                    <button type="button" className="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 rounded-circle" onClick={limpiarMultimedia}>
+                      <i className="bi bi-trash"></i>
+                    </button>
+                    {archivoAdjunto?.type.startsWith('video/') ? (
+                      <video src={vistaPrevia} className="img-fluid rounded" style={{ maxHeight: '200px' }} controls />
+                    ) : (
+                      <img src={vistaPrevia} alt="Vista previa" className="img-fluid rounded" style={{ maxHeight: '200px', objectFit: 'contain' }} />
+                    )}
+                  </div>
+                )}
+            </div>
+            <div className="modal-pie d-flex justify-content-between align-items-center mt-3 pt-2">
+                <input type="file" ref={fileInputRef} onChange={manejarCambioArchivo} accept="image/*,video/*" style={{ display: 'none' }} />
+                <button className="btn-multimedia-modal" type="button" onClick={() => fileInputRef.current.click()}>
+                    <i className="bi bi-image me-2"></i> {archivoAdjunto ? 'Cambiar archivo' : 'Agregar Foto/Video'}
                 </button>
-
+                <button className="boton-publicar-modal" type="button" onClick={manejarPublicar}>Publicar Legado</button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="row g-4">
-        {/* COLUMNA PRINCIPAL (Muro de Publicaciones) */}
+      {/* CUERPO DEL MURO */}
+      <div className="row g-4 MuroContenedor">
         <div className="col-12 col-lg-8">
-          <h2 className="fuente-elegante fw-bold mb-4 titulo-seccion">Legado Familiar</h2>
+          
+          <div className="tarjeta p-3 mb-4 shadow-sm disparador-modal d-flex align-items-center gap-3" onClick={() => setModalAbierto(true)}>
+            <img src={`https://ui-avatars.com/api/?name=${usuarioLogueado?.nombreUsuario || 'Usuario'}&background=0D1B2A&color=fff`} alt="Perfil" className="foto-perfil-chica" />
+            <div className="falso-input flex-grow-1">Preserva un nuevo recuerdo o momento familiar...</div>
+            <button className="boton-icono-publicar" type="button"><i className="bi bi-plus-lg"></i></button>
+          </div>
 
-          {/* BARRA DISPARADORA COMPACTA */}
-          <div className="tarjeta tarjeta-disparador shadow-sm mb-4">
-            <div className="d-flex align-items-center gap-2 gap-sm-3">
-              <img 
-                src="https://ui-avatars.com/api/?name=Diego+Fregoso&background=0D1B2A&color=fff" 
-                alt="Perfil" 
-                className="foto-perfil-post flex-shrink-0" 
-              />
-              <div 
-                className="input-simulado-compacto flex-grow-1" 
-                role="button" 
-                tabIndex={0}
-                onClick={() => setModalAbierto(true)}
-              >
-                Escribe un capítulo nuevo en tu historia, Diego...
+          {cargando && <p className="text-center text-muted py-3">Cargando memorias familiares...</p>}
+          {error && <p className="text-center text-danger py-3">{error}</p>}
+          {!cargando && publicaciones.length === 0 && <p className="text-center text-muted py-3">El muro está vacío.</p>}
+
+          {publicaciones.map((pub) => (
+            <div key={pub._id} className="tarjeta shadow-sm pb-3 mb-4">
+              <div className="tarjeta-cabecera p-3 d-flex align-items-center justify-content-between">
+                <div className="d-flex align-items-center gap-3">
+                  <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-chica" />
+                  <div>
+                    <h2 className="nombre-usuario-muro mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</h2>
+                    <p className="fecha-publicacion mb-0">
+                      {new Date(pub.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+                <span className={`badge-tipo ${pub.tipo === 'historico' ? 'badge-historico' : 'badge-familiar'}`}>
+                  {pub.tipo === 'historico' ? 'Recuerdo Histórico' : 'Momento Familiar'}
+                </span>
               </div>
-              <div className="d-flex gap-1 flex-shrink-0">
-                <button className="btn-icono-compacto historia" title="Escribir historia" onClick={() => { setTipoPublicacion('historico'); setModalAbierto(true); }}>
-                  <i className="bi bi-pencil-square"></i>
+
+              <div className="tarjeta-cuerpo px-3 pt-2">
+                <p className="texto-publicacion-muro">{pub.contenido}</p>
+                {pub.multimedia && pub.multimedia.length > 0 && pub.multimedia[0] && (
+                  <div className="multimedia-publicacion-contenedor mt-3 text-center bg-dark rounded overflow-hidden">
+                    {pub.multimedia[0].formato?.startsWith('video/') ? (
+                      <video src={`http://localhost:3000${pub.multimedia[0].urlArchivo}`} className="w-100" style={{ maxHeight: '420px' }} controls />
+                    ) : (
+                      <img src={`http://localhost:3000${pub.multimedia[0].urlArchivo}`} alt="Adjunto" className="img-fluid" style={{ maxHeight: '420px', objectFit: 'contain' }} />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* INTERACCIONES */}
+              <div className="tarjeta-acciones border-top mt-3 pt-2 px-3 d-flex justify-content-between">
+                <button className="boton-accion-muro d-flex align-items-center gap-2" type="button" onClick={() => manejarLike(pub._id)}>
+                  <i className="bi bi-heart-fill text-danger"></i> {pub.reacciones || 0}
                 </button>
-                <button className="btn-icono-compacto foto" title="Subir foto o video" onClick={() => { setTipoPublicacion('historico'); setModalAbierto(true); }}>
-                  <i className="bi bi-image"></i>
+                <button className="boton-accion-muro d-flex align-items-center gap-2" type="button" onClick={() => toggleComentarios(pub._id)}>
+                  <i className="bi bi-chat-square-text"></i> Comentar
+                </button>
+                <button className="boton-accion-muro d-flex align-items-center gap-2" type="button">
+                  <i className="bi bi-share"></i> {pub.compartido || 0}
                 </button>
               </div>
-            </div>
-          </div>
 
-          {/* =========================================
-              DISEÑO: RECUERDO HISTÓRICO
-              ========================================= */}
-          <div className="tarjeta shadow-sm pb-3">
-            <div className="d-flex justify-content-between align-items-start mb-2">
-              <div className="d-flex gap-3 align-items-center">
-                <img src="https://ui-avatars.com/api/?name=Arthur+Morales&background=e2e8f0&color=475569" alt="Arthur" className="foto-perfil-post" />
-                <div>
-                  {/* Tipo de Publicación (Arriba) */}
-                  <div className="etiqueta-tipo-publicacion">
-                    <span>RECUERDO HISTÓRICO</span>
+              {/* SECCIÓN DESPLEGABLE DE COMENTARIOS */}
+              {comentarioAbierto[pub._id] && (
+                <div className="px-3 mt-3 border-top pt-3">
+                  <div className="lista-comentarios mb-3" style={{ maxHeigth: '200px', overflowY: 'auto' }}>
+                    {comentariosPorPub[pub._id]?.length > 0 ? (
+                      comentariosPorPub[pub._id].map(com => (
+                        <div key={com._id} className="bg-light p-2 rounded-3 mb-2" style={{ fontSize: '0.85rem' }}>
+                          <span className="fw-bold text-dark d-block">{com.autor?.nombreUsuario}</span>
+                          <p className="mb-0 text-secondary">{com.texto}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-muted small mb-2 ps-1">Aún no hay comentarios en esta historia familiar...</p>
+                    )}
                   </div>
-                  
-                  {/* Nombre y Tiempo */}
-                  <div className="d-flex align-items-baseline gap-2 mt-1">
-                      <p className="nombre-autor fs-5 mb-0">Arthur Morales</p>
-                      <span className="info-autor mb-0">Hace 2 horas</span>
-                  </div>
-                  
-                  {/* Sello de Archivo, Ícono Público y Fecha (Abajo del nombre) */}
-                  <div className="etiqueta-historica-inferior">
-                      <i className="bi bi-globe-americas text-muted" title="Público"></i>
-                      <span>N i ñ e z</span>
-                      <span className="anio-historico">• 1945</span>
-                  </div>
-                </div>
-              </div>
-              <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
-            </div>
-
-            {/* Texto con tipografía unificada */}
-            <p className="texto-post historico">
-              Encontré esta antigua carta de mi padre fechada en 1945. Su caligrafía me trae tantos recuerdos de su estudio.
-            </p>
-            
-            {/* Contenedor estilo Polaroid con Zoom en hover */}
-            <div className="contenedor-polaroid">
-                <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
-                    <img src="https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=800" alt="Carta antigua" className="imagen-post-historico" />
-                </div>
-                {/* Simulador de Carrusel */}
-                <div className="carrusel-indicadores">
-                    <span className="carrusel-dot activo"></span>
-                    <span className="carrusel-dot"></span>
-                    <span className="carrusel-dot"></span>
-                </div>
-            </div>
-
-            {/* Footer de Interacción */}
-            <div className="d-flex justify-content-between mt-4 pt-3 border-top">
-              <div className="d-flex gap-4">
-                <button className="boton-interaccion"><i className="bi bi-heart"></i> 24</button>
-                <button className="boton-interaccion"><i className="bi bi-chat"></i> 5</button>
-              </div>
-              <div className="d-flex gap-3">
-                <button className="boton-interaccion" title="Guardar Recuerdo"><i className="bi bi-bookmark"></i></button>
-                <button className="boton-interaccion"><i className="bi bi-share"></i></button>
-              </div>
-            </div>
-          </div>
-
-          {/* =========================================
-              NUEVO DISEÑO: MOMENTO FAMILIAR
-              ========================================= */}
-          <div className="tarjeta shadow-sm pb-3">
-            <div className="d-flex justify-content-between align-items-start mb-2">
-              <div className="d-flex gap-3 align-items-center">
-                <img src="https://ui-avatars.com/api/?name=Daniela+Hernandez&background=fde047&color=0f172a" alt="Daniela" className="foto-perfil-post" />
-                <div>
-                  {/* Tipo de Publicación (Arriba) */}
-                  <div className="etiqueta-tipo-publicacion">
-                    <span>MOMENTO FAMILIAR</span>
-                  </div>
-                  
-                  {/* Nombre y Tiempo */}
-                  <div className="d-flex align-items-baseline gap-2 mt-1">
-                      <p className="nombre-autor fs-5 mb-0">Daniela Hernandez</p>
-                      <span className="info-autor mb-0">Hace 5 horas</span>
-                  </div>
-                  
-                  {/* Etiqueta de Contexto y Privacidad (Abajo del nombre) */}
-                  <div className="etiqueta-contexto-familiar">
-                      <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i>
-                      <span>Con <span className="resaltado">Jorge Ramírez</span> y <span className="resaltado">2 más</span></span>
+                  <div className="d-flex gap-2">
+                    <input 
+                      type="text" 
+                      className="form-control form-control-sm" 
+                      placeholder="Escribe un comentario familiar..."
+                      value={nuevoComentarioTexto[pub._id] || ''}
+                      onChange={(e) => setNuevoComentarioTexto(prev => ({ ...prev, [pub._id]: e.target.value }))}
+                      onKeyDown={(e) => { if(e.key === 'Enter') enviarComentario(pub._id); }}
+                    />
+                    <button className="btn btn-sm text-white px-3" onClick={() => enviarComentario(pub._id)} style={{ backgroundColor: '#0D1B2A' }}>
+                      Enviar
+                    </button>
                   </div>
                 </div>
-              </div>
-              <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
+              )}
             </div>
-
-            {/* Texto con tipografía estándar */}
-            <p className="texto-post historico">
-              Disfrutando de una tarde increíble recordando viejas anécdotas. ¡Qué hermoso es reunirnos todos juntos!
-            </p>
-            
-            {/* Contenedor estilo Moderno (Instagram) */}
-            <div className="contenedor-moderno">
-                <img src="https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&q=80&w=800" alt="Reunión familiar" className="imagen-post-moderna" />
-                {/* Simulador de Carrusel Moderno */}
-                <div className="carrusel-indicadores-moderno">
-                    <span className="carrusel-dot-moderno activo"></span>
-                    <span className="carrusel-dot-moderno"></span>
-                    <span className="carrusel-dot-moderno"></span>
-                </div>
-            </div>
-
-            {/* Footer de Interacción (SIN BOTÓN COMPARTIR) */}
-            <div className="d-flex justify-content-between mt-4 pt-3 border-top">
-              <div className="d-flex gap-4">
-                <button className="boton-interaccion"><i className="bi bi-heart"></i> 42</button>
-                <button className="boton-interaccion"><i className="bi bi-chat"></i> 12</button>
-              </div>
-              <div className="d-flex gap-3">
-                <button className="boton-interaccion" title="Guardar Momento"><i className="bi bi-bookmark"></i></button>
-              </div>
-            </div>
-          </div>
-
+          ))}
         </div>
 
-        {/* COLUMNA DERECHA (Widgets Laterales) */}
+        {/* WIDGETS LATERALES */}
         <div className="col-12 col-lg-4 d-none d-lg-block">
-
-          <div className="tarjeta shadow-sm mb-4">
+          <div className="tarjeta p-3 shadow-sm mb-4 widget-lateral">
             <h3 className="titulo-widget">Próximos Aniversarios</h3>
-            <div className="d-flex align-items-center gap-3 mt-3 p-2 rounded-3 hover-widget">
-              <div className="fecha-calendario">
-                <span className="mes-calendario">OCT</span>
-                <span className="dia-calendario">12</span>
+            <div className="d-flex align-items-center gap-3 mt-3">
+              <div className="calendario-icono text-center p-2 rounded-3">
+                <span className="d-block small text-uppercase font-weight-bold" style={{ fontSize: '0.7rem', color: '#B58D3D' }}>Jun</span>
+                <span className="d-block fs-5 fw-bold" style={{ color: '#0D1B2A', marginTop: '-4px' }}>24</span>
               </div>
               <div>
-                <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.95rem' }}>Boda de los Abuelos</p>
-                <p className="mb-0 text-muted small">58º Aniversario</p>
+                <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.9rem' }}>Cumpleaños de Abuela Elena</p>
+                <p className="mb-0 text-muted" style={{ fontSize: '0.8rem' }}>Cumpliría 88 años • Recordatorio</p>
               </div>
             </div>
           </div>
-
-          <div className="tarjeta shadow-sm">
-            <h3 className="titulo-widget">Conexiones Sugeridas</h3>
-            <div className="d-flex align-items-center justify-content-between mt-3 mb-3 p-2 rounded-3 hover-widget">
-              <div className="d-flex gap-3 align-items-center">
-                <img src="https://ui-avatars.com/api/?name=Carlos+Ruiz&background=cbd5e1" alt="Carlos" className="foto-perfil-chica" />
-                <div>
-                  <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.9rem' }}>Carlos Ruiz</p>
-                  <p className="mb-0 text-muted" style={{ fontSize: '0.75rem' }}>4 familiares en común</p>
-                </div>
-              </div>
-              <button className="boton-agregar">Agregar</button>
-            </div>
-            <div className="d-flex align-items-center justify-content-between p-2 rounded-3 hover-widget">
-              <div className="d-flex gap-3 align-items-center">
-                <img src="https://ui-avatars.com/api/?name=Isabella+Silva&background=f1f5f9" alt="Isabella" className="foto-perfil-chica" />
-                <div>
-                  <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.9rem' }}>Isabella Silva</p>
-                  <p className="mb-0 text-muted" style={{ fontSize: '0.75rem' }}>2 familiares en común</p>
-                </div>
-              </div>
-              <button className="boton-agregar">Agregar</button>
-            </div>
-          </div>
-
         </div>
       </div>
     </div>
