@@ -1,34 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Red.css';
 
-// --- DATOS DE PRUEBA (Simulando API) ---
-const conexionesMock = [
-  { id: 1, nombre: 'Carlos Ruiz', relacion: 'Familiar', info: '4 familiares en común', img: 'https://ui-avatars.com/api/?name=Carlos+Ruiz&background=cbd5e1' },
-  { id: 2, nombre: 'Isabella Silva', relacion: 'Familiar', info: '2 familiares en común', img: 'https://ui-avatars.com/api/?name=Isabella+Silva&background=f1f5f9' },
-  { id: 3, nombre: 'Arthur Morales', relacion: 'Abuelo', info: 'Miembro de la familia', img: 'https://ui-avatars.com/api/?name=Arthur+Morales&background=e2e8f0&color=475569' },
-  { id: 4, nombre: 'Maria Garcia', relacion: 'Tía', info: 'Miembro de la familia', img: 'https://ui-avatars.com/api/?name=Maria+Garcia&background=fef08a&color=713f12' },
-  { id: 5, nombre: 'David Morales', relacion: 'Hermano', info: 'Miembro de la familia', img: 'https://ui-avatars.com/api/?name=David+Morales&background=bae6fd&color=0c4a6e' }
-];
-
 export default function Red() {
   const [tabActiva, setTabActiva] = useState('familia');
+  const [conexiones, setConexiones] = useState([]);
+  const [busqueda, setBusqueda] = useState('');
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+
+  const token = localStorage.getItem('token');
+  const URL_BASE_BACKEND = 'http://localhost:3000';
+
+  // Efecto para consultar la API según la pestaña seleccionada
+  useEffect(() => {
+    if (!token) {
+      setError('No has iniciado sesión.');
+      setCargando(false);
+      return;
+    }
+
+    const fetchConexiones = async () => {
+      setCargando(true);
+      setError('');
+      
+      let endpoint = '';
+      if (tabActiva === 'familia') endpoint = '/api/familia/listar';
+      if (tabActiva === 'amigos') endpoint = '/api/amigos/listar';
+      if (tabActiva === 'seguidores') endpoint = '/api/seguidores/mis-seguidores';
+      if (tabActiva === 'siguiendo') endpoint = '/api/seguidores/a-quienes-sigo';
+
+      try {
+        const respuesta = await fetch(`${URL_BASE_BACKEND}${endpoint}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!respuesta.ok) {
+          throw new Error('Error al cargar las conexiones de la red.');
+        }
+
+        const datos = await respuesta.json();
+        setConexiones(datos);
+      } catch (err) {
+        console.error(err);
+        setError(err.message || 'Hubo un problema con el servidor.');
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    fetchConexiones();
+  }, [tabActiva, token]);
+
+  // Filtro dinámico para la barra de búsqueda superior
+  const conexionesFiltradas = conexiones.filter(contacto =>
+    contacto.nombre.toLowerCase().includes(busqueda.toLowerCase())
+  );
 
   return (
-    <div className="container-fluid max-w-custom p-0">
-      
-      {/* CABECERA */}
-      <div className="cabecera-red">
-        <h2 className="fuente-elegante fw-bold titulo-seccion fs-3">Tus Conexiones</h2>
-        
-        <div className="buscador-red">
-          <i className="bi bi-search"></i>
-          <input type="text" className="input-buscar-red" placeholder="Buscar en la red..." />
+    <div className="contenedor-red container py-4">
+      {/* SECCIÓN SUPERIOR: Título y Buscador */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+          <h2 className="fw-bold mb-1 texto-principal">Mi Red</h2>
+          <p className="text-muted mb-0">Gestiona tus lazos familiares, amistades y relaciones en tu legado.</p>
+        </div>
+        <div className="posicion-buscador">
+          <i className="bi bi-search icono-busqueda"></i>
+          <input 
+            type="text" 
+            className="form-control buscador-red" 
+            placeholder="Buscar conexiones por nombre..." 
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
         </div>
       </div>
 
-      {/* PESTAÑAS (TABS) */}
-      <div className="tabs-red">
+      {/* PESTAÑAS DE NAVEGACIÓN (Tabs de Categorías) */}
+      <div className="tabs-contenedor-red d-flex gap-2 overflow-x-auto pb-2 mb-4">
         <button 
           className={`tab-red ${tabActiva === 'familia' ? 'activo' : ''}`}
           onClick={() => setTabActiva('familia')}
@@ -55,21 +107,61 @@ export default function Red() {
         </button>
       </div>
 
-      {/* CUADRÍCULA DE CONEXIONES (Grid Responsivo) */}
-      <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
-        {conexionesMock.map(contacto => (
-          <div className="col" key={contacto.id}>
-            <div className="tarjeta-conexion shadow-sm">
-              <img src={contacto.img} alt={contacto.nombre} className="foto-conexion" />
-              <h5 className="nombre-conexion">{contacto.nombre}</h5>
-              <p className="relacion-conexion text-uppercase">{contacto.relacion}</p>
-              <p className="info-conexion">{contacto.info}</p>
-              <button className="boton-ver-perfil">Ver Perfil</button>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* MANEJO DE ESTADOS (Cargando / Error) */}
+      {cargando && (
+        <div className="text-center my-5">
+          <div className="spinner-border text-primary" role="status"></div>
+          <p className="text-muted mt-2">Sincronizando conexiones de tu legado...</p>
+        </div>
+      )}
 
+      {error && (
+        <div className="alert alert-danger text-center shadow-sm my-4" role="alert">
+          <i className="bi bi-exclamation-triangle-fill me-2"></i> {error}
+        </div>
+      )}
+
+      {/* CUADRÍCULA DE CONEXIONES */}
+      {!cargando && !error && (
+        <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
+          {conexionesFiltradas.length > 0 ? (
+            conexionesFiltradas.map(contacto => {
+              // Si la imagen es una ruta local del backend (/uploads/...), concatena la URL base
+              const srcImagen = contacto.img.startsWith('/uploads') 
+                ? `${URL_BASE_BACKEND}${contacto.img}` 
+                : contacto.img;
+
+              return (
+                <div className="col" key={contacto.id}>
+                  <div className="tarjeta-conexion shadow-sm text-center p-3 h-100 d-flex flex-column justify-content-between">
+                    <div>
+                      <img src={srcImagen} alt={contacto.nombre} className="foto-conexion mb-3" />
+                      <h5 className="nombre-conexion fw-bold">{contacto.nombre}</h5>
+                      <span className="badge bg-light text-dark text-uppercase mb-2 px-3 py-1 relacion-badge">
+                        {contacto.relacion}
+                      </span>
+                      <p className="relacion-conexion text-muted small">{contacto.info}</p>
+                    </div>
+                    <div className="mt-3 d-flex gap-2 justify-content-center">
+                      <button className="btn btn-outline-primary btn-sm rounded-pill px-3">
+                        <i className="bi bi-person-fill me-1"></i> Perfil
+                      </button>
+                      <button className="btn btn-primary btn-sm rounded-pill px-3">
+                        <i className="bi bi-chat-dots-fill me-1"></i> Mensaje
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="col-12 text-center my-5 w-100">
+              <i className="bi bi-people text-muted" style={{ fontSize: '3rem' }}></i>
+              <p className="text-muted mt-3">No se encontraron conexiones activas en esta sección.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

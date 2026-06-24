@@ -7,7 +7,7 @@ const publicacionSchema = new mongoose.Schema({
     },
     tipo: {
         type: String
-    }, 
+    },
     contenido: {
         type: String
     },
@@ -15,10 +15,10 @@ const publicacionSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Upload'
     }],
-    reacciones: {
-        type: Number,
-        default: 0
-    },
+    reacciones: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario'
+    }],
     compartido: {
         type: Number,
         default: 0

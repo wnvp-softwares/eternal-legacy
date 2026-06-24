@@ -33,7 +33,7 @@ const crearPublicacion = async (req, res) => {
             tipo: tipo || 'historico',
             contenido: contenido,
             multimedia: idsMultimedia, // Guardamos el array de IDs de la colección Upload
-            reacciones: 0,
+            reacciones: [],
             compartido: 0
         });
 
@@ -73,23 +73,37 @@ const obtenerPublicaciones = async (req, res) => {
 const reaccionarPublicacion = async (req, res) => {
     try {
         const { id } = req.params;
+        const usuarioId = req.usuario.id;
 
-        const publicacionActualizada = await Publicacion.findByIdAndUpdate(
-            id,
-            { $inc: { reacciones: 1 } },
-            { returnDocument: 'after' } // 👈 CAMBIA 'new: true' POR ESTO
-        );
-
-        if (!publicacionActualizada) {
+        const publicacion = await Publicacion.findById(id);
+        if (!publicacion) {
             return res.status(404).json({ mensaje: 'Publicación no encontrada' });
         }
 
+        // 💡 SOLUCIÓN: Si 'reacciones' no es un arreglo (es un número o undefined), lo inicializamos vacío en memoria
+        if (!Array.isArray(publicacion.reacciones)) {
+            publicacion.reacciones = [];
+        }
+
+        // Ahora .includes() nunca fallará
+        const yaReacciono = publicacion.reacciones.includes(usuarioId);
+
+        const operacion = yaReacciono
+            ? { $pull: { reacciones: usuarioId } }
+            : { $addToSet: { reacciones: usuarioId } };
+
+        const publicacionActualizada = await Publicacion.findByIdAndUpdate(
+            id,
+            operacion,
+            { returnDocument: 'after' }
+        );
+
         res.status(200).json({
-            mensaje: 'Reacción registrada',
-            reacciones: publicacionActualizada.reacciones
+            mensaje: yaReacciono ? 'Reacción eliminada' : 'Reacción registrada',
+            reacciones: publicacionActualizada.reacciones || []
         });
     } catch (error) {
-        console.error('❌ Error al reaccionar:', error);
+        console.error('❌ Error al gestionar la reacción:', error);
         res.status(500).json({ mensaje: 'Error al procesar la reacción' });
     }
 };

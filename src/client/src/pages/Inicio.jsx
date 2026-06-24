@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import './Inicio.css';
 
 export default function Inicio() {
+  const { textoBusqueda } = useOutletContext();
+
   const [modalAbierto, setModalAbierto] = useState(false);
   const [tipoPublicacion, setTipoPublicacion] = useState('historico');
   const [textoPublicacion, setTextoPublicacion] = useState('');
@@ -10,7 +13,7 @@ export default function Inicio() {
   const [archivoAdjunto, setArchivoAdjunto] = useState(null);
   const [vistaPrevia, setVistaPrevia] = useState('');
   const fileInputRef = useRef(null);
-  
+
   // ESTADOS PARA LAS PUBLICACIONES DEL MURO
   const token = localStorage.getItem('token');
   const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
@@ -19,9 +22,13 @@ export default function Inicio() {
   const [cargando, setCargando] = useState(token ? true : false);
   const [error, setError] = useState(token ? '' : 'No has iniciado sesión.');
 
+  // ESTADOS PARA BUSQUEDA
+  const [resultadosPersonas, setResultadosPersonas] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+
   // --- NUEVOS ESTADOS PARA INTERACCIÓN (MAPEOS POR PUBLICACIÓN ID) ---
-  const [comentariosPorPub, setComentariosPorPub] = useState({}); 
-  const [comentarioAbierto, setComentarioAbierto] = useState({}); 
+  const [comentariosPorPub, setComentariosPorPub] = useState({});
+  const [comentarioAbierto, setComentarioAbierto] = useState({});
   const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState({});
 
   // 1. CARGAR PUBLICACIONES AL INICIAR
@@ -36,7 +43,7 @@ export default function Inicio() {
           }
         });
         const datos = await respuesta.json();
-        
+
         if (respuesta.ok) {
           setPublicaciones(datos);
         } else {
@@ -174,60 +181,108 @@ export default function Inicio() {
     }
   };
 
+  // USE EFFECT PARA LA BUSQUEDA GENERALIZADA
+  useEffect(() => {
+    if (!token) return;
+
+    // Si la barra está vacía, restauramos las publicaciones originales del muro
+    if (textoBusqueda.trim() === '') {
+      setResultadosPersonas([]);
+      const restaurarMuro = async () => {
+        try {
+          const respuesta = await fetch('http://localhost:3000/api/publicaciones/muro', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (respuesta.ok) {
+            const datos = await respuesta.json();
+            setPublicaciones(datos);
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      restaurarMuro();
+      return;
+    }
+
+    // Si hay texto, hace la petición al backend pasados 400ms
+    const ejecutarBusqueda = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const respuesta = await fetch(`http://localhost:3000/api/publicaciones/buscar?q=${encodeURIComponent(textoBusqueda)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (respuesta.ok) {
+          const datos = await respuesta.json();
+          // Asumiendo que tu endpoint devuelve { publicaciones: [...], personas: [...] }
+          setPublicaciones(datos.publicaciones || []);
+          setResultadosPersonas(datos.personas || []);
+        }
+      } catch (err) {
+        console.error('Error al realizar la búsqueda:', err);
+      } finally {
+        setBuscando(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(ejecutarBusqueda);
+  }, [textoBusqueda, token]);
+
   return (
     <div className="container-fluid max-w-custom p-0">
-      
+
       {/* MODAL OVERLAY */}
       {modalAbierto && (
         <div className="modal-backdrop-custom" onClick={() => setModalAbierto(false)}>
           <div className="modal-publicacion" onClick={(e) => e.stopPropagation()}>
             <button className="btn-cerrar-modal" onClick={() => setModalAbierto(false)}>
-                <i className="bi bi-x"></i>
+              <i className="bi bi-x"></i>
             </button>
             <div className="modal-cabecera">
-                <div className="modal-tabs">
-                    <button className={`tab-publicacion ${tipoPublicacion === 'historico' ? 'activo' : ''}`} onClick={() => setTipoPublicacion('historico')}>
-                        <i className="bi bi-clock-history"></i> Recuerdo Histórico
-                    </button>
-                    <button className={`tab-publicacion ${tipoPublicacion === 'familiar' ? 'activo' : ''}`} onClick={() => setTipoPublicacion('familiar')}>
-                        <i className="bi bi-people"></i> Momento Familiar
-                    </button>
-                </div>
+              <div className="modal-tabs">
+                <button className={`tab-publicacion ${tipoPublicacion === 'historico' ? 'activo' : ''}`} onClick={() => setTipoPublicacion('historico')}>
+                  <i className="bi bi-clock-history"></i> Recuerdo Histórico
+                </button>
+                <button className={`tab-publicacion ${tipoPublicacion === 'familiar' ? 'activo' : ''}`} onClick={() => setTipoPublicacion('familiar')}>
+                  <i className="bi bi-people"></i> Momento Familiar
+                </button>
+              </div>
             </div>
             <div className="modal-cuerpo mt-3">
-                <textarea 
-                    className="form-control input-publicacion" 
-                    rows="3" 
-                    placeholder={tipoPublicacion === 'historico' ? "¿Qué historia o legado deseas preservar hoy?..." : "¿Qué está pasando en tu núcleo familiar hoy?..."}
-                    value={textoPublicacion}
-                    onChange={(e) => setTextoPublicacion(e.target.value)}
-                ></textarea>
-                {vistaPrevia && (
-                  <div className="contenedor-vista-previa mt-3 position-relative text-center bg-light rounded p-2 border">
-                    <button type="button" className="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 rounded-circle" onClick={limpiarMultimedia}>
-                      <i className="bi bi-trash"></i>
-                    </button>
-                    {archivoAdjunto?.type.startsWith('video/') ? (
-                      <video src={vistaPrevia} className="img-fluid rounded" style={{ maxHeight: '200px' }} controls />
-                    ) : (
-                      <img src={vistaPrevia} alt="Vista previa" className="img-fluid rounded" style={{ maxHeight: '200px', objectFit: 'contain' }} />
-                    )}
-                  </div>
-                )}
+              <textarea
+                className="form-control input-publicacion"
+                rows="3"
+                placeholder={tipoPublicacion === 'historico' ? "¿Qué historia o legado deseas preservar hoy?..." : "¿Qué está pasando en tu núcleo familiar hoy?..."}
+                value={textoPublicacion}
+                onChange={(e) => setTextoPublicacion(e.target.value)}
+              ></textarea>
+              {vistaPrevia && (
+                <div className="contenedor-vista-previa mt-3 position-relative text-center bg-light rounded p-2 border">
+                  <button type="button" className="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 rounded-circle" onClick={limpiarMultimedia}>
+                    <i className="bi bi-trash"></i>
+                  </button>
+                  {archivoAdjunto?.type.startsWith('video/') ? (
+                    <video src={vistaPrevia} className="img-fluid rounded" style={{ maxHeight: '200px' }} controls />
+                  ) : (
+                    <img src={vistaPrevia} alt="Vista previa" className="img-fluid rounded" style={{ maxHeight: '200px', objectFit: 'contain' }} />
+                  )}
+                </div>
+              )}
             </div>
             <div className="modal-pie d-flex justify-content-between align-items-center mt-3 pt-2">
-                <input type="file" ref={fileInputRef} onChange={manejarCambioArchivo} accept="image/*,video/*" style={{ display: 'none' }} />
-                <button className="btn-multimedia-modal" type="button" onClick={() => fileInputRef.current.click()}>
-                    <i className="bi bi-image me-2"></i> {archivoAdjunto ? 'Cambiar archivo' : 'Agregar Foto/Video'}
-                </button>
-                <button 
-                  className="boton-publicar-modal" 
-                  type="button" 
-                  onClick={manejarPublicar}
-                  disabled={textoPublicacion.trim() === ''}
-                >
-                  Publicar Legado
-                </button>
+              <input type="file" ref={fileInputRef} onChange={manejarCambioArchivo} accept="image/*,video/*" style={{ display: 'none' }} />
+              <button className="btn-multimedia-modal" type="button" onClick={() => fileInputRef.current.click()}>
+                <i className="bi bi-image me-2"></i> {archivoAdjunto ? 'Cambiar archivo' : 'Agregar Foto/Video'}
+              </button>
+              <button
+                className="boton-publicar-modal"
+                type="button"
+                onClick={manejarPublicar}
+                disabled={textoPublicacion.trim() === ''}
+              >
+                Publicar Legado
+              </button>
             </div>
           </div>
         </div>
@@ -236,12 +291,34 @@ export default function Inicio() {
       {/* CUERPO DEL MURO */}
       <div className="row g-4 MuroContenedor">
         <div className="col-12 col-lg-8">
-          
-          <div className="tarjeta p-3 mb-4 shadow-sm disparador-modal d-flex align-items-center gap-3" onClick={() => setModalAbierto(true)}>
-            <img src={`https://ui-avatars.com/api/?name=${usuarioLogueado?.nombreUsuario || 'Usuario'}&background=0D1B2A&color=fff`} alt="Perfil" className="foto-perfil-post" />
-            <div className="input-simulado-compacto flex-grow-1">Preserva un nuevo recuerdo o momento familiar...</div>
-            <button className="btn-icono-compacto historia" type="button"><i className="bi bi-plus-lg"></i></button>
-          </div>
+
+          {textoBusqueda.trim() === '' && (
+            <div className="tarjeta shadow-sm mb-4 p-3">
+              <div className="tarjeta p-3 mb-4 shadow-sm disparador-modal d-flex align-items-center gap-3" onClick={() => setModalAbierto(true)}>
+                <img src={`https://ui-avatars.com/api/?name=${usuarioLogueado?.nombreUsuario || 'Usuario'}&background=0D1B2A&color=fff`} alt="Perfil" className="foto-perfil-post" />
+                <div className="input-simulado-compacto flex-grow-1">Preserva un nuevo recuerdo o momento familiar...</div>
+                <button className="btn-icono-compacto historia" type="button"><i className="bi bi-plus-lg"></i></button>
+              </div>
+            </div>
+          )}
+
+          {textoBusqueda.trim() !== '' && resultadosPersonas.length > 0 && (
+            <div className="tarjeta shadow-sm mb-4 p-3">
+              <h3 className="titulo-widget mb-3" style={{ fontSize: '1rem' }}>Personas encontradas</h3>
+              <div className="d-flex flex-wrap gap-3">
+                {resultadosPersonas.map(persona => (
+                  <div key={persona.id || persona._id} className="d-flex align-items-center gap-3 p-2 rounded-3 hover-widget" style={{ minWidth: '200px' }}>
+                    <img src={persona.img || `https://ui-avatars.com/api/?name=${persona.nombreUsuario}`} alt={persona.nombreUsuario} className="foto-perfil-chica" />
+                    <div>
+                      <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.9rem' }}>
+                        {persona.nombreUsuario || persona.nombre || (persona.id && persona.id.nombreUsuario) || 'Usuario'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {cargando && <p className="text-center text-muted py-3">Cargando memorias familiares...</p>}
           {error && <p className="text-center text-danger py-3">{error}</p>}
@@ -256,7 +333,7 @@ export default function Inicio() {
 
             return (
               <div key={pub._id} className="tarjeta shadow-sm mb-4">
-                
+
                 {pub.tipo === 'historico' ? (
                   /* ================= DISEÑO HISTÓRICO ================= */
                   <>
@@ -268,33 +345,33 @@ export default function Inicio() {
                             <span>RECUERDO HISTÓRICO</span>
                           </div>
                           <div className="d-flex align-items-baseline gap-2 mt-1">
-                              <p className="nombre-autor fs-5 mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</p>
-                              <span className="info-autor mb-0">{fechaFormateada}</span>
+                            <p className="nombre-autor fs-5 mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</p>
+                            <span className="info-autor mb-0">{fechaFormateada}</span>
                           </div>
                           <div className="etiqueta-historica-inferior">
-                              <i className="bi bi-globe-americas text-muted" title="Público"></i>
-                              <span>{pub.etiqueta?.nombre || 'Sin Etiqueta'}</span>
-                              {pub.anio && <span className="anio-historico">• {pub.anio}</span>}
+                            <i className="bi bi-globe-americas text-muted" title="Público"></i>
+                            <span>{pub.etiqueta?.nombre || 'Sin Etiqueta'}</span>
+                            {pub.anio && <span className="anio-historico">• {pub.anio}</span>}
                           </div>
                         </div>
                       </div>
                       <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
                     </div>
 
-                    <p className="texto-post historico">{pub.contenido}</p>
-                    
+                    <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{pub.contenido}</p>
+
                     {tieneMultimedia && (
                       <div className="contenedor-polaroid">
-                          <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
-                              {esVideo ? (
-                                  <video src={urlMultimedia} className="imagen-post-historico w-100" controls controlsList="nodownload" />
-                              ) : (
-                                  <img src={urlMultimedia} alt="Recuerdo" className="imagen-post-historico" />
-                              )}
-                          </div>
-                          <div className="carrusel-indicadores">
-                              <span className="carrusel-dot activo"></span>
-                          </div>
+                        <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
+                          {esVideo ? (
+                            <video src={urlMultimedia} className="imagen-post-historico w-100" controls controlsList="nodownload" />
+                          ) : (
+                            <img src={urlMultimedia} alt="Recuerdo" className="imagen-post-historico" />
+                          )}
+                        </div>
+                        <div className="carrusel-indicadores">
+                          <span className="carrusel-dot activo"></span>
+                        </div>
                       </div>
                     )}
                   </>
@@ -309,30 +386,30 @@ export default function Inicio() {
                             <span>MOMENTO FAMILIAR</span>
                           </div>
                           <div className="d-flex align-items-baseline gap-2 mt-1">
-                              <p className="nombre-autor fs-5 mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</p>
-                              <span className="info-autor mb-0">{fechaFormateada}</span>
+                            <p className="nombre-autor fs-5 mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</p>
+                            <span className="info-autor mb-0">{fechaFormateada}</span>
                           </div>
                           <div className="etiqueta-contexto-familiar">
-                              <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i>
-                              <span>Con Familia</span>
+                            <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i>
+                            <span>Con Familia</span>
                           </div>
                         </div>
                       </div>
                       <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
                     </div>
 
-                    <p className="texto-post historico">{pub.contenido}</p>
-                    
+                    <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{pub.contenido}</p>
+
                     {tieneMultimedia && (
                       <div className="contenedor-moderno">
-                          {esVideo ? (
-                              <video src={urlMultimedia} className="imagen-post-moderna w-100" controls controlsList="nodownload" />
-                          ) : (
-                              <img src={urlMultimedia} alt="Recuerdo" className="imagen-post-moderna" />
-                          )}
-                          <div className="carrusel-indicadores-moderno">
-                              <span className="carrusel-dot-moderno activo"></span>
-                          </div>
+                        {esVideo ? (
+                          <video src={urlMultimedia} className="imagen-post-moderna w-100" controls controlsList="nodownload" />
+                        ) : (
+                          <img src={urlMultimedia} alt="Recuerdo" className="imagen-post-moderna" />
+                        )}
+                        <div className="carrusel-indicadores-moderno">
+                          <span className="carrusel-dot-moderno activo"></span>
+                        </div>
                       </div>
                     )}
                   </>
@@ -342,7 +419,7 @@ export default function Inicio() {
                 <div className="d-flex justify-content-between mt-4 pt-3 border-top">
                   <div className="d-flex gap-4">
                     <button className="boton-interaccion" type="button" onClick={() => manejarLike(pub._id)}>
-                      <i className={`bi bi-heart${pub.reacciones ? '-fill text-danger' : ''}`}></i> {pub.reacciones || 0}
+                      <i className={`bi bi-heart${pub.reacciones?.includes(usuarioLogueado?.id || usuarioLogueado?._id) ? '-fill text-danger' : ''}`}></i> {pub.reacciones?.length || 0}
                     </button>
                     <button className="boton-interaccion" type="button" onClick={() => toggleComentarios(pub._id)}>
                       <i className="bi bi-chat"></i> {comentariosPorPub[pub._id]?.length || 'Comentar'}
@@ -370,14 +447,14 @@ export default function Inicio() {
                       )}
                     </div>
                     <div className="d-flex gap-2 pb-2">
-                      <input 
-                        type="text" 
-                        className="form-control form-control-sm" 
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
                         placeholder="Escribe un comentario..."
                         style={{ backgroundColor: 'var(--input-bg)', color: 'var(--texto-principal)', borderColor: 'var(--borde-color)' }}
                         value={nuevoComentarioTexto[pub._id] || ''}
                         onChange={(e) => setNuevoComentarioTexto(prev => ({ ...prev, [pub._id]: e.target.value }))}
-                        onKeyDown={(e) => { if(e.key === 'Enter') enviarComentario(pub._id); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') enviarComentario(pub._id); }}
                       />
                       <button className="btn btn-sm text-white px-3" onClick={() => enviarComentario(pub._id)} style={{ backgroundColor: 'var(--dorado)', border: 'none' }}>
                         Enviar
