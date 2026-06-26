@@ -141,6 +141,204 @@
 }
 
 /* =========================================
+   NUEVO: MODAL DE EDICIÓN DE PERFIL (ESTILO X)
+   ========================================= */
+.modal-backdrop-edicion {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100vh;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.modal-edicion-x {
+    background-color: var(--fondo-tarjeta);
+    width: 100%;
+    max-width: 600px;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh; /* Permite scroll interno si la pantalla es chica */
+}
+
+.modal-cabecera-x {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--borde-color);
+    position: sticky;
+    top: 0;
+    background-color: var(--fondo-tarjeta);
+    z-index: 10;
+}
+
+.btn-cerrar-x {
+    background: transparent;
+    border: none;
+    color: var(--texto-principal);
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-cerrar-x:hover {
+    background-color: var(--hover-menu);
+}
+
+.titulo-edicion-x {
+    flex-grow: 1;
+    margin: 0 16px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--texto-principal);
+}
+
+.btn-guardar-x {
+    background-color: var(--texto-principal);
+    color: var(--fondo-tarjeta); /* Invertido para que resalte */
+    border: none;
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.btn-guardar-x:hover {
+    opacity: 0.85;
+}
+
+.modal-cuerpo-x {
+    overflow-y: auto;
+    padding-bottom: 20px;
+}
+
+/* Áreas de Imágenes con oscurecimiento */
+.portada-edicion-container {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    background-color: var(--borde-color);
+}
+
+.portada-edicion-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: brightness(0.6); /* Oscurece la imagen un poco */
+}
+
+.camara-icono-x {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0,0,0,0.5);
+    color: white;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.camara-icono-x:hover {
+    background-color: rgba(0,0,0,0.7);
+}
+
+.foto-perfil-edicion-container {
+    position: relative;
+    margin-top: -50px;
+    margin-left: 16px;
+    width: 112px;
+    height: 112px;
+    border-radius: 50%;
+    border: 4px solid var(--fondo-tarjeta);
+    background-color: var(--fondo-app);
+}
+
+.foto-perfil-edicion-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    filter: brightness(0.6);
+}
+
+/* Inputs Estilo X */
+.formulario-edicion-x {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.grupo-input-x {
+    border: 1px solid var(--borde-color);
+    border-radius: 4px;
+    padding: 6px 12px;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background-color: transparent;
+}
+
+.grupo-input-x:focus-within {
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 1px var(--dorado);
+}
+
+.label-input-x {
+    font-size: 0.8rem;
+    color: var(--texto-secundario);
+    margin-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.input-x, .textarea-x {
+    background-color: transparent !important;
+    border: none !important;
+    color: var(--texto-principal) !important;
+    padding: 0;
+    font-size: 1rem;
+    outline: none;
+    resize: none;
+    box-shadow: none !important;
+}
+
+.input-x:focus, .textarea-x:focus {
+    box-shadow: none !important;
+}
+
+/* Responsividad para móviles */
+@media (max-width: 576px) {
+    .modal-edicion-x {
+        border-radius: 0;
+        height: 100vh;
+        max-height: 100vh;
+    }
+}
+
+/* =========================================
    ETIQUETAS AESTHETIC (DIAPOSITIVAS)
    ========================================= */
 .contenedor-etiquetas {
@@ -371,7 +569,7 @@
 .boton-interaccion:hover { color: var(--dorado); }
 
 /* =========================================
-   LÍNEA DEL TIEMPO (HILO DORADO)
+   LÍ কমপক্ষে TIEMPO (HILO DORADO)
    ========================================= */
 .timeline-contenedor {
     position: relative;
@@ -394,14 +592,8 @@
 }
 
 @keyframes resplandor-hilo {
-    0% {
-        box-shadow: 0 0 8px rgba(203, 161, 53, 0.4), 0 0 2px rgba(255, 255, 255, 0.2);
-        opacity: 0.8;
-    }
-    100% {
-        box-shadow: 0 0 20px rgba(203, 161, 53, 1), 0 0 8px rgba(255, 255, 255, 0.8);
-        opacity: 1;
-    }
+    0% { box-shadow: 0 0 8px rgba(203, 161, 53, 0.4), 0 0 2px rgba(255, 255, 255, 0.2); opacity: 0.8; }
+    100% { box-shadow: 0 0 20px rgba(203, 161, 53, 1), 0 0 8px rgba(255, 255, 255, 0.8); opacity: 1; }
 }
 
 .timeline-item {
@@ -437,18 +629,12 @@
 }
 
 @keyframes latido-nodo {
-    0% {
-        transform: scale(1);
-        box-shadow: 0 4px 15px rgba(203, 161, 53, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.7);
-    }
-    100% {
-        transform: scale(1.08);
-        box-shadow: 0 4px 25px rgba(203, 161, 53, 0.8), inset 0 0 20px rgba(255, 255, 255, 1);
-    }
+    0% { transform: scale(1); box-shadow: 0 4px 15px rgba(203, 161, 53, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.7); }
+    100% { transform: scale(1.08); box-shadow: 0 4px 25px rgba(203, 161, 53, 0.8), inset 0 0 20px rgba(255, 255, 255, 1); }
 }
 
 /* =========================================
-   NUEVO: GALERÍA DE FOTOS (GRID)
+   GALERÍA DE FOTOS (GRID)
    ========================================= */
 .galeria-contenedor {
     padding: 10px 0 40px 0;
@@ -536,9 +722,9 @@
     .tabs-perfil { padding: 0 10px; overflow-x: auto; }
     .contenedor-polaroid { padding: 8px 8px 28px 8px; }
     
-    /* Adaptación de Galería para móviles (como Instagram) */
+    /* Adaptación de Galería para móviles */
     .galeria-grid { gap: 3px; }
-    .galeria-item { border-radius: 2px; } /* Bordes casi cuadrados en celular */
+    .galeria-item { border-radius: 2px; } 
     .galeria-icono-multi { top: 6px; right: 8px; font-size: 1rem; }
     .galeria-overlay { gap: 10px; }
     .galeria-estilos-texto { font-size: 0.95rem; gap: 4px; }

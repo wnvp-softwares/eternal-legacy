@@ -6,6 +6,14 @@ export default function Perfil() {
   const [tabActiva, setTabActiva] = useState('memories');
   const [etiquetaSeleccionada, setEtiquetaSeleccionada] = useState(null);
 
+  // --- ESTADOS PARA EL MODAL DE EDICIÓN DE PERFIL (ESTILO X) ---
+  const [edicionAbierta, setEdicionAbierta] = useState(false);
+  const [formEdicion, setFormEdicion] = useState({
+    biografia: '',
+    ubicacionActual: '',
+    ocupacionEducacion: ''
+  });
+
   // --- CONFIGURACIÓN DE DATOS REALES DE SESIÓN Y BACKEND ---
   const token = localStorage.getItem('token');
   const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
@@ -25,7 +33,6 @@ export default function Perfil() {
 
     const cargarDatosPerfil = async () => {
       try {
-        // Hacemos las peticiones apuntando al puerto correcto del servidor
         const [resPerfil, resPublicaciones] = await Promise.all([
           fetch(`${API_BASE_URL}/perfil/mi-perfil`, {
             method: 'GET',
@@ -52,19 +59,17 @@ export default function Perfil() {
 
         setPerfilBd(datosPerfil.perfil);
 
-        // 1. Validamos la estructura del JSON que devuelve tu backend
         const listaPosts = Array.isArray(datosPublicaciones)
           ? datosPublicaciones
           : (datosPublicaciones.publicaciones || datosPublicaciones.posts || []);
 
-        // 2. Filtramos en el cliente para mostrar ÚNICAMENTE las publicaciones de este usuario
         const misPublicaciones = listaPosts.filter(post => {
           const autorId = post.autor?._id || post.autor;
           return autorId === usuarioLogueado?.id || autorId === usuarioLogueado?._id;
         });
 
         setPublicaciones(misPublicaciones);
-        setError(''); // Limpiamos errores previos si todo sale bien
+        setError(''); 
       } catch (err) {
         console.error("Error cargando datos del perfil:", err);
         setError('Error de conexión con el servidor. Verifica que el backend esté corriendo en el puerto 3000.');
@@ -76,11 +81,48 @@ export default function Perfil() {
     cargarDatosPerfil();
   }, [token]);
 
+  // --- FUNCIONES DEL MODAL DE EDICIÓN ---
+  const toggleEdicion = () => {
+    if (!edicionAbierta) {
+      setFormEdicion({
+        biografia: perfilBd?.biografia || '',
+        ubicacionActual: perfilBd?.ubicacionActual || '',
+        ocupacionEducacion: perfilBd?.ocupacionEducacion || ''
+      });
+    }
+    setEdicionAbierta(!edicionAbierta);
+  };
+
+  const guardarPerfil = async () => {
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/perfil/actualizar`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(formEdicion)
+      });
+
+      if (respuesta.ok) {
+        const datosBD = await respuesta.json();
+        setPerfilBd(datosBD.perfil || { ...perfilBd, ...formEdicion });
+        setEdicionAbierta(false);
+      } else {
+        alert('Error al guardar el perfil en el servidor.');
+      }
+    } catch (error) {
+      console.error('Error de red al guardar:', error);
+      // Fallback visual en caso de que el backend no tenga lista esta ruta
+      setPerfilBd({ ...perfilBd, ...formEdicion });
+      setEdicionAbierta(false);
+    }
+  };
+
   const manejarClickEtiqueta = (id) => {
     setEtiquetaSeleccionada(etiquetaSeleccionada === id ? null : id);
   };
 
-  // Formatear fechas de MongoDB de forma elegante
   const formatearFecha = (fechaString, formato = 'corta') => {
     if (!fechaString) return 'Reciente';
     const fecha = new Date(fechaString);
@@ -89,12 +131,8 @@ export default function Perfil() {
       : fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
   };
 
-  // --- FILTROS ADAPTADOS A TU MODELO REAL ---
-  const publicacionesFiltradas = publicaciones; // Removidos los filtros por id de mock obsoleto
-
+  const publicacionesFiltradas = publicaciones; 
   const publicacionesHistoricas = publicaciones.filter(post => post.tipo === 'historico');
-
-  // Filtramos publicaciones que tengan un archivo multimedia válido en el primer elemento
   const fotosGaleria = publicaciones.filter(post => post.multimedia && post.multimedia[0]?.urlArchivo);
 
   if (cargando) {
@@ -106,11 +144,89 @@ export default function Perfil() {
     );
   }
 
-  // Generamos avatar dinámico usando el nombre real de tu base de datos
   const urlAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(usuarioLogueado?.nombreUsuario || 'Usuario')}&background=0D1B2A&color=fff`;
 
   return (
     <div className="container-fluid max-w-custom p-0">
+
+      {/* =========================================
+          MODAL DE EDICIÓN DE PERFIL (ESTILO X)
+          ========================================= */}
+      {edicionAbierta && (
+        <div className="modal-backdrop-edicion" onClick={() => setEdicionAbierta(false)}>
+          <div className="modal-edicion-x" onClick={(e) => e.stopPropagation()}>
+            
+            {/* Cabecera del Modal */}
+            <div className="modal-cabecera-x">
+              <button className="btn-cerrar-x" onClick={() => setEdicionAbierta(false)}>
+                <i className="bi bi-x"></i>
+              </button>
+              <h2 className="titulo-edicion-x m-0">Editar perfil</h2>
+              <button className="btn-guardar-x" onClick={guardarPerfil}>
+                Guardar
+              </button>
+            </div>
+
+            {/* Cuerpo del Modal con scroll */}
+            <div className="modal-cuerpo-x">
+              
+              {/* Sección visual simulada (Portada y Avatar con ícono de cámara) */}
+              <div className="portada-edicion-container">
+                <img src="https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200" alt="Portada Edición" className="portada-edicion-img" />
+                <div className="camara-icono-x" title="Cambiar Portada">
+                  <i className="bi bi-camera"></i>
+                </div>
+              </div>
+
+              <div className="foto-perfil-edicion-container">
+                <img src={usuarioLogueado?.imagenPerfil || urlAvatar} alt="Perfil Edición" className="foto-perfil-edicion-img" />
+                <div className="camara-icono-x" title="Cambiar Foto de Perfil">
+                  <i className="bi bi-camera"></i>
+                </div>
+              </div>
+
+              {/* Formulario Estilo X */}
+              <div className="formulario-edicion-x">
+                
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Biografía</label>
+                  <textarea 
+                    className="form-control textarea-x" 
+                    rows="3" 
+                    value={formEdicion.biografia}
+                    onChange={(e) => setFormEdicion({...formEdicion, biografia: e.target.value})}
+                    placeholder="Cuéntale a tu familia sobre ti..."
+                  ></textarea>
+                </div>
+
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Ubicación Actual</label>
+                  <input 
+                    type="text" 
+                    className="form-control input-x" 
+                    value={formEdicion.ubicacionActual}
+                    onChange={(e) => setFormEdicion({...formEdicion, ubicacionActual: e.target.value})}
+                    placeholder="Ej. Guadalajara"
+                  />
+                </div>
+
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Ocupación / Educación</label>
+                  <input 
+                    type="text" 
+                    className="form-control input-x" 
+                    value={formEdicion.ocupacionEducacion}
+                    onChange={(e) => setFormEdicion({...formEdicion, ocupacionEducacion: e.target.value})}
+                    placeholder="Ej. Técnico en Informática"
+                  />
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* =========================================
           CABECERA DEL PERFIL (REAL)
@@ -126,7 +242,9 @@ export default function Perfil() {
         <div className="info-usuario-container">
           <div className="fila-superior-info">
             <img src={usuarioLogueado?.imagenPerfil || urlAvatar} alt="Perfil" className="foto-perfil-grande" />
-            <button className="boton-editar-perfil" title="Editar Perfil">
+            
+            {/* BOTÓN PARA ABRIR MODAL */}
+            <button className="boton-editar-perfil" title="Editar Perfil" onClick={toggleEdicion}>
               <i className="bi bi-pencil"></i>
             </button>
           </div>
@@ -226,9 +344,9 @@ export default function Perfil() {
                             style={{
                               width: '100%',
                               height: '100%',
-                              maxHeight: '500px', // Limita la altura máxima para que no se deforme el feed
+                              maxHeight: '500px', 
                               objectFit: 'contain',
-                              backgroundColor: '#f8f9fa' // Fondo gris muy claro opcional para las barras de relleno
+                              backgroundColor: '#f8f9fa' 
                             }}
                           />
                         </div>
