@@ -16,6 +16,11 @@ export default function Perfil() {
   const [tabActiva, setTabActiva] = useState('memories');
   const [etiquetaSeleccionada, setEtiquetaSeleccionada] = useState(null);
 
+  // --- ESTADOS PARA INTERACCIONES (REACCIONES Y COMENTARIOS) ---
+  const [comentariosAbiertos, setComentariosAbiertos] = useState({}); // { postId: true/false }
+  const [comentariosPorPub, setComentariosPorPub] = useState({});     // { postId: [comentarios] }
+  const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState({}); // { postId: 'texto' }
+
   // --- ESTADOS PARA EL MODAL DE EDICIÓN DE PERFIL (ESTILO X) ---
   const [edicionAbierta, setEdicionAbierta] = useState(false);
   const [formEdicion, setFormEdicion] = useState({
@@ -231,6 +236,129 @@ export default function Perfil() {
     }
   };
 
+  // 1. Dar o quitar reacción (Like)
+  const manejarLike = async (postId) => {
+    try {
+      // Método POST y ruta exacta de tu publicacion.routes.js
+      const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/reaccionar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json(); // Tu controlador responde: { mensaje, reacciones }
+
+        // Sincronizamos las reacciones en el estado de perfilBd sin recargar la página
+        setPerfilBd(prev => {
+          if (!prev || !prev.publicaciones) return prev;
+          return {
+            ...prev,
+            publicaciones: prev.publicaciones.map(p =>
+              p._id === postId ? { ...p, reacciones: data.reacciones } : p
+            )
+          };
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error al gestionar la reacción:', error);
+    }
+  };
+
+  // 2. Cargar comentarios desde tu API de manera dinámica
+  const cargarComentarios = async (postId) => {
+    try {
+      // Endpoint mapeado en tu comentario.routes.js
+      const res = await fetch(`${API_BASE_URL}/comentarios/publicacion/${postId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json(); // Array de comentarios ordenados
+        setComentariosPorPub(prev => ({
+          ...prev,
+          [postId]: data
+        }));
+      }
+    } catch (error) {
+      console.error('❌ Error al obtener comentarios:', error);
+    }
+  };
+
+  // 3. Alternar la caja de comentarios y disparar la carga sincrónica
+  const toggleComentarios = (postId) => {
+    const abriendo = !comentariosAbiertos[postId];
+    setComentariosAbiertos(prev => ({ ...prev, [postId]: abriendo }));
+
+    if (abriendo) {
+      cargarComentarios(postId);
+    }
+  };
+
+  // 1. Función defensiva para comprobar si el usuario logueado dio Like
+  // (Evita errores de tipo si Mongoose devuelve un String o un Objeto populado)
+  const usuarioHaReaccionado = (post) => {
+    return post.reacciones?.some(r => {
+      if (!r) return false;
+      return typeof r === 'object' ? r._id === usuarioLogueado?.id : r === usuarioLogueado?.id;
+    });
+  };
+
+  // 2. Efecto para pre-cargar los comentarios de todas las publicaciones del perfil.
+  // Esto llena el estado global 'comentariosPorPub' al iniciar la vista, haciendo que
+  // los contadores numéricos muestren la cantidad real de inmediato.
+  useEffect(() => {
+    if (perfilBd?.publicaciones && perfilBd.publicaciones.length > 0) {
+      perfilBd.publicaciones.forEach(post => {
+        // Trae los comentarios del servidor únicamente si no se han cargado ya
+        if (!comentariosPorPub[post._id]) {
+          cargarComentarios(post._id);
+        }
+      });
+    }
+  }, [perfilBd?.publicaciones]);
+
+  // 4. Enviar un nuevo comentario
+  const manejarEnviarComentario = async (postId) => {
+    const texto = nuevoComentarioTexto[postId]?.trim();
+    if (!texto) return;
+
+    try {
+      // Estructura exacta que espera tu comentario.controller.js (crearComentario)
+      const res = await fetch(`${API_BASE_URL}/comentarios/crear`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ publicacionId: postId, texto: texto })
+      });
+
+      if (res.ok) {
+        // Limpiamos la caja de texto
+        setNuevoComentarioTexto(prev => ({ ...prev, [postId]: '' }));
+        // Recargamos los comentarios de este post para que aparezca el tuyo al instante
+        cargarComentarios(postId);
+
+        // Opcional: Incrementamos el contador visual del botón sumando un elemento simulado
+        setPerfilBd(prev => {
+          if (!prev || !prev.publicaciones) return prev;
+          return {
+            ...prev,
+            publicaciones: prev.publicaciones.map(p =>
+              p._id === postId ? { ...p, comentarios: [...(p.comentarios || []), 'nuevo_comentario'] } : p
+            )
+          };
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error al enviar el comentario:', error);
+    }
+  };
+
   const manejarClickEtiqueta = (id) => {
     setEtiquetaSeleccionada(etiquetaSeleccionada === id ? null : id);
   };
@@ -375,9 +503,6 @@ export default function Perfil() {
             alt="Portada"
             className="portada-perfil"
           />
-          <button className="boton-editar-portada" title="Editar Portada">
-            <i className="bi bi-camera"></i>
-          </button>
         </div>
 
         <div className="info-usuario-container">
@@ -499,16 +624,74 @@ export default function Perfil() {
                       </div>
                     )}
 
+                    {/* --- BOTONES DE INTERACCIÓN (LIKE Y COMENTARIOS) --- */}
                     <div className="d-flex justify-content-between mt-4 pt-3 border-top">
                       <div className="d-flex gap-4">
-                        <button className="boton-interaccion">
-                          <i className="bi bi-heart"></i> {post.likes?.length || post.reacciones?.length || 0}
+                        {/* Botón de Reacciones (Likes) */}
+                        <button
+                          className="boton-interaccion border-0 bg-transparent"
+                          onClick={() => manejarLike(post._id)}
+                        >
+                          <i className={`bi ${usuarioHaReaccionado(post) ? 'bi-heart-fill text-danger' : 'bi-heart'}`}></i>{' '}
+                          {post.reacciones?.length || 0}
                         </button>
-                        <button className="boton-interaccion">
-                          <i className="bi bi-chat"></i> {post.comentarios?.length || 0}
+
+                        {/* Botón de Comentarios (Usa el estado reactivo precargado) */}
+                        <button
+                          className="boton-interaccion border-0 bg-transparent"
+                          onClick={() => toggleComentarios(post._id)}
+                        >
+                          <i className="bi bi-chat"></i> {comentariosPorPub[post._id]?.length || 0}
                         </button>
                       </div>
                     </div>
+
+                    {/* --- SECCIÓN DESPLEGABLE DE COMENTARIOS --- */}
+                    {comentariosAbiertos[post._id] && (
+                      <div className="seccion-comentarios mt-3 pt-3 border-top bg-light p-3 rounded-3">
+
+                        {/* Lista de comentarios cargados dinámicamente */}
+                        <div className="lista-comentarios mb-3" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                          {comentariosPorPub[post._id] && comentariosPorPub[post._id].length > 0 ? (
+                            comentariosPorPub[post._id].map((com) => (
+                              <div key={com._id} className="d-flex align-items-start mb-2 bg-white p-2 rounded shadow-sm">
+                                <img
+                                  src={com.autor?.imagenPerfil?.urlArchivo ? `http://localhost:3000${com.autor.imagenPerfil.urlArchivo}` : urlAvatar}
+                                  alt="Avatar comentario"
+                                  className="rounded-circle me-2 object-fit-cover"
+                                  style={{ width: '30px', height: '30px', border: '1px solid #dee2e6' }}
+                                />
+                                <div className="flex-grow-1">
+                                  <span className="fw-bold small d-block">{com.autor?.nombreUsuario || 'Familiar'}</span>
+                                  <p className="small m-0 text-secondary">{com.texto}</p>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="small text-muted my-2 ps-1">Aún no hay comentarios en este recuerdo. ¡Sé el primero!</p>
+                          )}
+                        </div>
+
+                        {/* Formulario para añadir nuevo comentario */}
+                        <div className="d-flex gap-2">
+                          <input
+                            type="text"
+                            className="form-control form-control-sm border-secondary-subtle"
+                            placeholder="Escribe un comentario familiar..."
+                            value={nuevoComentarioTexto[post._id] || ''}
+                            onChange={(e) => setNuevoComentarioTexto(prev => ({ ...prev, [post._id]: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && manejarEnviarComentario(post._id)}
+                          />
+                          <button
+                            className="btn btn-sm text-white px-3"
+                            onClick={() => manejarEnviarComentario(post._id)}
+                            style={{ backgroundColor: 'var(--dorado)', border: 'none' }}
+                          >
+                            Enviar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -582,8 +765,9 @@ export default function Perfil() {
                         <div className="galeria-estilos-texto">
                           <i className="bi bi-heart-fill"></i> {post.reacciones?.length || 0}
                         </div>
+                        {/* Contador de comentarios corregido para la galería */}
                         <div className="galeria-estilos-texto">
-                          <i className="bi bi-chat-fill"></i> {post.comentarios?.length || 0}
+                          <i className="bi bi-chat-fill"></i> {comentariosPorPub[post._id]?.length || 0}
                         </div>
                       </div>
                     </div>
