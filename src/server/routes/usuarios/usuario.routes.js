@@ -6,6 +6,7 @@ const {
     crearUsuario, 
     loginUsuario, 
     actualizarFotoPerfil, 
+    actualizarImagenesPerfil,
     verificarCodigo
 } = require('../../controllers/usuarios/usuario.controller');
 
@@ -18,6 +19,7 @@ router.post('/verificar-codigo', verificarCodigo); // Ahora sí funcionará
 
 // Rutas Protegidas (Requieren Token)
 router.put('/foto-perfil', verificarToken, actualizarFotoPerfil);
+router.put('/actualizar-imagenes', verificarToken, actualizarImagenesPerfil);
 
 router.get('/zona-vip', verificarToken, (req, res) => {
     res.status(200).json({

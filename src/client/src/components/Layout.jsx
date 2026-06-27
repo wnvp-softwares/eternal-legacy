@@ -10,6 +10,8 @@ export default function Layout() {
 
   const [textoBusqueda, setTextoBusqueda] = useState('');
 
+  const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+
   const esActiva = (ruta) => location.pathname.includes(ruta);
 
   return (
@@ -51,17 +53,30 @@ export default function Layout() {
           {/* --- DROPDOWN DE PERFIL --- */}
           <div className="position-relative">
             <img
-              src="https://ui-avatars.com/api/?name=Diego+Fregoso&background=0D1B2A&color=fff"
+              src={
+                usuarioLogueado?.imagenPerfil?.urlArchivo
+                  ? `http://localhost:3000${usuarioLogueado.imagenPerfil.urlArchivo}`
+                  : usuarioLogueado?.imagenPerfil
+                    ? usuarioLogueado.imagenPerfil
+                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(usuarioLogueado?.nombreUsuario || 'Usuario')}&background=0D1B2A&color=fff`
+              }
               alt="Perfil"
               className="foto-perfil-nav"
+              style={{ objectFit: 'cover' }} // Mantiene la foto circular proporcionada sin deformarse
               onClick={() => setDropdownAbierto(!dropdownAbierto)}
             />
 
             {dropdownAbierto && (
               <div className="dropdown-perfil shadow-lg">
                 <div className="info-dropdown border-bottom">
-                  <p className="fw-bold m-0" style={{ color: 'var(--texto-principal)' }}>Elena Morales</p>
-                  <p className="small text-muted m-0">@elenam</p>
+                  {/* Nombre real del usuario */}
+                  <p className="fw-bold m-0" style={{ color: 'var(--texto-principal)' }}>
+                    {usuarioLogueado?.nombreUsuario || 'Usuario'}
+                  </p>
+                  {/* Nombre de usuario único en minúsculas */}
+                  <p className="small text-muted m-0">
+                    @{usuarioLogueado?.nombreUsuario?.toLowerCase() || 'usuario'}
+                  </p>
                 </div>
 
                 <Link to="/perfil" className="item-dropdown" onClick={() => setDropdownAbierto(false)}>
@@ -75,6 +90,9 @@ export default function Layout() {
                   className="item-dropdown text-danger border-0 w-100 text-start"
                   onClick={() => {
                     setDropdownAbierto(false);
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('usuario');
+                    window.location.href = '/login';
                   }}
                 >
                   <i className="bi bi-box-arrow-right"></i> Cerrar sesión

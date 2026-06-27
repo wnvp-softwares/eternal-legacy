@@ -28,6 +28,10 @@ const usuarioSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Upload'
     },
+    imagenPortada: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Upload'
+    },
     informacionPerfil: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'InformacionPerfil'

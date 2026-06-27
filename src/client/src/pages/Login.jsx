@@ -16,11 +16,20 @@ export default function Login() {
     confirmarPassword: ''
   });
 
+  // --- ESTADOS PARA EL MODAL DE ADVERTENCIA Y REGLAS ---
+  const [mostrarModalReglas, setMostrarModalReglas] = useState(false);
+  const [aceptoMayorEdad, setAceptoMayorEdad] = useState(false);
+  const [aceptoPrivacidad, setAceptoPrivacidad] = useState(false);
+
   const [codigo, setCodigo] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
 
   // --- NUEVO: ESTADO Y EFECTO DEL TEMPORIZADOR ---
   const [tiempoRestante, setTiempoRestante] = useState(300); // 300 segundos = 5 minutos
+
+  // 📝 NUEVOS ESTADOS PARA DOCUMENTOS LEGALES ADICIONALES:
+  const [mostrarModalTerminos, setMostrarModalTerminos] = useState(false);
+  const [mostrarModalPrivacidad, setMostrarModalPrivacidad] = useState(false);
 
   useEffect(() => {
     let intervalo;
@@ -414,16 +423,215 @@ export default function Login() {
                 {esLogin ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
                 <button
                   type="button"
-                  // Aquí aplicamos directamente texto-dorado y quitamos los estilos anteriores
                   className="btn btn-link texto-dorado p-0 ms-2 fw-bold text-decoration-none"
+
+                  // ✨ ONCLICK ACTUALIZADO:
                   onClick={() => {
+                    const cambiandoARegistro = esLogin === true; // Si esLogin es true, significa que al hacer clic irá a Sign Up
                     setEsLogin(!esLogin);
                     setError('');
+
+                    if (cambiandoARegistro) {
+                      setMostrarModalReglas(true); // Abre el modal de advertencia inmediatamente
+                    }
                   }}
                 >
                   {esLogin ? 'Regístrate' : 'Inicia sesión'}
                 </button>
               </p>
+            </div>
+          )}
+
+          {/* MODAL DE ADVERTENCIA Y ACEPTACIÓN DE REGLAS (SIGN UP) */}
+          {mostrarModalReglas && (
+            <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1060 }}>
+              <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable" style={{ maxWidth: '600px' }}>
+                <div className="modal-content border-0 shadow-lg" style={{ borderRadius: '15px' }}>
+
+                  <div className="modal-header border-0 bg-light p-4" style={{ borderRadius: '15px 15px 0 0' }}>
+                    <h5 className="modal-title fw-bold text-dark fuente-elegante fs-4">Advertencia Importante</h5>
+                  </div>
+
+                  <div className="modal-body p-4 text-secondary" style={{ fontSize: '0.95rem', lineHeight: '1.6' }}>
+                    <p className="fw-bold text-dark fs-5 mb-3">¡Te damos la bienvenida a LEGACY!</p>
+                    <p className="mb-4">
+                      Antes de crear tu cuenta, necesitamos asegurarnos de que estamos en la misma página.
+                      Al registrarte, aceptas nuestras reglas de juego:
+                    </p>
+
+                    <div className="mb-3">
+                      <h6 className="fw-bold text-dark mb-1">Solo para mayores de 18 años:</h6>
+                      <p>Al continuar, declaras bajo protesta de decir verdad que eres mayor de edad. No se permiten menores en esta comunidad.</p>
+                    </div>
+
+                    <div className="mb-3">
+                      <h6 className="fw-bold text-dark mb-1">Todo debe ser tuyo:</h6>
+                      <p>Solo puedes subir fotos, videos y audios que tú hayas creado. Queda estrictamente prohibido subir material de terceros o con derechos de autor.</p>
+                    </div>
+
+                    <div className="mb-3">
+                      <h6 className="fw-bold text-dark mb-1">Descargas para uso personal:</h6>
+                      <p>Puedes descargar archivos de otros usuarios, pero solo para tu disfrute privado. Está prohibido revenderlos o resubirlos a otras redes sociales.</p>
+                    </div>
+
+                    <div className="mb-3">
+                      <h6 className="fw-bold text-dark mb-1">Cero tolerancia al contenido tóxico:</h6>
+                      <p>El acoso, los insultos en chats privados, el discurso de odio y la pornografía no consentida causarán la baja inmediata de tu cuenta.</p>
+                    </div>
+
+                    <div className="mb-4">
+                      <h6 className="fw-bold text-dark mb-1">Cuidamos tus datos:</h6>
+                      <p>Recolectamos tus datos personales básicos solo para que la app funcione correctamente, siempre alineados con las leyes mexicanas.</p>
+                    </div>
+
+                    <hr className="my-4 text-muted" />
+
+                    {/* CASILLAS DE VERIFICACIÓN */}
+                    <div className="form-check mb-3">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="checkEdad"
+                        checked={aceptoMayorEdad}
+                        onChange={(e) => setAceptoMayorEdad(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <label className="form-check-label text-dark" htmlFor="checkEdad" style={{ cursor: 'pointer' }}>
+                        Declaro bajo protesta de decir verdad que soy mayor de 18 años y acepto los <a href="#" onClick={(e) => { e.preventDefault(); setMostrarModalTerminos(true); }} className="texto-dorado fw-bold text-decoration-none">Términos y Condiciones</a> de la plataforma.
+                      </label>
+                    </div>
+
+                    <div className="form-check mb-3">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="checkPrivacidad"
+                        checked={aceptoPrivacidad}
+                        onChange={(e) => setAceptoPrivacidad(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <label className="form-check-label text-dark" htmlFor="checkPrivacidad" style={{ cursor: 'pointer' }}>
+                        He leído y acepto el <a href="#" onClick={(e) => { e.preventDefault(); setMostrarModalPrivacidad(true); }} className="texto-dorado fw-bold text-decoration-none">Aviso de Privacidad</a> sobre el tratamiento de mis datos personales.
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="modal-footer border-0 p-4 bg-light" style={{ borderRadius: '0 0 15px 15px' }}>
+                    <button
+                      type="button"
+                      className="btn text-white w-100 fw-bold py-2 shadow-sm"
+                      disabled={!aceptoMayorEdad || !aceptoPrivacidad}
+                      onClick={() => setMostrarModalReglas(false)}
+                      style={{
+                        backgroundColor: (aceptoMayorEdad && aceptoPrivacidad) ? '#0D1B2A' : '#6c757d',
+                        border: 'none',
+                        borderRadius: '8px',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      Entendido y Continuar
+                    </button>
+                  </div>
+
+                  {/* 📜 MODAL ADICIONAL: TÉRMINOS Y CONDICIONES */}
+                  {mostrarModalTerminos && (
+                    <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1070 }}>
+                      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+                        <div className="modal-content border-0 rounded-4 shadow">
+                          <div className="modal-header border-0 p-4 bg-light" style={{ borderRadius: '15px 15px 0 0' }}>
+                            <h5 className="modal-title fuente-elegante fw-bold text-dark fs-4">Términos y Condiciones de Uso</h5>
+                            <button type="button" className="btn-close" onClick={() => setMostrarModalTerminos(false)} aria-label="Close"></button>
+                          </div>
+                          <div className="modal-body p-4 text-dark" style={{ maxHeight: '60vh', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                            <p className="fw-bold text-center text-muted mb-4">Versión 1.1 (Actualizado Mayo 2026)</p>
+                            <p>Los presentes Términos y Condiciones regulan el uso de la plataforma provisionalmente denominada <strong>Legacy</strong>. Para efectos de este contrato, las referencias a "La Empresa", "Nosotros" o "La App" comprenden a los creadores, desarrolladores, propietarios individuales, fundadores y futuros sucesores legales de la plataforma. Al crear una cuenta, el Usuario acepta de manera expresa, tácita y vinculante la totalidad de las cláusulas aquí descritas.</p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">CLÁUSULA 1. RESTRICCIÓN DE EDAD Y DECLARACIÓN JURADA</h6>
+                            <p>La Plataforma está dirigida de forma exclusiva a personas físicas que cuenten con la mayoría de edad legal (18 años cumplidos en los Estados Unidos Mexicanos, o la edad legal correspondiente en su país de residencia). Queda estrictamente prohibido el acceso, registro y uso de la Plataforma a menores de edad.</p>
+                            <p>Al marcar la casilla de confirmación durante el proceso de registro, el Usuario manifiesta bajo protesta de decir verdad que cumple con este requisito. El Usuario reconoce y acepta que la Plataforma opera bajo el principio de buena fe y no realiza una verificación documental obligatoria de la edad en esta etapa. En consecuencia, La App queda completamente deslindada de cualquier responsabilidad civil, penal o administrativa derivada del ingreso de menores de edad que hayan falseado su información. Los padres, tutores o representantes legales del menor serán los únicos responsables de los actos de este dentro de la Plataforma. Cualquier cuenta bajo sospecha de pertenecer a un menor de edad será eliminada de forma inmediata, definitiva y sin previo aviso.</p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">CLÁUSULA 2. PROPIEDAD INTELECTUAL Y LICENCIA DE CONTENIDO</h6>
+                            <p><strong>A. Propiedad de la Plataforma:</strong> Todo el contenido original de la plataforma (diseño de interfaz, logotipos, código fuente, software, marcas comerciales) es propiedad exclusiva de Marco Antonio Gallegos Mora. Queda prohibida su reproducción o ingeniería inversa.</p>
+                            <p><strong>B. Contenido Generado por el Usuario:</strong> El Usuario retiene todos los derechos de propiedad intelectual sobre las fotos, videos, audios y textos que publique. Sin embargo, al subirlos, otorga a La App una licencia de uso mundial, no exclusiva, gratuita, sublicenciable y transferible para hospedar, almacenar, reproducir, mostrar públicamente y distribuir dicho material, con el único fin de operar y promover los servicios de la red social.</p>
+                            <p><strong>C. Garantía de Originalidad e Indemnidad:</strong> El Usuario garantiza que es el autor original y titular exclusivo del contenido que sube. Queda estrictamente prohibido subir material protegido por derechos de autor de terceros. En caso de demandas por violaciones a derechos de autor cometidas por un Usuario, este se obliga a sacar en paz y a salvo e indemnizar de inmediato a La App por cualquier gasto o costo judicial derivado.</p>
+                            <p><strong>D. Reglas de Descarga entre Usuarios:</strong> La descarga de archivos multimedia otorga únicamente una licencia de uso privado, personal y no comercial. Queda prohibido utilizar los archivos descargados para fines comerciales o resubirlos a otras redes sociales sin el consentimiento del autor original. La App se desmarca de la distribución ilegal que un tercero realice con dicho contenido fuera de la aplicación.</p>
+                            <p><strong>E. Mecanismo de Notificación (Take-Down):</strong> Si considera que un contenido infringe sus derechos de autor, deberá enviar un reporte formal al correo electrónico <a href="mailto:LegacyDesarrollo@gmail.com" className="texto-dorado text-decoration-none fw-bold">LegacyDesarrollo@gmail.com</a> para su retiro preventivo.</p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">CLÁUSULA 3. PAUTAS DE COMPORTAMIENTO Y NORMAS DE LA COMUNIDAD</h6>
+                            <p>Queda estrictamente prohibido realizar, publicar o transmitir contenido en publicaciones, comentarios o chats privados que incurra en:</p>
+                            <ul>
+                              <li><strong>Acoso e Intimidación (Cyberbullying):</strong> Comentarios o mensajes privados dirigidos a denigrar, humillar o extorsionar a otros usuarios.</li>
+                              <li><strong>Discurso de Odio:</strong> Textos o archivos que promuevan la violencia o discriminación por motivos de raza, religión, orientación sexual, género o discapacidad.</li>
+                              <li><strong>Contenido Ilícito:</strong> Material que muestre violencia física, crueldad animal, autolesiones o relacionado con la comisión de delitos bajo las leyes mexicanas.</li>
+                              <li><strong>Invasión a la Privacidad (Doxxing):</strong> Publicar datos personales de terceros (teléfonos, direcciones, rostros sin consentimiento) en entornos privados.</li>
+                              <li><strong>Spam y Malware:</strong> Envío masivo de publicidad no solicitada, enlaces de fraude (phishing) o código diseñado para dañar dispositivos.</li>
+                              <li><strong>Simulación de Identidad:</strong> Crear cuentas falsas haciéndose pasar por empleados de La App o terceros.</li>
+                            </ul>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">CLÁUSULA 4. FUNCIONAMIENTO DE CHATS PRIVADOS Y MENSAJERÍA</h6>
+                            <p>Los mensajes privados son confidenciales entre los usuarios. La Plataforma no monitorea ni lee activamente los chats privados, por lo que el usuario es el único responsable legal (civil y penal) de las comunicaciones que realice. La App cooperará con las autoridades de México únicamente si un juez emite una orden oficial para requerir el historial de mensajes de un usuario investigado.</p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">CLÁUSULA 5. SISTEMA DE REPORTES INTER-USUARIO</h6>
+                            <p>Los usuarios tienen la obligación y el derecho de utilizar el botón de denuncia integrado en la app para reportar conductas inapropiadas. La app se reserva el derecho exclusivo y discrecional de decidir si un reporte procede. El usuario acepta que la plataforma puede suspender cuentas o borrar archivos basándose en los reportes recibidos, sin necesidad de probar la infracción ante el usuario afectado y sin derecho a indemnización. El abuso malicioso del botón de reporte causará la baja definitiva de la cuenta del denunciante.</p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">CLÁUSULA 6. LIMITACIÓN DE RESPONSABILIDAD Y EXCLUSIÓN DE GARANTÍAS</h6>
+                            <p>El Usuario acepta que el uso de la Plataforma se realiza bajo su propio riesgo. La aplicación se proporciona "tal cual" y "según disponibilidad". La App no garantiza que el servicio funcione sin interrupciones, libre de virus o malware informático transmitido a través de archivos descargados.</p>
+                            <p>La Plataforma no es un servicio de respaldo; si los servidores fallan o la cuenta es borrada por violar las reglas, los datos se perderán definitivamente. En caso de que un tribunal competente determine que existe una responsabilidad demostable e imputable a La App, las partes acuerdan que el límite máximo de indemnización económica global estará estrictamente limitado a las cantidades netas que el Usuario haya pagado efectivamente a La App por el uso de los servicios durante los 6 (seis) meses anteriores al hecho reclamado, o la cantidad fija de $200.00 MXN (Doscientos pesos 00/100 M.N.), lo que resulte menor.</p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">CLÁUSULA 7. LEY APLICABLE Y JURISDICCIÓN</h6>
+                            <p>Este contrato se rige estrictamente por las leyes federales de los Estados Unidos Mexicanos. Para la resolución de cualquier controversia, el Usuario y La App se someten expresamente a la jurisdicción de los tribunales competentes ubicados en la ciudad de Zapopan, Jalisco, México, renunciando de manera irrevocable a cualquier otro fuero que pudiera corresponderles por su domicilio presente o futuro. Antes de iniciar cualquier acción legal, las partes acuerdan intentar resolver la disputa de buena fe enviando una reclamación al correo <a href="mailto:LegacyDesarrollo@gmail.com" className="texto-dorado text-decoration-none fw-bold">LegacyDesarrollo@gmail.com</a></p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">CLÁUSULA 8. DIVISIBILIDAD Y ACTUALIZACIONES</h6>
+                            <p>Si cualquier parte de estos términos es declarada inválida o inaplicable por un tribunal (incluyendo tribunales internacionales durante la fase de expansión), el resto del contrato seguirá siendo plenamente válido. La App se reserva el derecho de modificar estos términos en cualquier momento, y el uso continuo de la app constituirá la aceptación de los nuevos términos.</p>
+                          </div>
+                          <div className="modal-footer border-0 p-3 bg-light" style={{ borderRadius: '0 0 15px 15px' }}>
+                            <button type="button" className="btn boton-oscuro px-4 py-2" onClick={() => setMostrarModalTerminos(false)} style={{ borderRadius: '8px' }}>
+                              Cerrar Lectura
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 🔒 MODAL ADICIONAL: AVISO DE PRIVACIDAD */}
+                  {mostrarModalPrivacidad && (
+                    <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1070 }}>
+                      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+                        <div className="modal-content border-0 rounded-4 shadow">
+                          <div className="modal-header border-0 p-4 bg-light" style={{ borderRadius: '15px 15px 0 0' }}>
+                            <h5 className="modal-title fuente-elegante fw-bold text-dark fs-4">Aviso de Privacidad</h5>
+                            <button type="button" className="btn-close" onClick={() => setMostrarModalPrivacidad(false)} aria-label="Close"></button>
+                          </div>
+                          <div className="modal-body p-4 text-dark" style={{ maxHeight: '60vh', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                            <h6 className="fw-bold text-center mb-4">AVISO DE PRIVACIDAD SIMPLIFICADO</h6>
+                            <p><strong>Legacy</strong>, con domicilio provisional en Zapopan, Jalisco, México, y correo electrónico de contacto <a href="mailto:LegacyDesarrollo@gmail.com" className="texto-dorado text-decoration-none fw-bold">LegacyDesarrollo@gmail.com</a>, es el responsable del tratamiento de sus datos personales, en cumplimiento con la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).</p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">¿Para qué fines utilizaremos sus datos?</h6>
+                            <p>Los datos personales que recabamos de usted (tales como nombre de usuario, correo electrónico, contraseña, dirección IP, datos de navegación y archivos multimedia cargados) serán utilizados para las siguientes finalidades esenciales:</p>
+                            <ol>
+                              <li>Crear, validar y administrar su cuenta de usuario en la plataforma.</li>
+                              <li>Permitir el funcionamiento de las herramientas de la red social (publicaciones, chats privados, subida y descarga de archivos).</li>
+                              <li>Atender, procesar e investigar los reportes de conducta enviados a través del sistema de denuncias entre usuarios.</li>
+                              <li>Cooperar con las autoridades judiciales mexicanas en caso de requerimiento legal formal.</li>
+                            </ol>
+                            <p>Asimismo, se informa al usuario que no debe subir fotos, videos o audios que expongan datos personales sensibles de terceros sin su consentimiento. El usuario es el único responsable por los datos expuestos dentro del contenido multimedia que decida publicar.</p>
+
+                            <h6 className="fw-bold mt-4 mb-2 text-dark">Mecanismo para ejercer sus Derechos ARCO:</h6>
+                            <p>Usted tiene derecho a Acceder, Rectificar, Cancelar u Oponerse (Derechos ARCO) al tratamiento de sus datos personales. Para conocer el procedimiento detallado, los requisitos, o para enviar una solicitud formal, deberá ponerse en contacto directamente con nuestro Comité de Privacidad a través del correo electrónico: <a href="mailto:LegacyDesarrollo@gmail.com" className="texto-dorado text-decoration-none fw-bold">LegacyDesarrollo@gmail.com</a>. Cualquier cambio a este aviso de privacidad será publicado dentro de la propia interfaz de la aplicación.</p>
+                          </div>
+                          <div className="modal-footer border-0 p-3 bg-light" style={{ borderRadius: '0 0 15px 15px' }}>
+                            <button type="button" className="btn boton-oscuro px-4 py-2" onClick={() => setMostrarModalPrivacidad(false)} style={{ borderRadius: '8px' }}>
+                              Cerrar Lectura
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
             </div>
           )}
 

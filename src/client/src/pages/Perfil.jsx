@@ -1,8 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Perfil.css';
 
 export default function Perfil() {
+  const fileInputPerfilRef = useRef(null);
+  const fileInputPortadaRef = useRef(null);
+
+  // --- NUEVOS ESTADOS PARA ARCHIVOS Y VISTAS PREVIAS ---
+  const [archivoPerfil, setArchivoPerfil] = useState(null);
+  const [vistaPreviaPerfil, setVistaPreviaPerfil] = useState('');
+
+  const [archivoPortada, setArchivoPortada] = useState(null);
+  const [vistaPreviaPortada, setVistaPreviaPortada] = useState('');
+
   const [tabActiva, setTabActiva] = useState('memories');
   const [etiquetaSeleccionada, setEtiquetaSeleccionada] = useState(null);
 
@@ -11,7 +21,8 @@ export default function Perfil() {
   const [formEdicion, setFormEdicion] = useState({
     biografia: '',
     ubicacionActual: '',
-    ocupacionEducacion: ''
+    ocupacionEducacion: '',
+    portada: ''
   });
 
   // --- CONFIGURACIÓN DE DATOS REALES DE SESIÓN Y BACKEND ---
@@ -69,7 +80,7 @@ export default function Perfil() {
         });
 
         setPublicaciones(misPublicaciones);
-        setError(''); 
+        setError('');
       } catch (err) {
         console.error("Error cargando datos del perfil:", err);
         setError('Error de conexión con el servidor. Verifica que el backend esté corriendo en el puerto 3000.');
@@ -89,12 +100,34 @@ export default function Perfil() {
         ubicacionActual: perfilBd?.ubicacionActual || '',
         ocupacionEducacion: perfilBd?.ocupacionEducacion || ''
       });
+      // Inicializamos las vistas previas con lo que ya tenga el usuario en sesión
+      setVistaPreviaPerfil(usuarioLogueado?.imagenPerfil || '');
+      setVistaPreviaPortada(usuarioLogueado?.imagenPortada || '');
+      setArchivoPerfil(null);
+      setArchivoPortada(null);
     }
     setEdicionAbierta(!edicionAbierta);
   };
 
+  const manejarCambioPerfil = (e) => {
+    const archivo = e.target.files[0];
+    if (archivo) {
+      setArchivoPerfil(archivo);
+      setVistaPreviaPerfil(URL.createObjectURL(archivo)); // Genera preview temporal
+    }
+  };
+
+  const manejarCambioPortada = (e) => {
+    const archivo = e.target.files[0];
+    if (archivo) {
+      setArchivoPortada(archivo);
+      setVistaPreviaPortada(URL.createObjectURL(archivo)); // Genera preview temporal
+    }
+  };
+
   const guardarPerfil = async () => {
     try {
+      // 1. Guardar primero los datos de texto (Biografía, ubicación, etc.)
       const respuesta = await fetch(`${API_BASE_URL}/perfil/actualizar`, {
         method: 'PUT',
         headers: {
@@ -104,17 +137,96 @@ export default function Perfil() {
         body: JSON.stringify(formEdicion)
       });
 
-      if (respuesta.ok) {
-        const datosBD = await respuesta.json();
-        setPerfilBd(datosBD.perfil || { ...perfilBd, ...formEdicion });
-        setEdicionAbierta(false);
-      } else {
-        alert('Error al guardar el perfil en el servidor.');
+      if (!respuesta.ok) {
+        alert('Error al guardar los datos de texto del perfil.');
+        return;
       }
+
+      const datosBD = await respuesta.json();
+      setPerfilBd(datosBD.perfil || { ...perfilBd, ...formEdicion });
+
+      // 2. Función interna para subir imágenes usando la configuración de Multer
+      const subirArchivoAlServidor = async (archivo) => {
+        const formData = new FormData();
+        formData.append('archivo', archivo);
+
+        const resUpload = await fetch(`${API_BASE_URL}/uploads/subir`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (!resUpload.ok) throw new Error('Error al subir el archivo multimedia.');
+        const dataUpload = await resUpload.json();
+        return dataUpload.upload?._id || dataUpload._id;
+      };
+
+      // 3. Procesar subidas si hay archivos seleccionados en los inputs
+      let imagenPerfilId = null;
+      let imagenPortadaId = null;
+
+      if (archivoPerfil) {
+        imagenPerfilId = await subirArchivoAlServidor(archivoPerfil);
+      }
+      if (archivoPortada) {
+        imagenPortadaId = await subirArchivoAlServidor(archivoPortada);
+      }
+
+      // 4. 🔥 CORRECCIÓN: Vinculamos ambas imágenes usando tu ruta unificada del backend
+      if (imagenPerfilId || imagenPortadaId) {
+        // Llamamos a tu ruta unificada /actualizar-imagenes que maneja ambos campos
+        const resImagenes = await fetch(`${API_BASE_URL}/usuarios/actualizar-imagenes`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            imagenPerfilId: imagenPerfilId || undefined,
+            imagenPortadaId: imagenPortadaId || undefined
+          })
+        });
+
+        if (resImagenes.ok) {
+          const datosImg = await resImagenes.json();
+          const usuarioBackend = datosImg.usuario;
+
+          // Construimos las URLs completas basándonos en tu carpeta estática
+          const nuevaUrlPerfil = usuarioBackend.imagenPerfil?.urlArchivo
+            ? `http://localhost:3000${usuarioBackend.imagenPerfil.urlArchivo}`
+            : usuarioLogueado?.imagenPerfil;
+
+          const nuevaUrlPortada = usuarioBackend.imagenPortada?.urlArchivo
+            ? `http://localhost:3000${usuarioBackend.imagenPortada.urlArchivo}`
+            : usuarioLogueado?.imagenPortada;
+
+          // Guardamos AMBOS cambios de manera persistente en la sesión de la interfaz
+          const usuarioActualizado = {
+            ...usuarioLogueado,
+            imagenPerfil: nuevaUrlPerfil,
+            imagenPortada: nuevaUrlPortada
+          };
+          localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
+        } else {
+          alert('Las imágenes se subieron, pero hubo un problema al vincularlas en tu perfil.');
+        }
+      }
+
+      // 5. Limpieza de URLs temporales de Vista Previa para liberar memoria RAM
+      if (vistaPreviaPerfil && vistaPreviaPerfil.startsWith('blob:')) URL.revokeObjectURL(vistaPreviaPerfil);
+      if (vistaPreviaPortada && vistaPreviaPortada.startsWith('blob:')) URL.revokeObjectURL(vistaPreviaPortada);
+
+      // Cerramos el modal de edición
+      setEdicionAbierta(false);
+
+      // Recarga limpia para actualizar todos los componentes de la interfaz
+      window.location.reload();
+
     } catch (error) {
-      console.error('Error de red al guardar:', error);
-      // Fallback visual en caso de que el backend no tenga lista esta ruta
-      setPerfilBd({ ...perfilBd, ...formEdicion });
+      console.error('❌ Error completo en el proceso de guardado:', error);
+      alert('Ocurrió un problema al procesar la actualización del perfil.');
       setEdicionAbierta(false);
     }
   };
@@ -131,7 +243,7 @@ export default function Perfil() {
       : fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
   };
 
-  const publicacionesFiltradas = publicaciones; 
+  const publicacionesFiltradas = publicaciones;
   const publicacionesHistoricas = publicaciones.filter(post => post.tipo === 'historico');
   const fotosGaleria = publicaciones.filter(post => post.multimedia && post.multimedia[0]?.urlArchivo);
 
@@ -155,7 +267,7 @@ export default function Perfil() {
       {edicionAbierta && (
         <div className="modal-backdrop-edicion" onClick={() => setEdicionAbierta(false)}>
           <div className="modal-edicion-x" onClick={(e) => e.stopPropagation()}>
-            
+
             {/* Cabecera del Modal */}
             <div className="modal-cabecera-x">
               <button className="btn-cerrar-x" onClick={() => setEdicionAbierta(false)}>
@@ -169,54 +281,78 @@ export default function Perfil() {
 
             {/* Cuerpo del Modal con scroll */}
             <div className="modal-cuerpo-x">
-              
+
               {/* Sección visual simulada (Portada y Avatar con ícono de cámara) */}
               <div className="portada-edicion-container">
-                <img src="https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200" alt="Portada Edición" className="portada-edicion-img" />
-                <div className="camara-icono-x" title="Cambiar Portada">
+                <img
+                  src={vistaPreviaPortada || "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200"}
+                  alt="Portada Edición"
+                  className="portada-edicion-img"
+                />
+                {/* Al hacer clic en la cámara, disparamos el clic del input oculto */}
+                <div className="camara-icono-x" title="Cambiar Portada" onClick={() => fileInputPortadaRef.current.click()}>
                   <i className="bi bi-camera"></i>
                 </div>
+                <input
+                  type="file"
+                  ref={fileInputPortadaRef}
+                  style={{ display: 'none' }}
+                  accept="image/*"
+                  onChange={manejarCambioPortada}
+                />
               </div>
 
               <div className="foto-perfil-edicion-container">
-                <img src={usuarioLogueado?.imagenPerfil || urlAvatar} alt="Perfil Edición" className="foto-perfil-edicion-img" />
-                <div className="camara-icono-x" title="Cambiar Foto de Perfil">
+                <img
+                  src={vistaPreviaPerfil || urlAvatar}
+                  alt="Perfil Edición"
+                  className="foto-perfil-edicion-img"
+                />
+                {/* Al hacer clic en la cámara, disparamos el clic del input oculto */}
+                <div className="camara-icono-x" title="Cambiar Foto de Perfil" onClick={() => fileInputPerfilRef.current.click()}>
                   <i className="bi bi-camera"></i>
                 </div>
+                <input
+                  type="file"
+                  ref={fileInputPerfilRef}
+                  style={{ display: 'none' }}
+                  accept="image/*"
+                  onChange={manejarCambioPerfil}
+                />
               </div>
 
               {/* Formulario Estilo X */}
               <div className="formulario-edicion-x">
-                
+
                 <div className="grupo-input-x">
                   <label className="label-input-x">Biografía</label>
-                  <textarea 
-                    className="form-control textarea-x" 
-                    rows="3" 
+                  <textarea
+                    className="form-control textarea-x"
+                    rows="3"
                     value={formEdicion.biografia}
-                    onChange={(e) => setFormEdicion({...formEdicion, biografia: e.target.value})}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, biografia: e.target.value })}
                     placeholder="Cuéntale a tu familia sobre ti..."
                   ></textarea>
                 </div>
 
                 <div className="grupo-input-x">
                   <label className="label-input-x">Ubicación Actual</label>
-                  <input 
-                    type="text" 
-                    className="form-control input-x" 
+                  <input
+                    type="text"
+                    className="form-control input-x"
                     value={formEdicion.ubicacionActual}
-                    onChange={(e) => setFormEdicion({...formEdicion, ubicacionActual: e.target.value})}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, ubicacionActual: e.target.value })}
                     placeholder="Ej. Guadalajara"
                   />
                 </div>
 
                 <div className="grupo-input-x">
                   <label className="label-input-x">Ocupación / Educación</label>
-                  <input 
-                    type="text" 
-                    className="form-control input-x" 
+                  <input
+                    type="text"
+                    className="form-control input-x"
                     value={formEdicion.ocupacionEducacion}
-                    onChange={(e) => setFormEdicion({...formEdicion, ocupacionEducacion: e.target.value})}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, ocupacionEducacion: e.target.value })}
                     placeholder="Ej. Técnico en Informática"
                   />
                 </div>
@@ -226,14 +362,19 @@ export default function Perfil() {
 
           </div>
         </div>
-      )}
+      )
+      }
 
       {/* =========================================
           CABECERA DEL PERFIL (REAL)
           ========================================= */}
       <div className="cabecera-perfil shadow-sm">
         <div className="portada-contenedor">
-          <img src="https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200" alt="Portada" className="portada-perfil" />
+          <img
+            src={usuarioLogueado?.imagenPortada || "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200"}
+            alt="Portada"
+            className="portada-perfil"
+          />
           <button className="boton-editar-portada" title="Editar Portada">
             <i className="bi bi-camera"></i>
           </button>
@@ -242,7 +383,7 @@ export default function Perfil() {
         <div className="info-usuario-container">
           <div className="fila-superior-info">
             <img src={usuarioLogueado?.imagenPerfil || urlAvatar} alt="Perfil" className="foto-perfil-grande" />
-            
+
             {/* BOTÓN PARA ABRIR MODAL */}
             <button className="boton-editar-perfil" title="Editar Perfil" onClick={toggleEdicion}>
               <i className="bi bi-pencil"></i>
@@ -271,7 +412,7 @@ export default function Perfil() {
 
           <div className="contenedor-etiquetas">
             <div className="etiqueta-item">
-              <div className="burbuja-etiqueta burbuja-crear" style={{margin: '0.5rem'}}>
+              <div className="burbuja-etiqueta burbuja-crear" style={{ margin: '0.5rem' }}>
                 <i className="bi bi-plus-lg"></i>
                 <span className="mt-1" style={{ fontSize: '0.70rem' }}>NUEVA</span>
               </div>
@@ -313,7 +454,12 @@ export default function Perfil() {
                   <div key={post._id} className="tarjeta shadow-sm pb-3 px-3 px-sm-4">
                     <div className="d-flex justify-content-between align-items-start mb-2">
                       <div className="d-flex gap-3 align-items-center">
-                        <img src={post.autor?.imagenPerfil || urlAvatar} alt="Avatar" className="foto-perfil-post" />
+                        <img
+                          src={post.autor?.imagenPerfil?.urlArchivo ? `http://localhost:3000${post.autor.imagenPerfil.urlArchivo}` : urlAvatar}
+                          alt="Avatar"
+                          className="foto-perfil-post"
+                          style={{ objectFit: 'cover' }} // Evita que la foto se deforme si no es perfectamente cuadrada
+                        />
                         <div>
                           <div className="etiqueta-tipo-publicacion">
                             <span>{esHistorico ? 'RECUERDO HISTÓRICO' : 'MOMENTO FAMILIAR'}</span>
@@ -344,9 +490,9 @@ export default function Perfil() {
                             style={{
                               width: '100%',
                               height: '100%',
-                              maxHeight: '500px', 
+                              maxHeight: '500px',
                               objectFit: 'contain',
-                              backgroundColor: '#f8f9fa' 
+                              backgroundColor: '#f8f9fa'
                             }}
                           />
                         </div>
@@ -454,6 +600,6 @@ export default function Perfil() {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 }

@@ -112,7 +112,9 @@ const verificarCodigo = async (req, res) => {
 const loginUsuario = async (req, res) => {
     try {
         const { email, password } = req.body;
-        const usuario = await Usuario.findOne({ email });
+        const usuario = await Usuario.findOne({ email: email })
+            .populate('imagenPerfil')
+            .populate('imagenPortada');
 
         if (!usuario) return res.status(400).json({ mensaje: 'Credenciales inválidas.' });
 
@@ -131,12 +133,22 @@ const loginUsuario = async (req, res) => {
             { expiresIn: '30d' }
         );
 
+        const urlPerfil = usuario.imagenPerfil?.urlArchivo
+            ? `http://localhost:3000${usuario.imagenPerfil.urlArchivo}`
+            : null;
+
+        const urlPortada = usuario.imagenPortada?.urlArchivo
+            ? `http://localhost:3000${usuario.imagenPortada.urlArchivo}`
+            : null;
+
         res.status(200).json({
             mensaje: 'Inicio de sesión exitoso.',
             usuario: {
                 id: usuario._id,
                 nombreUsuario: usuario.nombreUsuario,
-                email: usuario.email
+                email: usuario.email,
+                imagenPerfil: urlPerfil,   // <-- Enviado al frontend
+                imagenPortada: urlPortada  // <-- Enviado al frontend
             },
             token: token
         });
@@ -165,9 +177,47 @@ const actualizarFotoPerfil = async (req, res) => {
     }
 };
 
+const actualizarImagenesPerfil = async (req, res) => {
+    try {
+        const { imagenPerfilId, imagenPortadaId } = req.body;
+        const camposAActualizar = {};
+
+        // Verificamos si viene el ID de la foto de perfil
+        if (imagenPerfilId) {
+            camposAActualizar.imagenPerfil = imagenPerfilId;
+        }
+
+        // Verificamos si viene el ID de la foto de portada
+        if (imagenPortadaId) {
+            camposAActualizar.imagenPortada = imagenPortadaId;
+        }
+
+        // Si no viene ninguno, respondemos con un error leve
+        if (Object.keys(camposAActualizar).length === 0) {
+            return res.status(400).json({ mensaje: 'No se proporcionó ninguna imagen para actualizar.' });
+        }
+
+        // Actualizamos el usuario en la BD y hacemos populate de ambas imágenes
+        const usuarioActualizado = await Usuario.findByIdAndUpdate(
+            req.usuario.id,
+            camposAActualizar,
+            { new: true }
+        ).populate('imagenPerfil').populate('imagenPortada');
+
+        res.status(200).json({
+            mensaje: '¡Imágenes de perfil actualizadas con éxito!',
+            usuario: usuarioActualizado
+        });
+    } catch (error) {
+        console.error('❌ Error al actualizar imágenes de perfil:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor.' });
+    }
+};
+
 module.exports = {
     crearUsuario,
     loginUsuario,
     actualizarFotoPerfil,
+    actualizarImagenesPerfil,
     verificarCodigo
 };

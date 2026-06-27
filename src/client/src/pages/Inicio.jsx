@@ -295,7 +295,16 @@ export default function Inicio() {
           {textoBusqueda.trim() === '' && (
             <div className="tarjeta shadow-sm mb-4 p-3">
               <div className="tarjeta p-3 mb-4 shadow-sm disparador-modal d-flex align-items-center gap-3" onClick={() => setModalAbierto(true)}>
-                <img src={`https://ui-avatars.com/api/?name=${usuarioLogueado?.nombreUsuario || 'Usuario'}&background=0D1B2A&color=fff`} alt="Perfil" className="foto-perfil-post" />
+                {usuarioLogueado?.imagenPerfil ? (
+                  <img
+                    src={usuarioLogueado.imagenPerfil}
+                    alt="Mi perfil"
+                    className="rounded-circle me-3 object-fit-cover"
+                    style={{ width: '45px', height: '45px', border: '1px solid #dee2e6' }}
+                  />
+                ) : (
+                  <img src={`https://ui-avatars.com/api/?name=${usuarioLogueado?.nombreUsuario || 'Usuario'}&background=0D1B2A&color=fff`} alt="Perfil" className="foto-perfil-post" />
+                )}
                 <div className="input-simulado-compacto flex-grow-1">Preserva un nuevo recuerdo o momento familiar...</div>
                 <button className="btn-icono-compacto historia" type="button"><i className="bi bi-plus-lg"></i></button>
               </div>
@@ -339,7 +348,16 @@ export default function Inicio() {
                   <>
                     <div className="d-flex justify-content-between align-items-start mb-2">
                       <div className="d-flex gap-3 align-items-center">
-                        <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-post" />
+                        {pub.autor?.imagenPerfil?.urlArchivo ? (
+                          <img
+                            src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
+                            alt={pub.autor?.nombreUsuario}
+                            className="rounded-circle me-2 object-fit-cover"
+                            style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
+                          />
+                        ) : (
+                          <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-post" />
+                        )}
                         <div>
                           <div className="etiqueta-tipo-publicacion">
                             <span>RECUERDO HISTÓRICO</span>
@@ -380,7 +398,16 @@ export default function Inicio() {
                   <>
                     <div className="d-flex justify-content-between align-items-start mb-2">
                       <div className="d-flex gap-3 align-items-center">
-                        <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-post" />
+                        {pub.autor?.imagenPerfil?.urlArchivo ? (
+                          <img
+                            src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
+                            alt={pub.autor?.nombreUsuario}
+                            className="rounded-circle me-2 object-fit-cover"
+                            style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
+                          />
+                        ) : (
+                          <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-post" />
+                        )}
                         <div>
                           <div className="etiqueta-tipo-publicacion">
                             <span>MOMENTO FAMILIAR</span>

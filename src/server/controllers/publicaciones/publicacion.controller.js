@@ -59,8 +59,14 @@ const obtenerPublicaciones = async (req, res) => {
     try {
         const publicaciones = await Publicacion.find()
             .sort({ createdAt: -1 })
-            .populate('autor', 'nombreUsuario')
-            .populate('multimedia'); // Trae urlArchivo, formato, peso, etc.
+            .populate({
+                path: 'autor',
+                select: 'nombreUsuario',
+                populate: {
+                    path: 'imagenPerfil'
+                }
+            })
+            .populate('multimedia');
 
         res.status(200).json(publicaciones);
     } catch (error) {
