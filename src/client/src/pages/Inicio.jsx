@@ -17,6 +17,7 @@ export default function Inicio() {
   // ESTADOS PARA LAS PUBLICACIONES DEL MURO
   const token = localStorage.getItem('token');
   const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+  const API_BASE_URL = 'http://localhost:3000/api';
 
   const [publicaciones, setPublicaciones] = useState([]);
   const [cargando, setCargando] = useState(token ? true : false);
@@ -31,13 +32,66 @@ export default function Inicio() {
   const [comentarioAbierto, setComentarioAbierto] = useState({});
   const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState({});
 
+  // Cargar comentarios de una publicación
+  const cargarComentarios = async (pubId) => {
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/comentarios/publicacion/${pubId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const datos = await respuesta.json();
+
+      if (respuesta.ok) {
+        setComentariosPorPub(prev => ({ ...prev, [pubId]: datos }));
+        return datos;
+      }
+    } catch (err) {
+      console.error('Error al cargar comentarios:', err);
+    }
+
+    setComentariosPorPub(prev => ({ ...prev, [pubId]: [] }));
+    return [];
+  };
+
+  // Precargar contadores de comentarios para que no aparezcan en 0 al abrir la ventana
+  const cargarComentariosDePublicaciones = async (listaPublicaciones = []) => {
+    if (!token || !Array.isArray(listaPublicaciones) || listaPublicaciones.length === 0) return;
+
+    try {
+      const entradas = await Promise.all(
+        listaPublicaciones.map(async (pub) => {
+          try {
+            const respuesta = await fetch(`${API_BASE_URL}/comentarios/publicacion/${pub._id}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!respuesta.ok) return [pub._id, []];
+
+            const datos = await respuesta.json();
+            return [pub._id, Array.isArray(datos) ? datos : []];
+          } catch (err) {
+            console.error(`Error al cargar comentarios de ${pub._id}:`, err);
+            return [pub._id, []];
+          }
+        })
+      );
+
+      setComentariosPorPub(prev => ({
+        ...prev,
+        ...Object.fromEntries(entradas)
+      }));
+    } catch (err) {
+      console.error('Error al precargar comentarios:', err);
+    }
+  };
+
   // 1. CARGAR PUBLICACIONES AL INICIAR
   useEffect(() => {
     if (!token) return;
 
     const fetchPublicaciones = async () => {
       try {
-        const respuesta = await fetch('http://localhost:3000/api/publicaciones/muro', {
+        const respuesta = await fetch(`${API_BASE_URL}/publicaciones/muro`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -46,6 +100,7 @@ export default function Inicio() {
 
         if (respuesta.ok) {
           setPublicaciones(datos);
+          await cargarComentariosDePublicaciones(datos);
         } else {
           setError(datos.mensaje || 'Error al cargar el muro.');
         }
@@ -90,7 +145,7 @@ export default function Inicio() {
         formData.append('archivo', archivoAdjunto);
       }
 
-      const respuesta = await fetch('http://localhost:3000/api/publicaciones/crear', {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/crear`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
@@ -100,6 +155,7 @@ export default function Inicio() {
 
       if (respuesta.ok) {
         setPublicaciones([datos.publicacion, ...publicaciones]);
+        setComentariosPorPub(prev => ({ ...prev, [datos.publicacion._id]: [] }));
         setTextoPublicacion('');
         limpiarMultimedia();
         setModalAbierto(false);
@@ -112,10 +168,22 @@ export default function Inicio() {
     }
   };
 
+  // --- FUNCIÓN A PRUEBA DE BALAS PARA SABER SI EL USUARIO DIO LIKE ---
+  const usuarioHaReaccionado = (pub) => {
+    if (!Array.isArray(pub.reacciones)) return false;
+
+    const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+
+    return pub.reacciones.some(r => {
+      const idReaccion = typeof r === 'object' && r !== null ? r._id : r;
+      return idReaccion?.toString() === miId?.toString();
+    });
+  };
+
   // REACCIONAR (DAR ME GUSTA)
   const manejarLike = async (pubId) => {
     try {
-      const respuesta = await fetch(`http://localhost:3000/api/publicaciones/${pubId}/reaccionar`, {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${pubId}/reaccionar`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -130,20 +198,12 @@ export default function Inicio() {
 
   // DESPLEGAR / OCULTAR COMENTARIOS
   const toggleComentarios = async (pubId) => {
-    setComentarioAbierto(prev => ({ ...prev, [pubId]: !prev[pubId] }));
+    const abriendo = !comentarioAbierto[pubId];
+    setComentarioAbierto(prev => ({ ...prev, [pubId]: abriendo }));
 
-    if (!comentarioAbierto[pubId]) {
-      try {
-        const respuesta = await fetch(`http://localhost:3000/api/comentarios/publicacion/${pubId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const datos = await respuesta.json();
-        if (respuesta.ok) {
-          setComentariosPorPub(prev => ({ ...prev, [pubId]: datos }));
-        }
-      } catch (err) {
-        console.error("Error al cargar comentarios:", err);
-      }
+    // Al abrir, refrescamos para traer comentarios nuevos y mantener el contador actualizado.
+    if (abriendo) {
+      await cargarComentarios(pubId);
     }
   };
 
@@ -153,7 +213,7 @@ export default function Inicio() {
     if (!texto || !texto.trim()) return;
 
     try {
-      const respuesta = await fetch('http://localhost:3000/api/comentarios/crear', {
+      const respuesta = await fetch(`${API_BASE_URL}/comentarios/crear`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,12 +250,13 @@ export default function Inicio() {
       setResultadosPersonas([]);
       const restaurarMuro = async () => {
         try {
-          const respuesta = await fetch('http://localhost:3000/api/publicaciones/muro', {
+          const respuesta = await fetch(`${API_BASE_URL}/publicaciones/muro`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (respuesta.ok) {
             const datos = await respuesta.json();
             setPublicaciones(datos);
+            await cargarComentariosDePublicaciones(datos);
           }
         } catch (err) {
           console.error(err);
@@ -209,15 +270,17 @@ export default function Inicio() {
     const ejecutarBusqueda = setTimeout(async () => {
       setBuscando(true);
       try {
-        const respuesta = await fetch(`http://localhost:3000/api/publicaciones/buscar?q=${encodeURIComponent(textoBusqueda)}`, {
+        const respuesta = await fetch(`${API_BASE_URL}/publicaciones/buscar?q=${encodeURIComponent(textoBusqueda)}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (respuesta.ok) {
           const datos = await respuesta.json();
           // Asumiendo que tu endpoint devuelve { publicaciones: [...], personas: [...] }
-          setPublicaciones(datos.publicaciones || []);
+          const publicacionesEncontradas = datos.publicaciones || [];
+          setPublicaciones(publicacionesEncontradas);
           setResultadosPersonas(datos.personas || []);
+          await cargarComentariosDePublicaciones(publicacionesEncontradas);
         }
       } catch (err) {
         console.error('Error al realizar la búsqueda:', err);
@@ -445,16 +508,16 @@ export default function Inicio() {
                 {/* --- INTERACCIONES MANTENIDAS DEL BACKEND --- */}
                 <div className="d-flex justify-content-between mt-4 pt-3 border-top">
                   <div className="d-flex gap-4">
-                    <button className="boton-interaccion" type="button" onClick={() => manejarLike(pub._id)}>
-                      <i className={`bi bi-heart${pub.reacciones?.includes(usuarioLogueado?.id || usuarioLogueado?._id) ? '-fill text-danger' : ''}`}></i> {pub.reacciones?.length || 0}
+                    <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarLike(pub._id)}>
+                      <i className={`bi ${usuarioHaReaccionado(pub) ? 'bi-heart-fill text-danger' : 'bi-heart'}`}></i> {pub.reacciones?.length || 0}
                     </button>
-                    <button className="boton-interaccion" type="button" onClick={() => toggleComentarios(pub._id)}>
-                      <i className="bi bi-chat"></i> {comentariosPorPub[pub._id]?.length || 'Comentar'}
+                    <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => toggleComentarios(pub._id)}>
+                      <i className="bi bi-chat"></i> {comentariosPorPub[pub._id]?.length ?? 0}
                     </button>
                   </div>
                   <div className="d-flex gap-3">
-                    <button className="boton-interaccion" title="Guardar Recuerdo"><i className="bi bi-bookmark"></i></button>
-                    <button className="boton-interaccion"><i className="bi bi-share"></i> {pub.compartido || 0}</button>
+                    <button className="boton-interaccion border-0 bg-transparent p-0" title="Guardar Recuerdo"><i className="bi bi-bookmark"></i></button>
+                    <button className="boton-interaccion border-0 bg-transparent p-0"><i className="bi bi-share"></i> {pub.compartido || 0}</button>
                   </div>
                 </div>
 

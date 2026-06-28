@@ -41,6 +41,67 @@ export default function Perfil() {
   const [cargando, setCargando] = useState(token ? true : false);
   const [error, setError] = useState('');
 
+  // Cargar comentarios de una publicación
+  const cargarComentarios = async (postId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/comentarios/publicacion/${postId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setComentariosPorPub(prev => ({
+          ...prev,
+          [postId]: Array.isArray(data) ? data : []
+        }));
+        return Array.isArray(data) ? data : [];
+      }
+    } catch (error) {
+      console.error('❌ Error al obtener comentarios:', error);
+    }
+
+    setComentariosPorPub(prev => ({ ...prev, [postId]: [] }));
+    return [];
+  };
+
+  // Precargar contadores de comentarios para que aparezcan correctos desde el inicio
+  const cargarComentariosDePublicaciones = async (listaPublicaciones = []) => {
+    if (!token || !Array.isArray(listaPublicaciones) || listaPublicaciones.length === 0) return;
+
+    try {
+      const entradas = await Promise.all(
+        listaPublicaciones.map(async (post) => {
+          try {
+            const res = await fetch(`${API_BASE_URL}/comentarios/publicacion/${post._id}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+
+            if (!res.ok) return [post._id, []];
+
+            const data = await res.json();
+            return [post._id, Array.isArray(data) ? data : []];
+          } catch (error) {
+            console.error(`❌ Error al obtener comentarios de ${post._id}:`, error);
+            return [post._id, []];
+          }
+        })
+      );
+
+      setComentariosPorPub(prev => ({
+        ...prev,
+        ...Object.fromEntries(entradas)
+      }));
+    } catch (error) {
+      console.error('❌ Error al precargar comentarios:', error);
+    }
+  };
+
   useEffect(() => {
     if (!token) {
       setError('No has iniciado sesión.');
@@ -85,6 +146,7 @@ export default function Perfil() {
         });
 
         setPublicaciones(misPublicaciones);
+        await cargarComentariosDePublicaciones(misPublicaciones);
         setError('');
       } catch (err) {
         console.error("Error cargando datos del perfil:", err);
@@ -238,55 +300,31 @@ export default function Perfil() {
 
   // 1. Dar o quitar reacción (Like)
   const manejarLike = async (postId) => {
-    try {
-      // Método POST y ruta exacta de tu publicacion.routes.js
-      const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/reaccionar`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (res.ok) {
-        const data = await res.json(); // Tu controlador responde: { mensaje, reacciones }
-
-        // Sincronizamos las reacciones en el estado de perfilBd sin recargar la página
-        setPerfilBd(prev => {
-          if (!prev || !prev.publicaciones) return prev;
-          return {
-            ...prev,
-            publicaciones: prev.publicaciones.map(p =>
-              p._id === postId ? { ...p, reacciones: data.reacciones } : p
-            )
-          };
-        });
+  try {
+    const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/reaccionar`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
       }
-    } catch (error) {
-      console.error('❌ Error al gestionar la reacción:', error);
-    }
-  };
+    });
 
-  // 2. Cargar comentarios desde tu API de manera dinámica
-  const cargarComentarios = async (postId) => {
-    try {
-      // Endpoint mapeado en tu comentario.routes.js
-      const res = await fetch(`${API_BASE_URL}/comentarios/publicacion/${postId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json(); // Array de comentarios ordenados
-        setComentariosPorPub(prev => ({
-          ...prev,
-          [postId]: data
-        }));
-      }
-    } catch (error) {
-      console.error('❌ Error al obtener comentarios:', error);
+    const data = await res.json();
+
+    if (res.ok) {
+      setPublicaciones(prev =>
+        prev.map(post =>
+          post._id === postId
+            ? { ...post, reacciones: data.reacciones }
+            : post
+        )
+      );
+    } else {
+      console.error(data.mensaje || 'Error al gestionar la reacción');
     }
-  };
+  } catch (error) {
+    console.error('❌ Error al gestionar la reacción:', error);
+  }
+};
 
   // 3. Alternar la caja de comentarios y disparar la carga sincrónica
   const toggleComentarios = (postId) => {
@@ -301,25 +339,15 @@ export default function Perfil() {
   // 1. Función defensiva para comprobar si el usuario logueado dio Like
   // (Evita errores de tipo si Mongoose devuelve un String o un Objeto populado)
   const usuarioHaReaccionado = (post) => {
-    return post.reacciones?.some(r => {
-      if (!r) return false;
-      return typeof r === 'object' ? r._id === usuarioLogueado?.id : r === usuarioLogueado?.id;
-    });
-  };
+  if (!Array.isArray(post.reacciones)) return false;
 
-  // 2. Efecto para pre-cargar los comentarios de todas las publicaciones del perfil.
-  // Esto llena el estado global 'comentariosPorPub' al iniciar la vista, haciendo que
-  // los contadores numéricos muestren la cantidad real de inmediato.
-  useEffect(() => {
-    if (perfilBd?.publicaciones && perfilBd.publicaciones.length > 0) {
-      perfilBd.publicaciones.forEach(post => {
-        // Trae los comentarios del servidor únicamente si no se han cargado ya
-        if (!comentariosPorPub[post._id]) {
-          cargarComentarios(post._id);
-        }
-      });
-    }
-  }, [perfilBd?.publicaciones]);
+  const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+
+  return post.reacciones.some(r => {
+    const idReaccion = typeof r === 'object' && r !== null ? r._id : r;
+    return idReaccion?.toString() === miId?.toString();
+  });
+};
 
   // 4. Enviar un nuevo comentario
   const manejarEnviarComentario = async (postId) => {
@@ -327,32 +355,33 @@ export default function Perfil() {
     if (!texto) return;
 
     try {
-      // Estructura exacta que espera tu comentario.controller.js (crearComentario)
       const res = await fetch(`${API_BASE_URL}/comentarios/crear`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ publicacionId: postId, texto: texto })
+        body: JSON.stringify({ publicacionId: postId, texto })
       });
 
-      if (res.ok) {
-        // Limpiamos la caja de texto
-        setNuevoComentarioTexto(prev => ({ ...prev, [postId]: '' }));
-        // Recargamos los comentarios de este post para que aparezca el tuyo al instante
-        cargarComentarios(postId);
+      const data = await res.json();
 
-        // Opcional: Incrementamos el contador visual del botón sumando un elemento simulado
-        setPerfilBd(prev => {
-          if (!prev || !prev.publicaciones) return prev;
-          return {
-            ...prev,
-            publicaciones: prev.publicaciones.map(p =>
-              p._id === postId ? { ...p, comentarios: [...(p.comentarios || []), 'nuevo_comentario'] } : p
-            )
-          };
-        });
+      if (res.ok) {
+        const comentarioRender = {
+          ...data.comentario,
+          autor: {
+            nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo'
+          }
+        };
+
+        setComentariosPorPub(prev => ({
+          ...prev,
+          [postId]: [...(prev[postId] || []), comentarioRender]
+        }));
+
+        setNuevoComentarioTexto(prev => ({ ...prev, [postId]: '' }));
+      } else {
+        console.error(data.mensaje || 'Error al enviar comentario');
       }
     } catch (error) {
       console.error('❌ Error al enviar el comentario:', error);
@@ -641,7 +670,7 @@ export default function Perfil() {
                           className="boton-interaccion border-0 bg-transparent"
                           onClick={() => toggleComentarios(post._id)}
                         >
-                          <i className="bi bi-chat"></i> {comentariosPorPub[post._id]?.length || 0}
+                          <i className="bi bi-chat"></i> {comentariosPorPub[post._id]?.length ?? 0}
                         </button>
                       </div>
                     </div>
@@ -767,7 +796,7 @@ export default function Perfil() {
                         </div>
                         {/* Contador de comentarios corregido para la galería */}
                         <div className="galeria-estilos-texto">
-                          <i className="bi bi-chat-fill"></i> {comentariosPorPub[post._id]?.length || 0}
+                          <i className="bi bi-chat-fill"></i> {comentariosPorPub[post._id]?.length ?? 0}
                         </div>
                       </div>
                     </div>

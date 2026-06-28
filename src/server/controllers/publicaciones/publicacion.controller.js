@@ -79,20 +79,27 @@ const obtenerPublicaciones = async (req, res) => {
 const reaccionarPublicacion = async (req, res) => {
     try {
         const { id } = req.params;
-        const usuarioId = req.usuario.id;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!usuarioId) {
+            return res.status(400).json({ mensaje: "ID de usuario no detectado." });
+        }
 
         const publicacion = await Publicacion.findById(id);
         if (!publicacion) {
             return res.status(404).json({ mensaje: 'Publicación no encontrada' });
         }
 
-        // 💡 SOLUCIÓN: Si 'reacciones' no es un arreglo (es un número o undefined), lo inicializamos vacío en memoria
+        // --- CORRECCIÓN AQUÍ: Forzar conversión si es un número ---
         if (!Array.isArray(publicacion.reacciones)) {
-            publicacion.reacciones = [];
+            // Si es un número o está mal, lo corregimos en la base de datos primero
+            await Publicacion.updateOne({ _id: id }, { $set: { reacciones: [] } });
+            publicacion.reacciones = []; // Actualizamos el objeto en memoria también
         }
 
-        // Ahora .includes() nunca fallará
-        const yaReacciono = publicacion.reacciones.includes(usuarioId);
+        const yaReacciono = publicacion.reacciones.some(
+            (reaccion) => reaccion.toString() === usuarioId.toString()
+        );
 
         const operacion = yaReacciono
             ? { $pull: { reacciones: usuarioId } }
@@ -101,7 +108,7 @@ const reaccionarPublicacion = async (req, res) => {
         const publicacionActualizada = await Publicacion.findByIdAndUpdate(
             id,
             operacion,
-            { returnDocument: 'after' }
+            { new: true } 
         );
 
         res.status(200).json({
@@ -110,7 +117,7 @@ const reaccionarPublicacion = async (req, res) => {
         });
     } catch (error) {
         console.error('❌ Error al gestionar la reacción:', error);
-        res.status(500).json({ mensaje: 'Error al procesar la reacción' });
+        res.status(500).json({ mensaje: 'Error interno al procesar la reacción' });
     }
 };
 
