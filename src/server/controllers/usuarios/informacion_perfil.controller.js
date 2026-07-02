@@ -1,19 +1,66 @@
 const { Usuario, InformacionPerfil } = require('../../models/index.model');
 
+const formatearUsuarioCuenta = (usuario) => ({
+    id: usuario._id,
+    nombreUsuario: usuario.nombreUsuario,
+    email: usuario.email,
+    imagenPerfil: usuario.imagenPerfil || null,
+    informacionPerfil: usuario.informacionPerfil || null
+});
+
+const crearPerfilSiNoExiste = async (usuario) => {
+    if (usuario.informacionPerfil) {
+        return usuario.informacionPerfil;
+    }
+
+    const nuevoPerfil = await InformacionPerfil.create({
+        biografia: '',
+        fechaNacimiento: null,
+        genero: '',
+        lugarNacimiento: '',
+        ubicacionActual: '',
+        ocupacionEducacion: '',
+        intereses: []
+    });
+
+    usuario.informacionPerfil = nuevoPerfil._id;
+    await usuario.save();
+
+    return nuevoPerfil._id;
+};
+
 // 1. Ver mi propio perfil
 const obtenerMiPerfil = async (req, res) => {
     try {
-        // req.usuario.id viene de nuestro cadenero (el token)
-        // Usamos .populate() que es la magia de Mongoose para traer los datos del perfil
-        // en lugar de traernos solo el ID.
-        const usuario = await Usuario.findById(req.usuario.id).populate('informacionPerfil');
+        let usuario = await Usuario.findById(req.usuario.id)
+            .populate({
+                path: 'informacionPerfil'
+            })
+            .populate({
+                path: 'imagenPerfil',
+                select: 'urlArchivo'
+            });
 
         if (!usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
 
+        if (!usuario.informacionPerfil) {
+            await crearPerfilSiNoExiste(usuario);
+
+            usuario = await Usuario.findById(req.usuario.id)
+                .populate({
+                    path: 'informacionPerfil'
+                })
+                .populate({
+                    path: 'imagenPerfil',
+                    select: 'urlArchivo'
+                });
+        }
+
         res.status(200).json({
             mensaje: 'Perfil recuperado con éxito',
+            usuario: formatearUsuarioCuenta(usuario),
             perfil: usuario.informacionPerfil
         });
     } catch (error) {
@@ -25,22 +72,126 @@ const obtenerMiPerfil = async (req, res) => {
 // 2. Editar mi propio perfil
 const actualizarMiPerfil = async (req, res) => {
     try {
-        // Buscamos al usuario para saber cuál es el ID de su perfil
         const usuario = await Usuario.findById(req.usuario.id);
 
-        // Extraemos los datos que el usuario quiere actualizar desde el Body (Postman/Flutter)
-        const { biografia, genero, ubicacionActual, ocupacionEducacion } = req.body;
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+        }
 
-        // Actualizamos el documento en la colección de InformacionPerfil
-        // { new: true } le dice a Mongoose que nos devuelva el perfil ya actualizado
+        await crearPerfilSiNoExiste(usuario);
+
+        const {
+            nombreUsuario,
+            email,
+            biografia,
+            fechaNacimiento,
+            genero,
+            lugarNacimiento,
+            ubicacionActual,
+            ocupacionEducacion,
+            intereses
+        } = req.body;
+
+        if (nombreUsuario !== undefined) {
+            const nombreLimpio = nombreUsuario.trim();
+
+            if (!nombreLimpio) {
+                return res.status(400).json({
+                    mensaje: 'El nombre de usuario no puede estar vacío.'
+                });
+            }
+
+            const usuarioExistente = await Usuario.findOne({
+                nombreUsuario: nombreLimpio,
+                _id: { $ne: usuario._id }
+            });
+
+            if (usuarioExistente) {
+                return res.status(400).json({
+                    mensaje: 'Ese nombre de usuario ya está en uso.'
+                });
+            }
+
+            usuario.nombreUsuario = nombreLimpio;
+        }
+
+        if (email !== undefined) {
+            const emailLimpio = email.trim().toLowerCase();
+
+            if (!emailLimpio) {
+                return res.status(400).json({
+                    mensaje: 'El correo electrónico no puede estar vacío.'
+                });
+            }
+
+            const emailExistente = await Usuario.findOne({
+                email: emailLimpio,
+                _id: { $ne: usuario._id }
+            });
+
+            if (emailExistente) {
+                return res.status(400).json({
+                    mensaje: 'Ese correo electrónico ya está en uso.'
+                });
+            }
+
+            usuario.email = emailLimpio;
+        }
+
+        let fechaNacimientoFinal = undefined;
+
+        if (fechaNacimiento !== undefined) {
+            if (!fechaNacimiento) {
+                fechaNacimientoFinal = null;
+            } else {
+                const fecha = new Date(fechaNacimiento);
+
+                if (Number.isNaN(fecha.getTime())) {
+                    return res.status(400).json({
+                        mensaje: 'La fecha de nacimiento no es válida.'
+                    });
+                }
+
+                if (fecha > new Date()) {
+                    return res.status(400).json({
+                        mensaje: 'La fecha de nacimiento no puede ser futura.'
+                    });
+                }
+
+                fechaNacimientoFinal = fecha;
+            }
+        }
+
+        const datosPerfil = {};
+
+        if (biografia !== undefined) datosPerfil.biografia = biografia;
+        if (fechaNacimiento !== undefined) datosPerfil.fechaNacimiento = fechaNacimientoFinal;
+        if (genero !== undefined) datosPerfil.genero = genero;
+        if (lugarNacimiento !== undefined) datosPerfil.lugarNacimiento = lugarNacimiento;
+        if (ubicacionActual !== undefined) datosPerfil.ubicacionActual = ubicacionActual;
+        if (ocupacionEducacion !== undefined) datosPerfil.ocupacionEducacion = ocupacionEducacion;
+        if (intereses !== undefined) datosPerfil.intereses = Array.isArray(intereses) ? intereses : [];
+
+        await usuario.save();
+
         const perfilActualizado = await InformacionPerfil.findByIdAndUpdate(
             usuario.informacionPerfil,
-            { biografia, genero, ubicacionActual, ocupacionEducacion },
-            { new: true }
+            datosPerfil,
+            {
+                new: true,
+                runValidators: true
+            }
         );
+
+        const usuarioActualizado = await Usuario.findById(usuario._id)
+            .populate({
+                path: 'imagenPerfil',
+                select: 'urlArchivo'
+            });
 
         res.status(200).json({
             mensaje: '¡Perfil actualizado con éxito!',
+            usuario: formatearUsuarioCuenta(usuarioActualizado),
             perfil: perfilActualizado
         });
 

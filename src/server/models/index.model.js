@@ -10,6 +10,7 @@ const Seguidor = require('./usuarios/seguidores.model');
 const Arbol = require('./arboles/arbol.model');
 const Nodo = require('./arboles/nodo.model');
 const Hilo = require('./arboles/hilo.model');
+const InvitacionFamiliar = require('./arboles/invitacionFamiliar.model');
 
 // --- Importación de Publicaciones ---
 const Publicacion = require('./publicacion/publicacion.model');
@@ -21,18 +22,26 @@ const Mensajeria = require('./interaccion/mensajeria.model');
 const Notificacion = require('./interaccion/notificaciones.model');
 
 module.exports = {
+    // Usuarios
     Usuario,
     InformacionPerfil,
     Amigo,
     Cercano,
     Familia,
     Seguidor,
+
+    // Árboles
     Arbol,
     Nodo,
     Hilo,
+    InvitacionFamiliar,
+
+    // Publicaciones
     Publicacion,
     Comentario,
     Upload,
+
+    // Interacción
     Mensajeria,
     Notificacion
 };

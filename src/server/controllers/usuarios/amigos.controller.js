@@ -70,4 +70,28 @@ const obtenerMisAmigos = async (req, res) => {
     }
 };
 
-module.exports = { enviarSolicitudAmistad, verMisSolicitudes, obtenerMisAmigos };
+const responderSolicitudAmistad = async (req, res) => {
+    try {
+        const { idInvitacion } = req.params;
+        const { respuesta } = req.body; // Recibe 'Aceptado' o 'Rechazado'
+
+        if (!['Aceptado', 'Rechazado'].includes(respuesta)) {
+            return res.status(400).json({ mensaje: 'Respuesta no válida' });
+        }
+
+        const solicitud = await Amigo.findByIdAndUpdate(
+            idInvitacion,
+            { estado: respuesta },
+            { new: true }
+        );
+
+        if (!solicitud) return res.status(404).json({ mensaje: 'Solicitud no encontrada' });
+
+        res.status(200).json({ mensaje: `Solicitud ${respuesta}`, solicitud });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al responder la solicitud' });
+    }
+};
+// Recuerden exportarla: module.exports = { ..., responderSolicitudAmistad };
+
+module.exports = { enviarSolicitudAmistad, verMisSolicitudes, obtenerMisAmigos, responderSolicitudAmistad };

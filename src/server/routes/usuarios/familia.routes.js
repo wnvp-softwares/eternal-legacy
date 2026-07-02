@@ -1,9 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const { verificarToken } = require('../../middlewares/auth.middleware');
-const { agregarFamiliar, obtenerMisFamiliares } = require('../../controllers/usuarios/familia.controller');
+const { 
+    enviarInvitacionFamiliar, 
+    responderInvitacionFamiliar, 
+    obtenerMisFamiliares 
+} = require('../../controllers/usuarios/familia.controller');
 
-router.post('/agregar', verificarToken, agregarFamiliar);
+// Ruta para enviar la invitación (Antes era /agregar)
+router.post('/invitar', verificarToken, enviarInvitacionFamiliar);
+
+// NUEVA: Ruta para aceptar o rechazar la invitación
+router.put('/responder/:idInvitacion', verificarToken, responderInvitacionFamiliar);
+
+// Ruta para obtener la familia (ya filtrará solo los aceptados)
 router.get('/listar', verificarToken, obtenerMisFamiliares);
 
 module.exports = router;

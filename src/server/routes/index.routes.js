@@ -10,9 +10,13 @@ router.use('/cercanos', require('./usuarios/cercanos.routes'));
 router.use('/seguidores', require('./usuarios/seguidores.routes'));
 
 // --- 2. ÁRBOLES ---
-router.use('/arbol', require('./arboles/arbol.routes'));
+router.use('/arboles', require('./arboles/arbol.routes'));
 router.use('/nodos', require('./arboles/nodo.routes'));
 router.use('/hilos', require('./arboles/hilo.routes'));
+router.use('/invitaciones-familiares', require('./arboles/invitacionFamiliar.routes'));
+
+// Opcional: alias para no romper llamadas viejas que usen /api/arbol
+router.use('/arbol', require('./arboles/arbol.routes'));
 
 // --- 3. PUBLICACIONES ---
 router.use('/publicaciones', require('./publicaciones/publicacion.routes'));

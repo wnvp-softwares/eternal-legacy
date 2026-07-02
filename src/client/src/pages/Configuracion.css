@@ -202,3 +202,78 @@ textarea.input-config {
         gap: 15px;
     }
 }
+
+/* =========================================
+   ESTADOS Y ALERTAS DE CONFIGURACIÓN
+   ========================================= */
+
+.estado-configuracion-cargando {
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--texto-secundario);
+    gap: 12px;
+}
+
+.estado-configuracion-cargando p {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.alerta-configuracion {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    margin-bottom: 18px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.alerta-configuracion.exito {
+    background-color: rgba(16, 185, 129, 0.10);
+    color: #047857;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.alerta-configuracion.error {
+    background-color: rgba(239, 68, 68, 0.10);
+    color: #b91c1c;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.alerta-configuracion i {
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.ayuda-configuracion {
+    display: block;
+    color: var(--texto-secundario);
+    font-size: 0.74rem;
+    margin-top: 6px;
+    line-height: 1.35;
+}
+
+.boton-guardar:disabled {
+    opacity: 0.75;
+    cursor: not-allowed;
+    transform: none;
+}
+
+[data-tema="oscuro"] .alerta-configuracion.exito {
+    background-color: rgba(16, 185, 129, 0.14);
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.30);
+}
+
+[data-tema="oscuro"] .alerta-configuracion.error {
+    background-color: rgba(239, 68, 68, 0.14);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.30);
+}

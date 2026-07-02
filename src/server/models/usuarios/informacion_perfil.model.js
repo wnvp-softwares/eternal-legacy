@@ -2,35 +2,54 @@ const mongoose = require('mongoose');
 
 const informacionPerfilSchema = new mongoose.Schema({
     biografia: {
-        type: String
+        type: String,
+        default: ''
     },
+
+    fechaNacimiento: {
+        type: Date,
+        default: null
+    },
+
     genero: {
-        type: String
+        type: String,
+        default: ''
     },
+
     lugarNacimiento: {
-        type: String
+        type: String,
+        default: ''
     },
+
     ubicacionActual: {
-        type: String
+        type: String,
+        default: ''
     },
+
     ocupacionEducacion: {
-        type: String
+        type: String,
+        default: ''
     },
+
     intereses: [{
         type: String
     }],
+
     seguidores: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Seguidor'
     }],
+
     seguidos: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Usuario'
     }],
+
     amigos: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Amigo'
     }],
+
     familia: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Familia'

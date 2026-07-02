@@ -14,7 +14,13 @@ const familiaSchema = new mongoose.Schema({
     parentesco: {
         type: String,
         required: true
-    } 
+    },
+    // NUEVO: Para manejar el sistema de invitaciones al árbol
+    estado: {
+        type: String,
+        enum: ['Pendiente', 'Aceptado', 'Rechazado'],
+        default: 'Pendiente'
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Familia', familiaSchema);

@@ -47,54 +47,81 @@
     width: 100%;
     background-color: var(--fondo-tarjeta);
     border: 1px solid var(--borde-color);
-    border-radius: 24px;
-    padding: 10px 16px 10px 40px;
+    border-radius: 25px;
+    padding: 10px 15px 10px 40px;
     color: var(--texto-principal);
-    font-size: 0.9rem;
     outline: none;
-    transition: all 0.2s;
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .input-buscar-red:focus {
     border-color: var(--dorado);
-    box-shadow: 0 0 0 3px rgba(203, 161, 53, 0.15);
+    box-shadow: 0 0 0 3px rgba(203, 161, 53, 0.2);
 }
 
-/* Pestañas de Navegación (Tabs) */
+.input-buscar-red::placeholder {
+    color: var(--texto-secundario);
+    opacity: 0.7;
+}
+
+/* =========================================
+   NAVEGACIÓN DE PESTAÑAS (ESTILO PÍLDORA)
+   ========================================= */
+.tabs-red-container {
+    margin-bottom: 24px;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 8px; /* Espacio para que no se corte la sombra */
+}
+
+/* Ocultar barra de scroll en navegadores webkit para un look limpio */
+.tabs-red-container::-webkit-scrollbar {
+    height: 0px;
+    background: transparent;
+}
+
 .tabs-red {
     display: flex;
-    border-bottom: 1px solid var(--borde-color);
-    margin-bottom: 30px;
-    overflow-x: auto; /* Para deslizar en celulares */
-    white-space: nowrap;
-}
-
-.tabs-red::-webkit-scrollbar {
-    display: none; /* Oculta la barra de scroll de los tabs para verse limpio */
+    gap: 12px;
 }
 
 .tab-red {
-    background: none;
-    border: none;
-    padding: 12px 20px;
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 25px;
+    padding: 10px 22px;
     color: var(--texto-secundario);
-    font-weight: 500;
+    font-weight: 600;
     font-size: 0.95rem;
     cursor: pointer;
-    transition: color 0.2s;
-    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.tab-red i {
+    font-size: 1.1rem;
 }
 
 .tab-red:hover {
+    background-color: var(--hover-menu);
     color: var(--texto-principal);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
 }
 
 .tab-red.activo {
-    color: var(--dorado);
-    border-bottom-color: var(--dorado);
+    background-color: var(--dorado);
+    color: white;
+    border-color: var(--dorado);
+    box-shadow: 0 4px 12px rgba(203, 161, 53, 0.3);
 }
 
-/* Tarjetas de Conexión */
+/* =========================================
+   TARJETAS DE CONEXIÓN
+   ========================================= */
 .tarjeta-conexion {
     background-color: var(--fondo-tarjeta);
     border: 1px solid var(--borde-color);
@@ -132,30 +159,245 @@
 
 .relacion-conexion {
     color: var(--dorado-oscuro);
-    font-size: 0.8rem;
-    font-weight: 500;
-    margin-bottom: 4px;
-}
-
-.info-conexion {
-    color: var(--texto-secundario);
-    font-size: 0.75rem;
-    margin-bottom: 20px;
-}
-
-.boton-ver-perfil {
-    background-color: var(--fondo-app);
-    color: var(--texto-principal);
-    border: none;
-    border-radius: 20px;
-    padding: 8px 24px;
     font-size: 0.85rem;
-    font-weight: 600;
-    width: 100%;
-    transition: background-color 0.2s;
-    margin-top: auto; /* Empuja el botón al fondo siempre */
+    font-weight: 500;
+    margin-bottom: 15px;
 }
 
-.boton-ver-perfil:hover {
+.relacion-badge {
+    border: 1px solid var(--borde-color);
+    color: var(--texto-secundario) !important;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+/* =========================================
+   BOTONES DORADOS (PARA MI RED)
+   ========================================= */
+
+.btn-dorado {
+    background-color: var(--dorado);
+    color: white;
+    border: 1px solid var(--dorado);
+    transition: all 0.2s;
+}
+
+.btn-dorado:hover {
+    background-color: var(--dorado-oscuro);
+    border-color: var(--dorado-oscuro);
+    color: white;
+}
+
+.btn-outline-dorado {
+    background-color: transparent;
+    color: var(--dorado);
+    border: 1px solid var(--dorado);
+    transition: all 0.2s;
+}
+
+.btn-outline-dorado:hover {
+    background-color: var(--dorado);
+    color: white;
+}
+
+.btn-eliminar {
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+    border: 1px solid var(--borde-color);
+    transition: all 0.2s;
+}
+
+.btn-eliminar:hover {
     background-color: var(--borde-color);
+}
+
+/* =========================================
+   TARJETAS DE BÚSQUEDA / SUGERENCIAS (ESTILO FACEBOOK)
+   ========================================= */
+.tarjeta-sugerencia {
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    height: 100%;
+}
+
+.tarjeta-sugerencia:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.05);
+}
+
+.foto-sugerencia {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--hover-menu);
+    flex-shrink: 0;
+}
+
+.info-sugerencia {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0; 
+}
+
+.nombre-sugerencia {
+    color: var(--texto-principal);
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.comunes-sugerencia {
+    font-size: 0.80rem;
+    color: var(--texto-secundario);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.acciones-sugerencia {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+/* Nuevos botones de texto con hover dorado para sugerencias */
+.btn-accion-txt {
+    flex: 1;
+    padding: 6px 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background-color: transparent;
+    border: none;
+    color: var(--texto-principal);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.btn-accion-txt:hover {
+    color: var(--dorado);
+    background-color: rgba(205, 164, 52, 0.1); /* Dorado muy suave al pasar el mouse */
+}
+
+/* Responsividad para móviles en la búsqueda */
+@media (max-width: 576px) {
+    .tarjeta-sugerencia {
+        padding: 12px;
+        gap: 12px;
+    }
+    .foto-sugerencia {
+        width: 70px;
+        height: 70px;
+    }
+    .nombre-sugerencia {
+        font-size: 1rem;
+    }
+    .comunes-sugerencia {
+        font-size: 0.75rem;
+        margin-bottom: 8px;
+    }
+    .btn-accion-txt {
+        font-size: 0.8rem;
+        padding: 5px 0;
+    }
+}
+
+/* =========================================
+   MEJORAS VISUALES PARA TARJETAS DE RED
+   ========================================= */
+
+.tarjeta-conexion {
+    border-radius: 22px;
+    padding: 30px 22px;
+    border: 1px solid rgba(203, 161, 53, 0.16);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
+    position: relative;
+    overflow: hidden;
+}
+
+.tarjeta-conexion::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 18%;
+    right: 18%;
+    height: 4px;
+    border-radius: 0 0 12px 12px;
+    background: linear-gradient(90deg, transparent, var(--dorado), transparent);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.tarjeta-conexion:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 16px 35px rgba(15, 23, 42, 0.08);
+    border-color: rgba(203, 161, 53, 0.35);
+}
+
+.tarjeta-conexion:hover::before {
+    opacity: 1;
+}
+
+.foto-conexion {
+    width: 92px;
+    height: 92px;
+    border: 3px solid rgba(203, 161, 53, 0.18);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+    background-color: white;
+}
+
+.nombre-conexion {
+    font-size: 1.15rem;
+    margin-bottom: 8px;
+}
+
+.badge-siguiendo-click {
+    border: 1px solid rgba(203, 161, 53, 0.35);
+    background-color: rgba(203, 161, 53, 0.10);
+    color: var(--dorado-oscuro);
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.badge-siguiendo-click:hover {
+    background-color: rgba(220, 53, 69, 0.10);
+    color: #dc3545;
+    border-color: rgba(220, 53, 69, 0.35);
+    transform: translateY(-1px);
+}
+
+.btn-ver-perfil {
+    border: 1px solid rgba(203, 161, 53, 0.45);
+    background: linear-gradient(135deg, rgba(203, 161, 53, 0.12), rgba(203, 161, 53, 0.03));
+    color: var(--dorado-oscuro);
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 9px 14px;
+    transition: all 0.2s ease;
+}
+
+.btn-ver-perfil:hover {
+    background-color: var(--dorado);
+    border-color: var(--dorado);
+    color: white;
+    box-shadow: 0 8px 18px rgba(203, 161, 53, 0.25);
+    transform: translateY(-2px);
 }

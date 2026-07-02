@@ -1,0 +1,521 @@
+const {
+    Arbol,
+    Nodo,
+    Hilo,
+    Usuario,
+    Seguidor,
+    InvitacionFamiliar
+} = require('../../models/index.model');
+
+const sonMismoId = (id1, id2) => String(id1) === String(id2);
+
+const obtenerIniciales = (nombre = '') => {
+    const partes = nombre.trim().split(' ').filter(Boolean);
+
+    if (partes.length === 0) return 'NA';
+
+    if (partes.length === 1) {
+        return partes[0].slice(0, 2).toUpperCase();
+    }
+
+    return `${partes[0][0]}${partes[1][0]}`.toUpperCase();
+};
+
+const usuarioPuedeVerArbol = (arbol, usuarioId) => {
+    if (!arbol || !usuarioId) return false;
+
+    if (sonMismoId(arbol.creador, usuarioId)) return true;
+
+    const esAdmin = arbol.admins.some(adminId => sonMismoId(adminId, usuarioId));
+    if (esAdmin) return true;
+
+    return arbol.miembros.some(miembro =>
+        sonMismoId(miembro.usuario, usuarioId) && miembro.estado === 'Activo'
+    );
+};
+
+const usuarioPuedeEditarArbol = (arbol, usuarioId) => {
+    if (!arbol || !usuarioId) return false;
+
+    if (sonMismoId(arbol.creador, usuarioId)) return true;
+
+    return arbol.admins.some(adminId => sonMismoId(adminId, usuarioId));
+};
+
+const verificarAmistadMutua = async (usuarioA, usuarioB) => {
+    const yoSigo = await Seguidor.findOne({
+        seguidor: usuarioA,
+        seguido: usuarioB
+    });
+
+    const meSigue = await Seguidor.findOne({
+        seguidor: usuarioB,
+        seguido: usuarioA
+    });
+
+    return Boolean(yoSigo && meSigue);
+};
+
+const obtenerAmigosDisponiblesParaInvitar = async (req, res) => {
+    try {
+        const { arbolId } = req.params;
+        const usuarioId = req.usuario.id;
+
+        const arbol = await Arbol.findOne({
+            _id: arbolId,
+            activo: true
+        });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado' });
+        }
+
+        if (!usuarioPuedeVerArbol(arbol, usuarioId)) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para ver amigos disponibles para este árbol.'
+            });
+        }
+
+        const siguiendo = await Seguidor.find({ seguidor: usuarioId }).select('seguido');
+        const idsQueSigo = siguiendo.map(s => s.seguido);
+
+        if (idsQueSigo.length === 0) {
+            return res.status(200).json({
+                mensaje: 'No tienes amigos disponibles todavía.',
+                total: 0,
+                amigos: []
+            });
+        }
+
+        const amistades = await Seguidor.find({
+            seguidor: { $in: idsQueSigo },
+            seguido: usuarioId
+        }).populate({
+            path: 'seguidor',
+            select: 'nombreUsuario imagenPerfil',
+            populate: {
+                path: 'imagenPerfil',
+                select: 'urlArchivo'
+            }
+        });
+
+        const idsAmigos = amistades
+            .map(a => a.seguidor?._id)
+            .filter(Boolean);
+
+        const nodosExistentes = await Nodo.find({
+            arbol: arbolId,
+            usuario: { $in: idsAmigos },
+            visible: true
+        }).select('usuario');
+
+        const idsYaEnArbol = new Set(
+            nodosExistentes.map(n => String(n.usuario))
+        );
+
+        const invitacionesPendientes = await InvitacionFamiliar.find({
+            arbol: arbolId,
+            invitado: { $in: idsAmigos },
+            estado: 'Pendiente'
+        }).select('invitado');
+
+        const idsConInvitacionPendiente = new Set(
+            invitacionesPendientes.map(i => String(i.invitado))
+        );
+
+        const amigos = amistades
+            .map(a => a.seguidor)
+            .filter(usuario => {
+                if (!usuario) return false;
+
+                const id = String(usuario._id);
+
+                return !idsYaEnArbol.has(id) &&
+                    !idsConInvitacionPendiente.has(id) &&
+                    id !== String(usuarioId);
+            })
+            .map(usuario => ({
+                id: usuario._id,
+                idConexion: usuario._id,
+                nombre: usuario.nombreUsuario,
+                iniciales: obtenerIniciales(usuario.nombreUsuario),
+                relacion: 'Amigo',
+                img: usuario.imagenPerfil?.urlArchivo || null
+            }));
+
+        res.status(200).json({
+            mensaje: 'Amigos disponibles recuperados correctamente',
+            total: amigos.length,
+            amigos
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener amigos disponibles:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const enviarInvitacionFamiliar = async (req, res) => {
+    try {
+        const {
+            arbolId,
+            invitadoId,
+            datosNodoPropuesto,
+            relacionPropuesta = {},
+            mensaje = ''
+        } = req.body;
+
+        if (!arbolId || !invitadoId || !datosNodoPropuesto) {
+            return res.status(400).json({
+                mensaje: 'Faltan datos obligatorios: arbolId, invitadoId y datosNodoPropuesto.'
+            });
+        }
+
+        if (sonMismoId(invitadoId, req.usuario.id)) {
+            return res.status(400).json({
+                mensaje: 'No puedes enviarte una invitación a ti mismo.'
+            });
+        }
+
+        const arbol = await Arbol.findOne({
+            _id: arbolId,
+            activo: true
+        });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado' });
+        }
+
+        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para enviar invitaciones desde este árbol.'
+            });
+        }
+
+        const invitado = await Usuario.findById(invitadoId).select('nombreUsuario');
+
+        if (!invitado) {
+            return res.status(404).json({ mensaje: 'Usuario invitado no encontrado' });
+        }
+
+        const esAmigo = await verificarAmistadMutua(req.usuario.id, invitadoId);
+
+        if (!esAmigo) {
+            return res.status(403).json({
+                mensaje: 'Solo puedes invitar al árbol a usuarios que sean tus amigos.'
+            });
+        }
+
+        const nodoExistente = await Nodo.findOne({
+            arbol: arbolId,
+            usuario: invitadoId,
+            visible: true
+        });
+
+        if (nodoExistente) {
+            return res.status(400).json({
+                mensaje: 'Este usuario ya pertenece a este árbol.'
+            });
+        }
+
+        const invitacionExistente = await InvitacionFamiliar.findOne({
+            arbol: arbolId,
+            invitado: invitadoId,
+            estado: 'Pendiente'
+        });
+
+        if (invitacionExistente) {
+            return res.status(400).json({
+                mensaje: 'Este usuario ya tiene una invitación pendiente para este árbol.'
+            });
+        }
+
+        const nombrePropuesto = datosNodoPropuesto.nombre || invitado.nombreUsuario;
+
+        const nuevaInvitacion = await InvitacionFamiliar.create({
+            arbol: arbolId,
+            invitado: invitadoId,
+            invitadoPor: req.usuario.id,
+            estado: 'Pendiente',
+            datosNodoPropuesto: {
+                nombre: nombrePropuesto,
+                iniciales: datosNodoPropuesto.iniciales || obtenerIniciales(nombrePropuesto),
+                colorFondo: datosNodoPropuesto.colorFondo || '#e2e8f0',
+                colorTexto: datosNodoPropuesto.colorTexto || '#0f172a',
+                generacion: datosNodoPropuesto.generacion,
+                fila: datosNodoPropuesto.fila,
+                tipo: datosNodoPropuesto.tipo || 'normal'
+            },
+            relacionPropuesta: {
+                nodoRelacionado: relacionPropuesta.nodoRelacionado || null,
+                tipoRelacion: relacionPropuesta.tipoRelacion || 'ninguna',
+                rolDelInvitado: relacionPropuesta.rolDelInvitado || 'ninguno'
+            },
+            mensaje
+        });
+
+        res.status(201).json({
+            mensaje: 'Invitación familiar enviada correctamente',
+            invitacion: nuevaInvitacion
+        });
+    } catch (error) {
+        console.error('❌ Error al enviar invitación familiar:', error);
+
+        if (error.code === 11000) {
+            return res.status(400).json({
+                mensaje: 'Ya existe una invitación pendiente para este usuario en este árbol.'
+            });
+        }
+
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const obtenerInvitacionesPendientes = async (req, res) => {
+    try {
+        const invitaciones = await InvitacionFamiliar.find({
+            invitado: req.usuario.id,
+            estado: 'Pendiente'
+        })
+            .populate('arbol', 'nombreFamilia descripcion privacidad creador')
+            .populate('invitadoPor', 'nombreUsuario imagenPerfil')
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            mensaje: 'Invitaciones pendientes recuperadas correctamente',
+            total: invitaciones.length,
+            invitaciones
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener invitaciones pendientes:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const aceptarInvitacionFamiliar = async (req, res) => {
+    try {
+        const { invitacionId } = req.params;
+        const usuarioId = req.usuario.id;
+
+        const invitacion = await InvitacionFamiliar.findOne({
+            _id: invitacionId,
+            invitado: usuarioId,
+            estado: 'Pendiente'
+        });
+
+        if (!invitacion) {
+            return res.status(404).json({
+                mensaje: 'Invitación pendiente no encontrada.'
+            });
+        }
+
+        const arbol = await Arbol.findOne({
+            _id: invitacion.arbol,
+            activo: true
+        });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado' });
+        }
+
+        const nodoExistente = await Nodo.findOne({
+            arbol: invitacion.arbol,
+            usuario: usuarioId,
+            visible: true
+        });
+
+        if (nodoExistente) {
+            return res.status(400).json({
+                mensaje: 'Ya perteneces a este árbol.'
+            });
+        }
+
+        const nuevoNodo = await Nodo.create({
+            arbol: invitacion.arbol,
+            usuario: usuarioId,
+            creadoPor: invitacion.invitadoPor,
+            nombre: invitacion.datosNodoPropuesto.nombre,
+            iniciales: invitacion.datosNodoPropuesto.iniciales,
+            colorFondo: invitacion.datosNodoPropuesto.colorFondo,
+            colorTexto: invitacion.datosNodoPropuesto.colorTexto,
+            fechaCorta: 'Pendiente',
+            estaFallecido: false,
+            tipo: invitacion.datosNodoPropuesto.tipo,
+            estado: 'Verificado',
+            origen: 'usuario_real',
+            generacion: invitacion.datosNodoPropuesto.generacion,
+            fila: invitacion.datosNodoPropuesto.fila,
+            fotos: [],
+            biografia: '',
+            visible: true
+        });
+
+        const yaEsMiembro = arbol.miembros.some(miembro =>
+            sonMismoId(miembro.usuario, usuarioId)
+        );
+
+        if (!yaEsMiembro) {
+            arbol.miembros.push({
+                usuario: usuarioId,
+                rol: 'Miembro',
+                estado: 'Activo'
+            });
+        } else {
+            arbol.miembros = arbol.miembros.map(miembro => {
+                if (sonMismoId(miembro.usuario, usuarioId)) {
+                    miembro.estado = 'Activo';
+                }
+                return miembro;
+            });
+        }
+
+        await arbol.save();
+
+        let hiloCreado = null;
+
+        const tipoRelacion = invitacion.relacionPropuesta?.tipoRelacion;
+        const nodoRelacionadoId = invitacion.relacionPropuesta?.nodoRelacionado;
+        const rolDelInvitado = invitacion.relacionPropuesta?.rolDelInvitado;
+
+        if (tipoRelacion && tipoRelacion !== 'ninguna' && nodoRelacionadoId) {
+            const nodoRelacionado = await Nodo.findOne({
+                _id: nodoRelacionadoId,
+                arbol: invitacion.arbol,
+                visible: true
+            });
+
+            if (nodoRelacionado) {
+                let nodoOrigen = nodoRelacionado._id;
+                let nodoDestino = nuevoNodo._id;
+
+                if (tipoRelacion === 'padre_hijo') {
+                    if (rolDelInvitado === 'hijo') {
+                        nodoOrigen = nodoRelacionado._id;
+                        nodoDestino = nuevoNodo._id;
+                    }
+
+                    if (rolDelInvitado === 'padre') {
+                        nodoOrigen = nuevoNodo._id;
+                        nodoDestino = nodoRelacionado._id;
+                    }
+                }
+
+                try {
+                    hiloCreado = await Hilo.create({
+                        arbol: invitacion.arbol,
+                        nodoOrigen,
+                        nodoDestino,
+                        tipoRelacion,
+                        estado: 'Activa',
+                        creadoPor: invitacion.invitadoPor
+                    });
+                } catch (errorHilo) {
+                    if (errorHilo.code !== 11000) {
+                        console.error('❌ Error al crear hilo al aceptar invitación:', errorHilo);
+                    }
+                }
+            }
+        }
+
+        invitacion.estado = 'Aceptada';
+        invitacion.respondidaEn = new Date();
+        await invitacion.save();
+
+        res.status(200).json({
+            mensaje: 'Invitación aceptada. Ya formas parte del árbol.',
+            nodo: nuevoNodo,
+            hilo: hiloCreado
+        });
+    } catch (error) {
+        console.error('❌ Error al aceptar invitación familiar:', error);
+
+        if (error.code === 11000) {
+            return res.status(400).json({
+                mensaje: 'Ya existe un nodo para este usuario en este árbol.'
+            });
+        }
+
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const rechazarInvitacionFamiliar = async (req, res) => {
+    try {
+        const { invitacionId } = req.params;
+
+        const invitacion = await InvitacionFamiliar.findOne({
+            _id: invitacionId,
+            invitado: req.usuario.id,
+            estado: 'Pendiente'
+        });
+
+        if (!invitacion) {
+            return res.status(404).json({
+                mensaje: 'Invitación pendiente no encontrada.'
+            });
+        }
+
+        invitacion.estado = 'Rechazada';
+        invitacion.respondidaEn = new Date();
+        await invitacion.save();
+
+        res.status(200).json({
+            mensaje: 'Invitación rechazada correctamente'
+        });
+    } catch (error) {
+        console.error('❌ Error al rechazar invitación familiar:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const cancelarInvitacionFamiliar = async (req, res) => {
+    try {
+        const { invitacionId } = req.params;
+
+        const invitacion = await InvitacionFamiliar.findOne({
+            _id: invitacionId,
+            estado: 'Pendiente'
+        });
+
+        if (!invitacion) {
+            return res.status(404).json({
+                mensaje: 'Invitación pendiente no encontrada.'
+            });
+        }
+
+        const arbol = await Arbol.findById(invitacion.arbol);
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado' });
+        }
+
+        const puedeCancelar =
+            sonMismoId(invitacion.invitadoPor, req.usuario.id) ||
+            usuarioPuedeEditarArbol(arbol, req.usuario.id);
+
+        if (!puedeCancelar) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para cancelar esta invitación.'
+            });
+        }
+
+        invitacion.estado = 'Cancelada';
+        invitacion.respondidaEn = new Date();
+        await invitacion.save();
+
+        res.status(200).json({
+            mensaje: 'Invitación cancelada correctamente'
+        });
+    } catch (error) {
+        console.error('❌ Error al cancelar invitación familiar:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+module.exports = {
+    obtenerAmigosDisponiblesParaInvitar,
+    enviarInvitacionFamiliar,
+    obtenerInvitacionesPendientes,
+    aceptarInvitacionFamiliar,
+    rechazarInvitacionFamiliar,
+    cancelarInvitacionFamiliar
+};
