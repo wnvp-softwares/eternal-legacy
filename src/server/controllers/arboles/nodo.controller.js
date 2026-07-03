@@ -1,6 +1,25 @@
-const { Arbol, Nodo, Hilo, Usuario } = require('../../models/index.model');
+const { Arbol, Nodo, Hilo, InvitacionFamiliar } = require('../../models/index.model');
 
-const sonMismoId = (id1, id2) => String(id1) === String(id2);
+const obtenerIdSeguro = (valor) => {
+    if (!valor) return null;
+
+    if (typeof valor === 'string') return valor;
+
+    if (valor._id) return String(valor._id);
+
+    if (valor.id) return String(valor.id);
+
+    return String(valor);
+};
+
+const sonMismoId = (id1, id2) => {
+    const valor1 = obtenerIdSeguro(id1);
+    const valor2 = obtenerIdSeguro(id2);
+
+    if (!valor1 || !valor2) return false;
+
+    return valor1 === valor2;
+};
 
 const obtenerIniciales = (nombre = '') => {
     const partes = nombre.trim().split(' ').filter(Boolean);
@@ -19,10 +38,14 @@ const usuarioPuedeVerArbol = (arbol, usuarioId) => {
 
     if (sonMismoId(arbol.creador, usuarioId)) return true;
 
-    const esAdmin = arbol.admins.some(adminId => sonMismoId(adminId, usuarioId));
+    const admins = Array.isArray(arbol.admins) ? arbol.admins : [];
+    const esAdmin = admins.some(adminId => sonMismoId(adminId, usuarioId));
+
     if (esAdmin) return true;
 
-    return arbol.miembros.some(miembro =>
+    const miembros = Array.isArray(arbol.miembros) ? arbol.miembros : [];
+
+    return miembros.some(miembro =>
         sonMismoId(miembro.usuario, usuarioId) && miembro.estado === 'Activo'
     );
 };
@@ -32,7 +55,9 @@ const usuarioPuedeEditarArbol = (arbol, usuarioId) => {
 
     if (sonMismoId(arbol.creador, usuarioId)) return true;
 
-    return arbol.admins.some(adminId => sonMismoId(adminId, usuarioId));
+    const admins = Array.isArray(arbol.admins) ? arbol.admins : [];
+
+    return admins.some(adminId => sonMismoId(adminId, usuarioId));
 };
 
 const obtenerNodosPorArbol = async (req, res) => {
@@ -110,11 +135,17 @@ const obtenerDetalleNodo = async (req, res) => {
             visible: true
         }).populate({
             path: 'usuario',
-            select: 'nombreUsuario imagenPerfil',
-            populate: {
-                path: 'imagenPerfil',
-                select: 'urlArchivo'
-            }
+            select: 'nombreUsuario imagenPerfil informacionPerfil',
+            populate: [
+                {
+                    path: 'imagenPerfil',
+                    select: 'urlArchivo'
+                },
+                {
+                    path: 'informacionPerfil',
+                    select: 'biografia fechaNacimiento lugarNacimiento ubicacionActual ocupacionEducacion'
+                }
+            ]
         });
 
         if (!nodo) {
@@ -326,6 +357,7 @@ const actualizarNodo = async (req, res) => {
 const eliminarNodo = async (req, res) => {
     try {
         const { arbolId, nodoId } = req.params;
+        const usuarioId = req.usuario.id;
 
         const arbol = await Arbol.findOne({
             _id: arbolId,
@@ -336,7 +368,7 @@ const eliminarNodo = async (req, res) => {
             return res.status(404).json({ mensaje: 'Árbol no encontrado' });
         }
 
-        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
+        if (!usuarioPuedeEditarArbol(arbol, usuarioId)) {
             return res.status(403).json({
                 mensaje: 'No tienes permiso para eliminar nodos de este árbol.'
             });
@@ -344,21 +376,23 @@ const eliminarNodo = async (req, res) => {
 
         const nodo = await Nodo.findOne({
             _id: nodoId,
-            arbol: arbolId,
-            visible: true
+            arbol: arbolId
         });
 
         if (!nodo) {
             return res.status(404).json({ mensaje: 'Nodo no encontrado' });
         }
 
-        nodo.visible = false;
-        await nodo.save();
+        if (sonMismoId(nodo.usuario, arbol.creador)) {
+            return res.status(400).json({
+                mensaje: 'No puedes eliminar al creador principal del árbol.'
+            });
+        }
 
         await Hilo.updateMany(
             {
                 arbol: arbolId,
-                estado: 'Activa',
+                estado: { $ne: 'Eliminada' },
                 $or: [
                     { nodoOrigen: nodoId },
                     { nodoDestino: nodoId }
@@ -369,8 +403,45 @@ const eliminarNodo = async (req, res) => {
             }
         );
 
+        if (nodo.usuario) {
+            const nodoUsuarioId = nodo.usuario;
+
+            arbol.miembros = arbol.miembros.filter(miembro =>
+                !sonMismoId(miembro.usuario, nodoUsuarioId)
+            );
+
+            arbol.admins = arbol.admins.filter(adminId =>
+                !sonMismoId(adminId, nodoUsuarioId)
+            );
+
+            await arbol.save();
+
+            await InvitacionFamiliar.updateMany(
+                {
+                    arbol: arbolId,
+                    invitado: nodoUsuarioId,
+                    estado: { $in: ['Pendiente', 'Aceptada'] }
+                },
+                {
+                    $set: {
+                        estado: 'Cancelada',
+                        respondidaEn: new Date()
+                    }
+                }
+            );
+
+            await Nodo.deleteOne({ _id: nodoId });
+
+            return res.status(200).json({
+                mensaje: 'Usuario eliminado del árbol correctamente. Ya puede volver a recibir invitación.'
+            });
+        }
+
+        nodo.visible = false;
+        await nodo.save();
+
         res.status(200).json({
-            mensaje: 'Nodo eliminado del árbol correctamente'
+            mensaje: 'Perfil sin cuenta eliminado del árbol correctamente.'
         });
     } catch (error) {
         console.error('❌ Error al eliminar nodo:', error);

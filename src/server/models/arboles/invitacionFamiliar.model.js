@@ -30,26 +30,32 @@ const invitacionFamiliarSchema = new mongoose.Schema({
             type: String,
             required: true
         },
+
         iniciales: {
             type: String,
             default: 'NA'
         },
+
         colorFondo: {
             type: String,
             default: '#e2e8f0'
         },
+
         colorTexto: {
             type: String,
             default: '#0f172a'
         },
+
         generacion: {
             type: Number,
             required: true
         },
+
         fila: {
             type: Number,
             required: true
         },
+
         tipo: {
             type: String,
             enum: ['creador', 'admin', 'normal'],
@@ -63,11 +69,13 @@ const invitacionFamiliarSchema = new mongoose.Schema({
             ref: 'Nodo',
             default: null
         },
+
         tipoRelacion: {
             type: String,
             enum: ['padre_hijo', 'pareja', 'matrimonio', 'divorcio', 'ninguna'],
             default: 'ninguna'
         },
+
         rolDelInvitado: {
             type: String,
             enum: ['hijo', 'padre', 'pareja', 'conyuge', 'ninguno'],

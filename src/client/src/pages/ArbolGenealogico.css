@@ -314,8 +314,14 @@
 
 .foto-contenedor {
     position: relative;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
     margin-right: 12px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .avatar-iniciales {
@@ -1953,4 +1959,360 @@
     background-color: rgba(234, 179, 8, 0.12);
     border-color: rgba(234, 179, 8, 0.35);
     color: #fde68a;
+}
+
+/* =========================================
+   FOTO DE PERFIL EN NODOS DEL ÁRBOL
+   ========================================= */
+
+.avatar-foto-perfil-arbol {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    max-width: 44px;
+    max-height: 44px;
+    border-radius: 999px;
+    object-fit: cover;
+    display: block;
+    border: 2px solid var(--fondo-app);
+}
+
+.avatar-iniciales-biografia {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.avatar-iniciales-biografia span {
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+}
+
+.avatar-foto-biografia-arbol {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 999px;
+}
+
+/* =========================================
+   SELECTOR DE ESTADO DE RELACIÓN
+   ========================================= */
+
+.control-union-relacion {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 34px;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 12;
+}
+
+.icono-union-actual {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+    color: var(--dorado);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.control-union-relacion.editable:hover .icono-union-actual {
+    opacity: 0.12;
+    transform: scale(0.92);
+}
+
+.boton-editar-union {
+    position: absolute;
+    inset: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid rgba(203, 164, 52, 0.35);
+    background-color: rgba(255, 255, 255, 0.72);
+    color: var(--dorado-oscuro);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.86);
+    transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+}
+
+.control-union-relacion.editable:hover .boton-editar-union {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.boton-editar-union:hover {
+    background-color: var(--dorado);
+    color: #ffffff;
+    border-color: var(--dorado);
+}
+
+.menu-tipo-union {
+    position: absolute;
+    top: 38px;
+    right: 0;
+    width: 190px;
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    box-shadow: 0 18px 35px rgba(15, 23, 42, 0.16);
+    padding: 8px;
+    z-index: 60;
+    animation: aparecerMenuUnion 0.16s ease-out;
+}
+
+@keyframes aparecerMenuUnion {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.menu-tipo-union-titulo {
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: var(--texto-secundario);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 6px 8px 8px;
+    border-bottom: 1px solid var(--borde-color);
+    margin-bottom: 6px;
+}
+
+.opcion-tipo-union {
+    width: 100%;
+    border: none;
+    background-color: transparent;
+    color: var(--texto-principal);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 8px;
+    border-radius: 12px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-align: left;
+    transition: background-color 0.18s ease, color 0.18s ease;
+    cursor: pointer;
+}
+
+.opcion-tipo-union:hover {
+    background-color: var(--hover-menu);
+}
+
+.opcion-tipo-union.activo {
+    background-color: rgba(203, 164, 52, 0.13);
+    color: var(--dorado-oscuro);
+}
+
+.opcion-tipo-union-icono {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--dorado);
+    flex-shrink: 0;
+}
+
+.icono-pareja-no-casada {
+    color: #ef4444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.icono-divorcio {
+    color: var(--texto-secundario);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+[data-tema="oscuro"] .boton-editar-union {
+    background-color: rgba(30, 41, 59, 0.84);
+    border-color: rgba(234, 179, 8, 0.35);
+    color: #fde68a;
+}
+
+[data-tema="oscuro"] .menu-tipo-union {
+    box-shadow: 0 18px 35px rgba(0, 0, 0, 0.35);
+}
+
+/* En móviles no existe hover, así que dejamos visible el botón si la relación es editable. */
+@media (hover: none) {
+    .control-union-relacion.editable .boton-editar-union {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    .control-union-relacion.editable .icono-union-actual {
+        opacity: 0.18;
+    }
+}
+
+/* =========================================
+   FECHA DE RELACIÓN EN PANEL DE PERFIL
+   ========================================= */
+
+.bloque-estado-union-perfil .icono-pareja-no-casada,
+.bloque-estado-union-perfil .icono-divorcio,
+.bloque-estado-union-perfil .icono-anillos {
+    transform: scale(1.15);
+}
+
+.linea-fecha-union-perfil {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--texto-secundario);
+    font-size: 0.86rem;
+    line-height: 1.35;
+    margin-top: 2px;
+}
+
+.boton-calendario-union {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background-color: transparent;
+    color: var(--texto-secundario);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    flex-shrink: 0;
+}
+
+.boton-calendario-union:hover {
+    color: var(--dorado-oscuro);
+    background-color: rgba(203, 164, 52, 0.12);
+    border-color: rgba(203, 164, 52, 0.22);
+}
+
+.boton-calendario-union i {
+    font-size: 0.95rem;
+    pointer-events: none;
+}
+
+.boton-calendario-union input[type="date"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+[data-tema="oscuro"] .boton-calendario-union:hover {
+    color: #fde68a;
+    background-color: rgba(234, 179, 8, 0.12);
+    border-color: rgba(234, 179, 8, 0.30);
+}
+
+/* =========================================
+   RESULTADO VACÍO POR FILTROS DEL ÁRBOL
+   ========================================= */
+
+.mensaje-filtros-vacios-arbol {
+    width: 320px;
+    max-width: 90vw;
+    padding: 22px 20px;
+    border-radius: 22px;
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-tarjeta);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+    text-align: center;
+    color: var(--texto-principal);
+}
+
+.mensaje-filtros-vacios-arbol .icono-filtro-vacio {
+    width: 54px;
+    height: 54px;
+    margin: 0 auto 12px auto;
+    border-radius: 999px;
+    background-color: rgba(203, 164, 52, 0.12);
+    color: var(--dorado-oscuro);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+}
+
+.mensaje-filtros-vacios-arbol h6 {
+    margin: 0 0 8px 0;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--texto-principal);
+}
+
+.mensaje-filtros-vacios-arbol p {
+    margin: 0 auto 14px auto;
+    max-width: 260px;
+    color: var(--texto-secundario);
+    font-size: 0.80rem;
+    line-height: 1.45;
+}
+
+.mensaje-filtros-vacios-arbol button {
+    border: 1px solid rgba(203, 164, 52, 0.35);
+    background-color: transparent;
+    color: var(--dorado-oscuro);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.mensaje-filtros-vacios-arbol button:hover {
+    background-color: var(--dorado);
+    color: white;
+    border-color: var(--dorado);
+}
+
+[data-tema="oscuro"] .mensaje-filtros-vacios-arbol {
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+[data-tema="oscuro"] .mensaje-filtros-vacios-arbol .icono-filtro-vacio {
+    color: #fde68a;
+    background-color: rgba(234, 179, 8, 0.14);
+}
+
+[data-tema="oscuro"] .mensaje-filtros-vacios-arbol button {
+    color: #fde68a;
+    border-color: rgba(234, 179, 8, 0.35);
 }

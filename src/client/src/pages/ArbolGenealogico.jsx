@@ -6,11 +6,90 @@ import './ArbolGenealogico.css';
 // CONFIGURACIÓN
 // ==========================================
 const URL_BASE_BACKEND = 'http://localhost:3000';
+
+const resolverUrlImagen = (url) => {
+  if (!url) return null;
+
+  if (
+    typeof url === 'string' &&
+    (
+      url.startsWith('http://') ||
+      url.startsWith('https://') ||
+      url.startsWith('data:') ||
+      url.startsWith('blob:')
+    )
+  ) {
+    return url;
+  }
+
+  if (typeof url === 'string') {
+    return `${URL_BASE_BACKEND}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+
+  return null;
+};
+
 const ESPACIADO_Y = 175;
 const COLORES_AVATAR = [
   '#86efac', '#bae6fd', '#e9d5ff', '#fde047', '#fca5a5',
   '#f472b6', '#7dd3fc', '#cbd5e1', '#93c5fd', '#fdba74'
 ];
+
+const TIPOS_UNION = {
+  pareja: {
+    valor: 'pareja',
+    etiqueta: 'Pareja no casada',
+    corto: 'Pareja',
+    icono: 'heart'
+  },
+  matrimonio: {
+    valor: 'matrimonio',
+    etiqueta: 'Casados',
+    corto: 'Casados',
+    icono: 'rings'
+  },
+  divorcio: {
+    valor: 'divorcio',
+    etiqueta: 'Divorcio',
+    corto: 'Divorcio',
+    icono: 'scissors'
+  }
+};
+
+const OPCIONES_UNION = [
+  TIPOS_UNION.matrimonio,
+  TIPOS_UNION.pareja,
+  TIPOS_UNION.divorcio
+];
+
+const obtenerConfigUnion = (tipoUnion = 'pareja') => {
+  return TIPOS_UNION[tipoUnion] || TIPOS_UNION.pareja;
+};
+
+const esIdTemporal = (id = '') => {
+  return String(id).startsWith('tmp-') || String(id).startsWith('hilo-') || String(id).startsWith('nodo-');
+};
+
+const FILTROS_ARBOL_DEFECTO = {
+  vista: 'Ambos',
+  rama: 'Ambas',
+  estado: 'Todos',
+  generacion: 'Todas',
+  conCuenta: 'Ambos',
+  conFoto: 'Ambos'
+};
+
+const obtenerValorRamaNodo = (nodo = {}) => {
+  return String(
+    nodo.rama ||
+    nodo.ramaFamiliar ||
+    nodo.ladoFamiliar ||
+    nodo.lineaFamiliar ||
+    nodo.linea ||
+    ''
+  ).toLowerCase();
+};
+
 
 const obtenerIniciales = (nombre = '') => {
   const partes = nombre.trim().split(' ').filter(Boolean);
@@ -58,14 +137,108 @@ const romano = (numero) => {
   return salida || `${n}`;
 };
 
-const obtenerFechaValida = (fecha) => {
+const extraerPartesFecha = (fecha) => {
   if (!fecha) return null;
+
+  if (typeof fecha === 'string') {
+    const coincidencia = fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+    if (coincidencia) {
+      return {
+        year: Number(coincidencia[1]),
+        month: Number(coincidencia[2]),
+        day: Number(coincidencia[3])
+      };
+    }
+  }
 
   const date = new Date(fecha);
 
   if (Number.isNaN(date.getTime())) return null;
 
-  return date;
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate()
+  };
+};
+
+const obtenerFechaValida = (fecha) => {
+  const partes = extraerPartesFecha(fecha);
+
+  if (!partes) return null;
+
+  return new Date(partes.year, partes.month - 1, partes.day, 12, 0, 0);
+};
+
+const formatearFechaRelacion = (fecha) => {
+  const partes = extraerPartesFecha(fecha);
+
+  if (!partes) return '';
+
+  const date = new Date(partes.year, partes.month - 1, partes.day, 12, 0, 0);
+
+  return date.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+
+const formatearFechaParaInput = (fecha) => {
+  const partes = extraerPartesFecha(fecha);
+
+  if (!partes) return '';
+
+  const year = String(partes.year).padStart(4, '0');
+  const month = String(partes.month).padStart(2, '0');
+  const day = String(partes.day).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+const obtenerTextoEstadoUnion = (tipoUnion, nombrePareja) => {
+  const tipo = tipoUnion || 'pareja';
+
+  if (tipo === 'matrimonio') {
+    return `Casado con ${nombrePareja}`;
+  }
+
+  if (tipo === 'divorcio') {
+    return `Divorciado de ${nombrePareja}`;
+  }
+
+  return `En pareja con ${nombrePareja}`;
+};
+
+const obtenerTextoFechaUnion = (tipoUnion, fechaInicio, fechaFin) => {
+  const tipo = tipoUnion || 'pareja';
+
+  if (tipo === 'divorcio') {
+    return fechaFin
+      ? `Fecha de divorcio: ${formatearFechaRelacion(fechaFin)}`
+      : 'Fecha de divorcio pendiente';
+  }
+
+  if (tipo === 'matrimonio') {
+    return fechaInicio
+      ? `Desde ${formatearFechaRelacion(fechaInicio)}`
+      : 'Fecha de matrimonio pendiente';
+  }
+
+  return fechaInicio
+    ? `Desde ${formatearFechaRelacion(fechaInicio)}`
+    : 'Fecha de inicio pendiente';
+};
+
+const obtenerLabelFechaUnion = (tipoUnion) => {
+  if (tipoUnion === 'divorcio') return 'Fecha de divorcio';
+  if (tipoUnion === 'matrimonio') return 'Fecha de matrimonio';
+  return 'Fecha de inicio de relación';
+};
+
+const obtenerCampoFechaUnion = (tipoUnion) => {
+  return tipoUnion === 'divorcio' ? 'fechaFin' : 'fechaInicio';
 };
 
 const obtenerAnio = (fecha) => {
@@ -132,13 +305,21 @@ const normalizarNodo = (nodo, usuarioActualId = null) => {
       ? `${nombreBase} (Yo)`
       : nombreBase;
 
-  const imagenPerfil = nodo.usuario?.imagenPerfil?.urlArchivo;
   const informacionPerfil = nodo.usuario?.informacionPerfil || {};
+
+  const imagenPerfil = resolverUrlImagen(
+    nodo.usuario?.imagenPerfil?.urlArchivo ||
+    nodo.usuario?.imagenPerfil ||
+    null
+  );
 
   const fechaNacimientoPerfil = informacionPerfil.fechaNacimiento || null;
   const fechaNacimientoFinal = nodo.fechaNacimiento || fechaNacimientoPerfil || null;
 
-  const fotosNodo = Array.isArray(nodo.fotos) ? nodo.fotos : [];
+  const fotosNodo = Array.isArray(nodo.fotos)
+    ? nodo.fotos.map(resolverUrlImagen).filter(Boolean)
+    : [];
+
   const fotos = imagenPerfil
     ? [imagenPerfil, ...fotosNodo.filter(f => f !== imagenPerfil)]
     : fotosNodo;
@@ -166,6 +347,8 @@ const normalizarNodo = (nodo, usuarioActualId = null) => {
     iniciales: nodo.iniciales || obtenerIniciales(nombreBase),
     colorFondo: nodo.colorFondo || colorPorTexto(nombreBase),
     colorTexto: nodo.colorTexto || '#0f172a',
+
+    fotoPerfil: imagenPerfil || fotos[0] || null,
 
     fechaNacimiento: fechaNacimientoFinal,
     fechaCorta: fechaCortaCalculada,
@@ -208,6 +391,7 @@ const FilaPersona = ({
   iniciales,
   colorFondo,
   colorTexto,
+  fotoPerfil,
   estaFallecido,
   esModoEdicion,
   tieneDescendencia,
@@ -215,12 +399,34 @@ const FilaPersona = ({
 }) => (
   <div className="fila-persona" onClick={alHacerClic}>
     <div className="foto-contenedor">
-      <div className="avatar-iniciales" style={{ backgroundColor: colorFondo, color: colorTexto || 'inherit' }}>
+      {fotoPerfil && (
+        <img
+          src={fotoPerfil}
+          alt={nombre}
+          className="avatar-foto-perfil-arbol"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            const fallback = e.currentTarget.nextElementSibling;
+            if (fallback) fallback.style.display = 'flex';
+          }}
+        />
+      )}
+
+      <div
+        className="avatar-iniciales"
+        style={{
+          backgroundColor: colorFondo,
+          color: colorTexto || 'inherit',
+          display: fotoPerfil ? 'none' : 'flex'
+        }}
+      >
         {iniciales}
       </div>
+
       {tipo === 'creador' && <div className="etiqueta-rol creador"><i className="bi bi-star-fill"></i></div>}
       {tipo === 'admin' && <div className="etiqueta-rol admin"><i className="bi bi-shield-fill"></i></div>}
     </div>
+
     <div className="info-nodo">
       <h6 className="nombre-nodo">{nombre}</h6>
       <span className="fecha-nodo">
@@ -230,6 +436,7 @@ const FilaPersona = ({
         )}
       </span>
     </div>
+
     {esModoEdicion && tieneDescendencia && <i className="bi bi-caret-right boton-expandir-flotante"></i>}
   </div>
 );
@@ -248,12 +455,41 @@ const Celda = ({ fila, children }) => (
   </div>
 );
 
+const IconoUnion = ({ tipoUnion }) => {
+  const config = obtenerConfigUnion(tipoUnion);
+
+  if (config.icono === 'rings') {
+    return (
+      <div className="icono-anillos" title={config.etiqueta}>
+        <span className="anillo"></span>
+        <span className="anillo"></span>
+      </div>
+    );
+  }
+
+  if (config.icono === 'scissors') {
+    return (
+      <div className="icono-divorcio" title={config.etiqueta}>
+        <i className="bi bi-scissors"></i>
+      </div>
+    );
+  }
+
+  return (
+    <div className="icono-pareja-no-casada" title={config.etiqueta}>
+      <i className="bi bi-heart-fill"></i>
+    </div>
+  );
+};
+
 const TarjetaPareja = ({
   pareja1,
   pareja2,
   tipoUnion,
   unionId,
   esModoEdicion,
+  puedeEditarUnion,
+  alCambiarTipoUnion,
   alSeleccionar,
   modoRelacionar,
   esDestinoValido,
@@ -263,6 +499,7 @@ const TarjetaPareja = ({
   alEliminar,
   alEliminarUnion
 }) => {
+  const [menuUnionAbierto, establecerMenuUnionAbierto] = useState(false);
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
 
   const manejarClicTarjeta = (e) => {
@@ -272,7 +509,8 @@ const TarjetaPareja = ({
     }
   };
 
-  const mostrarAnillos = pareja2 && tipoUnion && !modoRelacionar;
+  const mostrarUnion = pareja2 && tipoUnion && !modoRelacionar;
+  const configUnion = obtenerConfigUnion(tipoUnion);
 
   return (
     <div className={`tarjeta-nodo-unificada ${claseDestino}`} onClick={manejarClicTarjeta}>
@@ -304,9 +542,10 @@ const TarjetaPareja = ({
         />
       )}
 
-      {mostrarAnillos && (
+      {mostrarUnion && (
         <div
-          className="icono-union-borde"
+          className={`control-union-relacion ${puedeEditarUnion ? 'editable' : ''}`}
+          onMouseLeave={() => establecerMenuUnionAbierto(false)}
           onClick={(e) => {
             if (modoEliminar && unionId) {
               e.stopPropagation();
@@ -314,9 +553,45 @@ const TarjetaPareja = ({
             }
           }}
         >
-          {(tipoUnion === 'casados' || tipoUnion === 'pareja') && (
-            <div className="icono-anillos" title={tipoUnion === 'casados' ? 'Casados' : 'Pareja'}>
-              <span className="anillo"></span><span className="anillo"></span>
+          <div className="icono-union-actual" title={configUnion.etiqueta}>
+            <IconoUnion tipoUnion={tipoUnion} />
+          </div>
+
+          {puedeEditarUnion && !modoEliminar && (
+            <button
+              type="button"
+              className="boton-editar-union"
+              title="Cambiar estado de relación"
+              onClick={(e) => {
+                e.stopPropagation();
+                establecerMenuUnionAbierto(prev => !prev);
+              }}
+            >
+              <i className="bi bi-plus-lg"></i>
+            </button>
+          )}
+
+          {puedeEditarUnion && menuUnionAbierto && !modoEliminar && (
+            <div className="menu-tipo-union">
+              <div className="menu-tipo-union-titulo">Estado de relación</div>
+
+              {OPCIONES_UNION.map((opcion) => (
+                <button
+                  key={opcion.valor}
+                  type="button"
+                  className={`opcion-tipo-union ${tipoUnion === opcion.valor ? 'activo' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    establecerMenuUnionAbierto(false);
+                    alCambiarTipoUnion(opcion.valor);
+                  }}
+                >
+                  <span className="opcion-tipo-union-icono">
+                    <IconoUnion tipoUnion={opcion.valor} />
+                  </span>
+                  <span>{opcion.etiqueta}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -429,6 +704,10 @@ export default function ArbolGenealogico() {
   const [invitacionesPendientes, establecerInvitacionesPendientes] = useState([]);
   const [nodos, establecerNodos] = useState([]);
   const [hilos, establecerHilos] = useState([]);
+  const [nodosOriginales, establecerNodosOriginales] = useState([]);
+  const [hilosOriginales, establecerHilosOriginales] = useState([]);
+  const [cambiosPendientes, establecerCambiosPendientes] = useState([]);
+  const [guardandoCambiosArbol, establecerGuardandoCambiosArbol] = useState(false);
   const [amigosDisponibles, establecerAmigosDisponibles] = useState([]);
   const [busquedaInvitaciones, establecerBusquedaInvitaciones] = useState('');
   const [nombreNuevoArbol, establecerNombreNuevoArbol] = useState('');
@@ -465,11 +744,14 @@ export default function ArbolGenealogico() {
   const [nivelZoom, establecerNivelZoom] = useState(1);
   const [leyendaAbierta, establecerLeyendaAbierta] = useState(true);
 
-  const [filtroVista, establecerFiltroVista] = useState('Ancestros');
-  const [filtroRama, establecerFiltroRama] = useState('Ambas');
-  const [filtroEstado, establecerFiltroEstado] = useState('Todos');
-  const [filtroConCuenta, establecerFiltroConCuenta] = useState('Ambos');
-  const [filtroConFoto, establecerFiltroConFoto] = useState('Ambos');
+  const [filtroVista, establecerFiltroVista] = useState(FILTROS_ARBOL_DEFECTO.vista);
+  const [filtroRama, establecerFiltroRama] = useState(FILTROS_ARBOL_DEFECTO.rama);
+  const [filtroEstado, establecerFiltroEstado] = useState(FILTROS_ARBOL_DEFECTO.estado);
+  const [filtroGeneracion, establecerFiltroGeneracion] = useState(FILTROS_ARBOL_DEFECTO.generacion);
+  const [filtroConCuenta, establecerFiltroConCuenta] = useState(FILTROS_ARBOL_DEFECTO.conCuenta);
+  const [filtroConFoto, establecerFiltroConFoto] = useState(FILTROS_ARBOL_DEFECTO.conFoto);
+
+  const [filtrosAplicados, establecerFiltrosAplicados] = useState(FILTROS_ARBOL_DEFECTO);
 
   const token = localStorage.getItem('token');
   const usuarioActualId = useMemo(() => obtenerUsuarioIdDesdeToken(token), [token]);
@@ -494,6 +776,55 @@ export default function ArbolGenealogico() {
     }
 
     return data;
+  };
+
+  const generarIdTemporal = (prefijo = 'tmp') => {
+    return `${prefijo}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  };
+
+  const clonarDatos = (datos) => {
+    return JSON.parse(JSON.stringify(datos || []));
+  };
+
+  const registrarCambioPendiente = (cambio) => {
+    establecerCambiosPendientes(prev => [...prev, cambio]);
+  };
+
+  const hayCambiosPendientes = () => cambiosPendientes.length > 0;
+
+  const entrarModoEdicion = () => {
+    establecerNodosOriginales(clonarDatos(nodos));
+    establecerHilosOriginales(clonarDatos(hilos));
+    establecerCambiosPendientes([]);
+    establecerModoEdicion(true);
+  };
+
+  const salirModoEdicionSinCambios = () => {
+    reiniciarModos();
+    establecerModoEdicion(false);
+    establecerCambiosPendientes([]);
+    establecerNodosOriginales([]);
+    establecerHilosOriginales([]);
+  };
+
+  const alternarModoEdicion = () => {
+    if (esModoEdicion) {
+      if (cambiosPendientes.length > 0) {
+        const confirmado = window.confirm(
+          'Tienes cambios sin guardar. ¿Deseas descartarlos y salir del modo edición?'
+        );
+
+        if (!confirmado) return;
+
+        establecerNodos(nodosOriginales);
+        establecerHilos(hilosOriginales);
+      }
+
+      salirModoEdicionSinCambios();
+      return;
+    }
+
+    entrarModoEdicion();
   };
 
   const cargarAmigosDisponibles = async (arbolId) => {
@@ -540,6 +871,10 @@ export default function ArbolGenealogico() {
     establecerArbol(null);
     establecerNodos([]);
     establecerHilos([]);
+    establecerNodosOriginales([]);
+    establecerHilosOriginales([]);
+    establecerCambiosPendientes([]);
+    establecerGuardandoCambiosArbol(false);
     establecerAmigosDisponibles([]);
     establecerNodoSeleccionado(null);
     establecerMostrarFiltros(false);
@@ -594,16 +929,8 @@ export default function ArbolGenealogico() {
       establecerErrorArbol('');
       limpiarLienzo();
 
-      let miArbol = null;
       let arboles = [];
       let invitaciones = [];
-
-      try {
-        const dataMiArbol = await apiFetch('/api/arboles/mi-arbol');
-        miArbol = dataMiArbol.arbol || null;
-      } catch (error) {
-        if (error.status !== 404) throw error;
-      }
 
       try {
         const dataArboles = await apiFetch('/api/arboles/mis-arboles');
@@ -617,7 +944,13 @@ export default function ArbolGenealogico() {
         invitaciones = Array.isArray(dataInvitaciones.invitaciones) ? dataInvitaciones.invitaciones : [];
       } catch (error) {
         console.error('Error al cargar invitaciones pendientes:', error);
+        invitaciones = [];
       }
+
+      const miArbol = arboles.find((item) => {
+        const creadorId = obtenerId(item.creador);
+        return usuarioActualId && creadorId && String(creadorId) === String(usuarioActualId);
+      }) || null;
 
       establecerArbolPropio(miArbol);
       establecerArbolesDisponibles(normalizarListaArboles(arboles, miArbol));
@@ -815,6 +1148,38 @@ export default function ArbolGenealogico() {
   const alejarZoom = () => establecerNivelZoom(prev => Math.max(prev - 0.2, 0.4));
   const restablecerZoom = () => establecerNivelZoom(1);
 
+  const obtenerFiltrosSeleccionados = () => ({
+    vista: filtroVista,
+    rama: filtroRama,
+    estado: filtroEstado,
+    generacion: filtroGeneracion,
+    conCuenta: filtroConCuenta,
+    conFoto: filtroConFoto
+  });
+
+  const aplicarFiltrosArbol = () => {
+    establecerFiltrosAplicados(obtenerFiltrosSeleccionados());
+    establecerMostrarFiltros(false);
+    establecerMensajeSistema('Filtros aplicados correctamente.');
+  };
+
+  const restablecerFiltrosArbol = () => {
+    establecerFiltroVista(FILTROS_ARBOL_DEFECTO.vista);
+    establecerFiltroRama(FILTROS_ARBOL_DEFECTO.rama);
+    establecerFiltroEstado(FILTROS_ARBOL_DEFECTO.estado);
+    establecerFiltroGeneracion(FILTROS_ARBOL_DEFECTO.generacion);
+    establecerFiltroConCuenta(FILTROS_ARBOL_DEFECTO.conCuenta);
+    establecerFiltroConFoto(FILTROS_ARBOL_DEFECTO.conFoto);
+    establecerFiltrosAplicados(FILTROS_ARBOL_DEFECTO);
+    establecerMensajeSistema('Filtros restablecidos.');
+  };
+
+  const hayFiltrosAplicados = useMemo(() => {
+    return Object.keys(FILTROS_ARBOL_DEFECTO).some(
+      key => filtrosAplicados[key] !== FILTROS_ARBOL_DEFECTO[key]
+    );
+  }, [filtrosAplicados]);
+
   const proximosEventos = [
     { id: 1, titulo: 'Boda de los Abuelos', fecha: '12 OCT', detalle: '58º Aniversario - Salón Principal' },
     { id: 2, titulo: 'Cumpleaños familiar', fecha: '25 NOV', detalle: 'Evento familiar pendiente de configurar' }
@@ -830,6 +1195,136 @@ export default function ArbolGenealogico() {
     () => hilos.filter(hilo => hilo.estado !== 'Eliminada'),
     [hilos]
   );
+
+  const nodoBaseFiltro = useMemo(() => {
+    return (
+      nodos.find(nodo => nodo.esUsuarioActual) ||
+      nodos.find(nodo => nodo.tipo === 'creador') ||
+      nodos[0] ||
+      null
+    );
+  }, [nodos]);
+
+  const idsVistaFiltrada = useMemo(() => {
+    if (!nodoBaseFiltro || filtrosAplicados.vista === 'Ambos') return null;
+
+    const padresPorHijo = new Map();
+    const hijosPorPadre = new Map();
+
+    hilosActivos
+      .filter(hilo => hilo.tipoRelacion === 'padre_hijo')
+      .forEach((hilo) => {
+        const padreId = String(hilo.nodoOrigenId);
+        const hijoId = String(hilo.nodoDestinoId);
+
+        if (!padresPorHijo.has(hijoId)) padresPorHijo.set(hijoId, []);
+        padresPorHijo.get(hijoId).push(padreId);
+
+        if (!hijosPorPadre.has(padreId)) hijosPorPadre.set(padreId, []);
+        hijosPorPadre.get(padreId).push(hijoId);
+      });
+
+    const visitados = new Set();
+    const pendientes = [String(nodoBaseFiltro.id)];
+    const mapaDireccion = filtrosAplicados.vista === 'Ancestros'
+      ? padresPorHijo
+      : hijosPorPadre;
+
+    while (pendientes.length > 0) {
+      const actual = pendientes.shift();
+
+      if (visitados.has(actual)) continue;
+
+      visitados.add(actual);
+
+      const relacionados = mapaDireccion.get(actual) || [];
+      relacionados.forEach(idRelacionado => {
+        if (!visitados.has(String(idRelacionado))) {
+          pendientes.push(String(idRelacionado));
+        }
+      });
+    }
+
+    return visitados;
+  }, [nodoBaseFiltro, filtrosAplicados.vista, hilosActivos]);
+
+  const nodoCumpleFiltros = (nodo) => {
+    if (!nodo) return false;
+
+    if (idsVistaFiltrada && !idsVistaFiltrada.has(String(nodo.id))) {
+      return false;
+    }
+
+    if (filtrosAplicados.generacion !== 'Todas') {
+      if (Number(nodo.generacion) !== Number(filtrosAplicados.generacion)) {
+        return false;
+      }
+    }
+
+    if (filtrosAplicados.estado === 'Vivos' && nodo.estaFallecido) {
+      return false;
+    }
+
+    if (filtrosAplicados.estado === 'Difuntos' && !nodo.estaFallecido) {
+      return false;
+    }
+
+    if (filtrosAplicados.conCuenta === 'Con cuenta' && !nodo.usuarioId) {
+      return false;
+    }
+
+    if (filtrosAplicados.conCuenta === 'Sin cuenta' && nodo.usuarioId) {
+      return false;
+    }
+
+    const tieneFoto = Boolean(nodo.fotoPerfil) || (Array.isArray(nodo.fotos) && nodo.fotos.length > 0);
+
+    if (filtrosAplicados.conFoto === 'Con foto' && !tieneFoto) {
+      return false;
+    }
+
+    if (filtrosAplicados.conFoto === 'Sin foto' && tieneFoto) {
+      return false;
+    }
+
+    if (filtrosAplicados.rama !== 'Ambas') {
+      const ramaNodo = obtenerValorRamaNodo(nodo);
+
+      if (ramaNodo) {
+        const quiereMaterna = filtrosAplicados.rama === 'Materna';
+        const coincideRama = quiereMaterna
+          ? ramaNodo.includes('materna')
+          : ramaNodo.includes('paterna');
+
+        if (!coincideRama) return false;
+      }
+    }
+
+    return true;
+  };
+
+  const nodosFiltrados = useMemo(() => {
+    return nodos.filter(nodoCumpleFiltros);
+  }, [nodos, filtrosAplicados, idsVistaFiltrada]);
+
+  const idsNodosFiltrados = useMemo(() => {
+    return new Set(nodosFiltrados.map(nodo => String(nodo.id)));
+  }, [nodosFiltrados]);
+
+  const hilosActivosFiltrados = useMemo(() => {
+    return hilosActivos.filter(hilo =>
+      idsNodosFiltrados.has(String(hilo.nodoOrigenId)) &&
+      idsNodosFiltrados.has(String(hilo.nodoDestinoId))
+    );
+  }, [hilosActivos, idsNodosFiltrados]);
+
+  const generacionesFiltroDisponibles = useMemo(() => {
+    const generaciones = Array.from(
+      new Set(nodos.map(nodo => Number(nodo.generacion)).filter(num => Number.isFinite(num)))
+    );
+
+    return generaciones.length > 0 ? generaciones.sort((a, b) => a - b) : [0];
+  }, [nodos]);
 
   const obtenerEstadoFamiliar = (persona) => {
     if (!persona) return null;
@@ -850,14 +1345,29 @@ export default function ArbolGenealogico() {
       .filter(Boolean);
 
     const pareja = relaciones.find(hilo => ['pareja', 'matrimonio', 'divorcio'].includes(hilo.tipoRelacion));
+
+    const nodoOrigenPareja = pareja ? mapaNodos.get(String(pareja.nodoOrigenId)) : null;
+    const nodoDestinoPareja = pareja ? mapaNodos.get(String(pareja.nodoDestinoId)) : null;
+
     const parejaNodo = pareja
-      ? mapaNodos.get(String(pareja.nodoOrigenId) === String(persona.id) ? String(pareja.nodoDestinoId) : String(pareja.nodoOrigenId))
+      ? String(pareja.nodoOrigenId) === String(persona.id)
+        ? nodoDestinoPareja
+        : nodoOrigenPareja
       : null;
+
+    const usuariosRelacion = [
+      nodoOrigenPareja?.usuarioId,
+      nodoDestinoPareja?.usuarioId
+    ].filter(Boolean);
 
     return {
       conyuge: parejaNodo?.nombre || '',
-      fechaMatrimonio: pareja?.fechaInicio ? formatearFechaRelacion(pareja.fechaInicio) : '',
+      unionId: pareja?.id || pareja?._id || null,
       tipoUnion: pareja?.tipoRelacion || '',
+      fechaInicio: pareja?.fechaInicio || null,
+      fechaFin: pareja?.fechaFin || null,
+      fechaMatrimonio: pareja?.fechaInicio ? formatearFechaRelacion(pareja.fechaInicio) : '',
+      usuariosRelacion,
       hijos,
       padres,
       generacion: `Generación ${romano(persona.generacion)}`
@@ -874,11 +1384,17 @@ export default function ArbolGenealogico() {
     establecerMostrarEventos(false);
   };
 
+  const estadoFamiliarSeleccionado = useMemo(() => {
+    if (!nodoSeleccionado) return null;
+
+    return obtenerEstadoFamiliar(nodoSeleccionado);
+  }, [nodoSeleccionado, hilosActivos, mapaNodos, esUsuarioAdmin, esModoEdicion]);
+
   const cardsPorGeneracion = useMemo(() => {
     const idsUsados = new Set();
     const cards = [];
 
-    const uniones = hilosActivos.filter(hilo => ['pareja', 'matrimonio', 'divorcio'].includes(hilo.tipoRelacion));
+    const uniones = hilosActivosFiltrados.filter(hilo => ['pareja', 'matrimonio', 'divorcio'].includes(hilo.tipoRelacion));
 
     uniones.forEach((hilo) => {
       const origen = mapaNodos.get(String(hilo.nodoOrigenId));
@@ -896,7 +1412,8 @@ export default function ArbolGenealogico() {
         id: `union-${hilo.id}`,
         tipo: 'pareja',
         unionId: hilo.id,
-        tipoUnion: hilo.tipoRelacion === 'matrimonio' ? 'casados' : 'pareja',
+        tipoUnion: hilo.tipoRelacion,
+        hilo,
         pareja1: origen,
         pareja2: destino,
         generacion,
@@ -906,7 +1423,7 @@ export default function ArbolGenealogico() {
       });
     });
 
-    nodos.forEach((nodo) => {
+    nodosFiltrados.forEach((nodo) => {
       if (idsUsados.has(String(nodo.id))) return;
 
       cards.push({
@@ -933,7 +1450,7 @@ export default function ArbolGenealogico() {
     });
 
     return agrupadas;
-  }, [nodos, hilosActivos, mapaNodos]);
+  }, [nodosFiltrados, hilosActivosFiltrados, mapaNodos]);
 
   const cardPorNodoId = useMemo(() => {
     const mapa = new Map();
@@ -947,12 +1464,20 @@ export default function ArbolGenealogico() {
 
   const generacionesExistentes = useMemo(() => {
     const generaciones = Array.from(cardsPorGeneracion.keys());
-    if (generaciones.length === 0) return [0];
+
+    if (generaciones.length === 0) {
+      const generacionFiltro = filtrosAplicados.generacion !== 'Todas'
+        ? Number(filtrosAplicados.generacion)
+        : 0;
+
+      return [Number.isFinite(generacionFiltro) ? generacionFiltro : 0];
+    }
+
     return generaciones.sort((a, b) => a - b);
-  }, [cardsPorGeneracion]);
+  }, [cardsPorGeneracion, filtrosAplicados.generacion]);
 
   const relacionesPadreHijo = useMemo(() => {
-    return hilosActivos
+    return hilosActivosFiltrados
       .filter(hilo => hilo.tipoRelacion === 'padre_hijo')
       .map((hilo) => {
         const cardOrigen = cardPorNodoId.get(String(hilo.nodoOrigenId));
@@ -967,7 +1492,7 @@ export default function ArbolGenealogico() {
         };
       })
       .filter(Boolean);
-  }, [hilosActivos, cardPorNodoId]);
+  }, [hilosActivosFiltrados, cardPorNodoId]);
 
   const maxFilaActual = useMemo(() => {
     const filas = [];
@@ -1079,72 +1604,182 @@ export default function ArbolGenealogico() {
 
     const filaDestino = obtenerSiguienteFila(numGeneracion);
 
-    try {
-      if (personaEnColocacion.origen === 'perfil_sin_cuenta') {
-        await crearNodoSinCuenta({ persona: personaEnColocacion, generacion: numGeneracion, fila: filaDestino });
-        establecerMensajeSistema('Perfil sin cuenta agregado al árbol.');
-      } else {
-        await enviarInvitacion({ persona: personaEnColocacion, generacion: numGeneracion, fila: filaDestino });
-        establecerMensajeSistema('Invitación enviada. El familiar aparecerá cuando acepte.');
-      }
+    if (personaEnColocacion.origen === 'perfil_sin_cuenta') {
+      const tempId = generarIdTemporal('nodo');
 
-      await cargarNodosEHilos(arbol._id);
-      await cargarAmigosDisponibles(arbol._id);
-    } catch (error) {
-      console.error('Error al colocar familiar:', error);
-      window.alert(error.message || 'No se pudo completar la acción.');
-    } finally {
-      establecerModoColocacion(false);
-      establecerPersonaEnColocacion(null);
+      const nodoTemporal = normalizarNodo({
+        _id: tempId,
+        arbol: arbol._id,
+        usuario: null,
+        creadoPor: usuarioActualId,
+        nombre: personaEnColocacion.nombre,
+        iniciales: personaEnColocacion.iniciales,
+        colorFondo: personaEnColocacion.colorFondo,
+        colorTexto: personaEnColocacion.colorTexto,
+        fechaCorta: 'Pendiente',
+        estaFallecido: false,
+        tipo: 'normal',
+        estado: 'Incompleto',
+        origen: 'perfil_sin_cuenta',
+        generacion: numGeneracion,
+        fila: filaDestino,
+        fotos: [],
+        biografia: '',
+        visible: true
+      }, usuarioActualId);
+
+      establecerNodos(prev => [...prev, nodoTemporal]);
+
+      registrarCambioPendiente({
+        tipo: 'crearNodoSinCuenta',
+        tempId,
+        payload: {
+          arbolId: arbol._id,
+          nombre: personaEnColocacion.nombre,
+          iniciales: personaEnColocacion.iniciales,
+          colorFondo: personaEnColocacion.colorFondo,
+          colorTexto: personaEnColocacion.colorTexto,
+          fechaCorta: 'Pendiente',
+          estaFallecido: false,
+          estado: 'Incompleto',
+          generacion: numGeneracion,
+          fila: filaDestino,
+          fotos: [],
+          biografia: ''
+        }
+      });
+
+      establecerMensajeSistema('Perfil sin cuenta preparado. Presiona Guardar cambios para aplicarlo.');
+    } else {
+      registrarCambioPendiente({
+        tipo: 'enviarInvitacion',
+        payload: {
+          arbolId: arbol._id,
+          invitadoId: personaEnColocacion.usuarioId,
+          datosNodoPropuesto: {
+            nombre: personaEnColocacion.nombre,
+            iniciales: personaEnColocacion.iniciales,
+            colorFondo: personaEnColocacion.colorFondo,
+            colorTexto: personaEnColocacion.colorTexto,
+            generacion: numGeneracion,
+            fila: filaDestino,
+            tipo: 'normal'
+          },
+          relacionPropuesta: {},
+          mensaje: 'Te invito a formar parte de mi árbol genealógico en Legacy.'
+        }
+      });
+
+      establecerMensajeSistema('Invitación preparada. Se enviará al guardar cambios.');
     }
+
+    establecerModoColocacion(false);
+    establecerPersonaEnColocacion(null);
   };
 
   const colocarComoPareja = async (personaDestino) => {
     if (!personaEnColocacion || !personaDestino || !arbol?._id) return;
 
-    try {
-      if (personaEnColocacion.origen === 'perfil_sin_cuenta') {
-        const nuevoNodo = await crearNodoSinCuenta({
-          persona: personaEnColocacion,
-          generacion: personaDestino.generacion,
-          fila: personaDestino.fila
-        });
+    if (personaEnColocacion.origen === 'perfil_sin_cuenta') {
+      const tempId = generarIdTemporal('nodo');
+      const tempHiloId = generarIdTemporal('hilo');
 
-        await apiFetch('/api/hilos/crear', {
-          method: 'POST',
-          body: JSON.stringify({
-            arbolId: arbol._id,
-            nodoOrigenId: personaDestino.id,
-            nodoDestinoId: nuevoNodo.id,
-            tipoRelacion: 'matrimonio'
-          })
-        });
+      const nodoTemporal = normalizarNodo({
+        _id: tempId,
+        arbol: arbol._id,
+        usuario: null,
+        creadoPor: usuarioActualId,
+        nombre: personaEnColocacion.nombre,
+        iniciales: personaEnColocacion.iniciales,
+        colorFondo: personaEnColocacion.colorFondo,
+        colorTexto: personaEnColocacion.colorTexto,
+        fechaCorta: 'Pendiente',
+        estaFallecido: false,
+        tipo: 'normal',
+        estado: 'Incompleto',
+        origen: 'perfil_sin_cuenta',
+        generacion: personaDestino.generacion,
+        fila: personaDestino.fila,
+        fotos: [],
+        biografia: '',
+        visible: true
+      }, usuarioActualId);
 
-        establecerMensajeSistema('Pareja agregada al árbol.');
-      } else {
-        await enviarInvitacion({
-          persona: personaEnColocacion,
+      const hiloTemporal = {
+        id: tempHiloId,
+        _id: tempHiloId,
+        arbol: arbol._id,
+        nodoOrigen: personaDestino.id,
+        nodoDestino: tempId,
+        nodoOrigenId: personaDestino.id,
+        nodoDestinoId: tempId,
+        tipoRelacion: 'pareja',
+        estado: 'Activa'
+      };
+
+      establecerNodos(prev => [...prev, nodoTemporal]);
+      establecerHilos(prev => [...prev, hiloTemporal]);
+
+      registrarCambioPendiente({
+        tipo: 'crearNodoSinCuenta',
+        tempId,
+        payload: {
+          arbolId: arbol._id,
+          nombre: personaEnColocacion.nombre,
+          iniciales: personaEnColocacion.iniciales,
+          colorFondo: personaEnColocacion.colorFondo,
+          colorTexto: personaEnColocacion.colorTexto,
+          fechaCorta: 'Pendiente',
+          estaFallecido: false,
+          estado: 'Incompleto',
           generacion: personaDestino.generacion,
           fila: personaDestino.fila,
+          fotos: [],
+          biografia: ''
+        }
+      });
+
+      registrarCambioPendiente({
+        tipo: 'crearHilo',
+        tempId: tempHiloId,
+        payload: {
+          arbolId: arbol._id,
+          nodoOrigenId: personaDestino.id,
+          nodoDestinoId: tempId,
+          tipoRelacion: 'pareja'
+        }
+      });
+
+      establecerMensajeSistema('Pareja preparada. Presiona Guardar cambios para aplicarla.');
+    } else {
+      registrarCambioPendiente({
+        tipo: 'enviarInvitacion',
+        payload: {
+          arbolId: arbol._id,
+          invitadoId: personaEnColocacion.usuarioId,
+          datosNodoPropuesto: {
+            nombre: personaEnColocacion.nombre,
+            iniciales: personaEnColocacion.iniciales,
+            colorFondo: personaEnColocacion.colorFondo,
+            colorTexto: personaEnColocacion.colorTexto,
+            generacion: personaDestino.generacion,
+            fila: personaDestino.fila,
+            tipo: 'normal'
+          },
           relacionPropuesta: {
             nodoRelacionado: personaDestino.id,
-            tipoRelacion: 'matrimonio',
+            tipoRelacion: 'pareja',
             rolDelInvitado: 'conyuge'
-          }
-        });
+          },
+          mensaje: 'Te invito a formar parte de mi árbol genealógico en Legacy.'
+        }
+      });
 
-        establecerMensajeSistema('Invitación enviada. La pareja aparecerá cuando acepte.');
-      }
-
-      await cargarNodosEHilos(arbol._id);
-      await cargarAmigosDisponibles(arbol._id);
-    } catch (error) {
-      console.error('Error al colocar como pareja:', error);
-      window.alert(error.message || 'No se pudo agregar como pareja.');
-    } finally {
-      establecerModoColocacion(false);
-      establecerPersonaEnColocacion(null);
+      establecerMensajeSistema('Invitación de pareja preparada. Se enviará al guardar cambios.');
     }
+
+    establecerModoColocacion(false);
+    establecerPersonaEnColocacion(null);
   };
 
   const iniciarModoRelacionar = () => {
@@ -1169,26 +1804,45 @@ export default function ArbolGenealogico() {
   const manejarClicDestino = async (card) => {
     if (!origenRelacion || !card || !arbol?._id) return;
 
-    try {
-      await apiFetch('/api/hilos/crear', {
-        method: 'POST',
-        body: JSON.stringify({
-          arbolId: arbol._id,
-          nodoOrigenId: origenRelacion.nodoId,
-          nodoDestinoId: card.nodoPrincipalId,
-          tipoRelacion: 'padre_hijo'
-        })
-      });
+    if (Number(origenRelacion.generacion) >= Number(card.generacion)) {
+      window.alert(
+        'Para crear una relación padre/hijo, el familiar destino debe estar en una generación posterior. Ejemplo: Marco en Generación I → Hugo en Generación II.'
+      );
 
-      establecerMensajeSistema('Relación padre/hijo creada correctamente.');
-      await cargarNodosEHilos(arbol._id);
-    } catch (error) {
-      console.error('Error al relacionar:', error);
-      window.alert(error.message || 'No se pudo crear la relación.');
-    } finally {
       establecerModoRelacionar(false);
       establecerOrigenRelacion(null);
+      return;
     }
+
+    const tempHiloId = generarIdTemporal('hilo');
+
+    const hiloTemporal = {
+      id: tempHiloId,
+      _id: tempHiloId,
+      arbol: arbol._id,
+      nodoOrigen: origenRelacion.nodoId,
+      nodoDestino: card.nodoPrincipalId,
+      nodoOrigenId: origenRelacion.nodoId,
+      nodoDestinoId: card.nodoPrincipalId,
+      tipoRelacion: 'padre_hijo',
+      estado: 'Activa'
+    };
+
+    establecerHilos(prev => [...prev, hiloTemporal]);
+
+    registrarCambioPendiente({
+      tipo: 'crearHilo',
+      payload: {
+        arbolId: arbol._id,
+        nodoOrigenId: origenRelacion.nodoId,
+        nodoDestinoId: card.nodoPrincipalId,
+        tipoRelacion: 'padre_hijo'
+      }
+    });
+
+    establecerMensajeSistema('Relación preparada. Presiona Guardar cambios para aplicarla.');
+    establecerModoRelacionar(false);
+    establecerOrigenRelacion(null);
   };
 
   const iniciarModoEliminar = () => {
@@ -1202,51 +1856,386 @@ export default function ArbolGenealogico() {
     establecerNodoSeleccionado(null);
   };
 
-  const manejarEliminacion = async (idPersona, nombrePersona) => {
-    const confirmado = window.confirm(`¿Estás seguro de que deseas eliminar a ${nombrePersona} del árbol? Esta acción no se puede deshacer.`);
+  const manejarEliminacion = (idPersona, nombrePersona) => {
+    const confirmado = window.confirm(
+      `¿Deseas quitar a ${nombrePersona} del árbol? El cambio se aplicará cuando presiones "Guardar cambios".`
+    );
+
     if (!confirmado || !arbol?._id) return;
 
+    establecerNodos(prev => prev.filter(nodo => String(nodo.id) !== String(idPersona)));
+
+    establecerHilos(prev => prev.filter(hilo =>
+      String(hilo.nodoOrigenId) !== String(idPersona) &&
+      String(hilo.nodoDestinoId) !== String(idPersona)
+    ));
+
+    registrarCambioPendiente({
+      tipo: 'eliminarNodo',
+      payload: {
+        arbolId: arbol._id,
+        nodoId: idPersona,
+        nombre: nombrePersona
+      }
+    });
+
+    establecerNodoSeleccionado(null);
+    establecerMensajeSistema('Familiar marcado para eliminar. Presiona Guardar cambios para aplicarlo.');
+  };
+
+  const manejarEliminacionUnion = (hiloId) => {
+    const confirmado = window.confirm(
+      '¿Deseas eliminar esta relación de matrimonio/pareja? El cambio se aplicará cuando presiones "Guardar cambios".'
+    );
+
+    if (!confirmado || !arbol?._id) return;
+
+    establecerHilos(prev => prev.filter(hilo => String(hilo.id) !== String(hiloId)));
+
+    registrarCambioPendiente({
+      tipo: 'eliminarHilo',
+      payload: {
+        arbolId: arbol._id,
+        hiloId
+      }
+    });
+
+    establecerMensajeSistema('Relación marcada para eliminar. Presiona Guardar cambios para aplicarlo.');
+  };
+
+  const manejarEliminacionLinea = (hiloId) => {
+    const confirmado = window.confirm(
+      '¿Deseas eliminar esta línea de descendencia? El cambio se aplicará cuando presiones "Guardar cambios".'
+    );
+
+    if (!confirmado || !arbol?._id) return;
+
+    establecerHilos(prev => prev.filter(hilo => String(hilo.id) !== String(hiloId)));
+
+    registrarCambioPendiente({
+      tipo: 'eliminarHilo',
+      payload: {
+        arbolId: arbol._id,
+        hiloId
+      }
+    });
+
+    establecerMensajeSistema('Línea marcada para eliminar. Presiona Guardar cambios para aplicarla.');
+  };
+
+
+  const usuarioFormaParteUnion = (card) => {
+    if (!card || !usuarioActualId) return false;
+
+    const usuariosRelacion = [
+      card.pareja1?.usuarioId,
+      card.pareja2?.usuarioId
+    ].filter(Boolean);
+
+    return usuariosRelacion.some(id => String(id) === String(usuarioActualId));
+  };
+
+  const puedeEditarUnionCard = (card) => {
+    if (!card?.unionId || !usuarioActualId) return false;
+
+    if (esUsuarioAdmin) {
+      return esModoEdicion || usuarioFormaParteUnion(card);
+    }
+
+    return usuarioFormaParteUnion(card);
+  };
+
+  const actualizarTipoUnionVisual = (unionId, nuevoTipo) => {
+    establecerHilos(prev => prev.map(hilo => {
+      if (String(hilo.id) !== String(unionId)) return hilo;
+
+      return {
+        ...hilo,
+        tipoRelacion: nuevoTipo
+      };
+    }));
+  };
+
+  const registrarCambioTipoUnion = (unionId, nuevoTipo) => {
+    registrarCambioHiloPendiente(unionId, {
+      tipoRelacion: nuevoTipo
+    });
+  };
+
+  const cambiarTipoUnion = async (card, nuevoTipo) => {
+    if (!card?.unionId || !arbol?._id || !nuevoTipo) return;
+
+    if (card.tipoUnion === nuevoTipo) return;
+
+    if (!puedeEditarUnionCard(card)) {
+      window.alert('No tienes permiso para editar esta relación.');
+      return;
+    }
+
+    const etiquetaNueva = obtenerConfigUnion(nuevoTipo).etiqueta;
+
+    if (esUsuarioAdmin && esModoEdicion) {
+      actualizarTipoUnionVisual(card.unionId, nuevoTipo);
+      registrarCambioTipoUnion(card.unionId, nuevoTipo);
+      establecerMensajeSistema(`Relación marcada como "${etiquetaNueva}". Presiona Guardar cambios para aplicarlo.`);
+      return;
+    }
+
+    const confirmado = window.confirm(
+      `¿Deseas cambiar esta relación a "${etiquetaNueva}"?`
+    );
+
+    if (!confirmado) return;
+
     try {
-      await apiFetch(`/api/nodos/arbol/${arbol._id}/${idPersona}`, { method: 'DELETE' });
-      establecerMensajeSistema('Familiar eliminado del árbol.');
+      await apiFetch(`/api/hilos/arbol/${arbol._id}/${card.unionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          tipoRelacion: nuevoTipo
+        })
+      });
+
+      establecerMensajeSistema(`Relación actualizada a "${etiquetaNueva}".`);
       await cargarNodosEHilos(arbol._id);
     } catch (error) {
-      console.error('Error al eliminar nodo:', error);
-      window.alert(error.message || 'No se pudo eliminar el familiar.');
+      console.error('Error al cambiar estado de relación:', error);
+      window.alert(error.message || 'No se pudo cambiar el estado de la relación.');
     }
   };
 
-  const manejarEliminacionUnion = async (hiloId) => {
-    const confirmado = window.confirm('¿Estás seguro de que deseas eliminar esta relación de matrimonio/pareja?');
-    if (!confirmado || !arbol?._id) return;
+  const puedeEditarEstadoFamiliarSeleccionado = (estadoFamiliar) => {
+    if (!estadoFamiliar?.unionId || !usuarioActualId) return false;
+
+    const formaParte = Array.isArray(estadoFamiliar.usuariosRelacion)
+      ? estadoFamiliar.usuariosRelacion.some(id => String(id) === String(usuarioActualId))
+      : false;
+
+    if (esUsuarioAdmin) {
+      return esModoEdicion || formaParte;
+    }
+
+    return formaParte;
+  };
+
+  const registrarCambioHiloPendiente = (unionId, datosActualizados) => {
+    establecerCambiosPendientes(prev => {
+      if (esIdTemporal(unionId)) {
+        return prev.map(cambio => {
+          if (cambio.tipo === 'crearHilo' && cambio.tempId && String(cambio.tempId) === String(unionId)) {
+            return {
+              ...cambio,
+              payload: {
+                ...cambio.payload,
+                ...datosActualizados
+              }
+            };
+          }
+
+          return cambio;
+        });
+      }
+
+      const cambioPrevio = prev.find(cambio =>
+        cambio.tipo === 'actualizarHilo' &&
+        String(cambio.payload?.hiloId) === String(unionId)
+      );
+
+      const sinCambioPrevio = prev.filter(cambio =>
+        !(cambio.tipo === 'actualizarHilo' && String(cambio.payload?.hiloId) === String(unionId))
+      );
+
+      return [
+        ...sinCambioPrevio,
+        {
+          tipo: 'actualizarHilo',
+          payload: {
+            ...(cambioPrevio?.payload || {}),
+            arbolId: arbol._id,
+            hiloId: unionId,
+            ...datosActualizados
+          }
+        }
+      ];
+    });
+  };
+
+  const actualizarFechaUnionVisual = (unionId, campoFecha, valorFecha) => {
+    establecerHilos(prev => prev.map(hilo => {
+      if (String(hilo.id) !== String(unionId)) return hilo;
+
+      return {
+        ...hilo,
+        [campoFecha]: valorFecha || null
+      };
+    }));
+  };
+
+  const actualizarFechaUnionDesdePerfil = async (estadoFamiliar, valorFecha) => {
+    if (!estadoFamiliar?.unionId || !arbol?._id) return;
+
+    if (!puedeEditarEstadoFamiliarSeleccionado(estadoFamiliar)) {
+      window.alert('No tienes permiso para editar la fecha de esta relación.');
+      return;
+    }
+
+    const tipoUnion = estadoFamiliar.tipoUnion || 'pareja';
+    const campoFecha = obtenerCampoFechaUnion(tipoUnion);
+    const labelFecha = obtenerLabelFechaUnion(tipoUnion);
+
+    if (esUsuarioAdmin && esModoEdicion) {
+      actualizarFechaUnionVisual(estadoFamiliar.unionId, campoFecha, valorFecha || null);
+      registrarCambioHiloPendiente(estadoFamiliar.unionId, {
+        [campoFecha]: valorFecha || null
+      });
+
+      establecerMensajeSistema(`${labelFecha} marcada. Presiona Guardar cambios para aplicarla.`);
+      return;
+    }
+
+    const confirmado = window.confirm(
+      valorFecha
+        ? `¿Deseas guardar esta ${labelFecha.toLowerCase()}?`
+        : `¿Deseas quitar esta ${labelFecha.toLowerCase()}?`
+    );
+
+    if (!confirmado) return;
 
     try {
-      await apiFetch(`/api/hilos/arbol/${arbol._id}/${hiloId}`, { method: 'DELETE' });
-      establecerMensajeSistema('Relación eliminada correctamente.');
+      await apiFetch(`/api/hilos/arbol/${arbol._id}/${estadoFamiliar.unionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          [campoFecha]: valorFecha || null
+        })
+      });
+
+      establecerMensajeSistema(`${labelFecha} actualizada correctamente.`);
       await cargarNodosEHilos(arbol._id);
     } catch (error) {
-      console.error('Error al eliminar relación:', error);
-      window.alert(error.message || 'No se pudo eliminar la relación.');
+      console.error('Error al actualizar fecha de relación:', error);
+      window.alert(error.message || 'No se pudo actualizar la fecha de la relación.');
     }
   };
 
-  const manejarEliminacionLinea = async (hiloId) => {
-    const confirmado = window.confirm('¿Estás seguro de que deseas eliminar esta línea de descendencia?');
-    if (!confirmado || !arbol?._id) return;
-
-    try {
-      await apiFetch(`/api/hilos/arbol/${arbol._id}/${hiloId}`, { method: 'DELETE' });
-      establecerMensajeSistema('Línea de descendencia eliminada correctamente.');
-      await cargarNodosEHilos(arbol._id);
-    } catch (error) {
-      console.error('Error al eliminar línea:', error);
-      window.alert(error.message || 'No se pudo eliminar la línea.');
+  const descartarTodo = async () => {
+    if (cambiosPendientes.length === 0) {
+      reiniciarModos();
+      establecerModoEdicion(false);
+      return;
     }
-  };
 
-  const descartarTodo = () => {
+    const confirmado = window.confirm(
+      '¿Deseas descartar todos los cambios no guardados? El árbol volverá al último estado guardado.'
+    );
+
+    if (!confirmado) return;
+
+    establecerNodos(nodosOriginales);
+    establecerHilos(hilosOriginales);
+    establecerCambiosPendientes([]);
+    establecerMensajeSistema('Cambios descartados correctamente.');
     reiniciarModos();
     establecerModoEdicion(false);
+
+    if (arbol?._id) {
+      await cargarNodosEHilos(arbol._id);
+      await cargarAmigosDisponibles(arbol._id);
+    }
+  };
+
+  const guardarCambiosArbol = async () => {
+    if (!arbol?._id) return;
+
+    if (cambiosPendientes.length === 0) {
+      establecerMensajeSistema('No hay cambios pendientes por guardar.');
+      reiniciarModos();
+      establecerModoEdicion(false);
+      return;
+    }
+
+    const confirmado = window.confirm(
+      `¿Deseas guardar ${cambiosPendientes.length} cambio(s) en este árbol?`
+    );
+
+    if (!confirmado) return;
+
+    try {
+      establecerGuardandoCambiosArbol(true);
+
+      const mapaIdsTemporales = {};
+
+      for (const cambio of cambiosPendientes) {
+        if (cambio.tipo === 'crearNodoSinCuenta') {
+          const data = await apiFetch('/api/nodos/perfil-sin-cuenta', {
+            method: 'POST',
+            body: JSON.stringify(cambio.payload)
+          });
+
+          const idReal = obtenerId(data.nodo);
+
+          if (idReal && cambio.tempId) {
+            mapaIdsTemporales[cambio.tempId] = idReal;
+          }
+        }
+
+        if (cambio.tipo === 'enviarInvitacion') {
+          await apiFetch('/api/invitaciones-familiares/enviar', {
+            method: 'POST',
+            body: JSON.stringify(cambio.payload)
+          });
+        }
+
+        if (cambio.tipo === 'crearHilo') {
+          const payload = { ...cambio.payload };
+
+          payload.nodoOrigenId = mapaIdsTemporales[payload.nodoOrigenId] || payload.nodoOrigenId;
+          payload.nodoDestinoId = mapaIdsTemporales[payload.nodoDestinoId] || payload.nodoDestinoId;
+
+          await apiFetch('/api/hilos/crear', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+        }
+
+        if (cambio.tipo === 'actualizarHilo') {
+          await apiFetch(`/api/hilos/arbol/${cambio.payload.arbolId}/${cambio.payload.hiloId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              tipoRelacion: cambio.payload.tipoRelacion,
+              fechaInicio: cambio.payload.fechaInicio,
+              fechaFin: cambio.payload.fechaFin,
+              descripcion: cambio.payload.descripcion
+            })
+          });
+        }
+
+        if (cambio.tipo === 'eliminarNodo') {
+          await apiFetch(`/api/nodos/arbol/${cambio.payload.arbolId}/${cambio.payload.nodoId}`, {
+            method: 'DELETE'
+          });
+        }
+
+        if (cambio.tipo === 'eliminarHilo') {
+          await apiFetch(`/api/hilos/arbol/${cambio.payload.arbolId}/${cambio.payload.hiloId}`, {
+            method: 'DELETE'
+          });
+        }
+      }
+
+      establecerMensajeSistema('Cambios guardados correctamente.');
+      establecerCambiosPendientes([]);
+      establecerNodosOriginales([]);
+      establecerHilosOriginales([]);
+      reiniciarModos();
+      establecerModoEdicion(false);
+
+      await cargarNodosEHilos(arbol._id);
+      await cargarAmigosDisponibles(arbol._id);
+    } catch (error) {
+      console.error('Error al guardar cambios del árbol:', error);
+      window.alert(error.message || 'No se pudieron guardar los cambios.');
+    } finally {
+      establecerGuardandoCambiosArbol(false);
+    }
   };
 
   const renderLineasGeneracion = (genOrigen) => {
@@ -1282,6 +2271,8 @@ export default function ArbolGenealogico() {
           tipoUnion={card.tipoUnion}
           unionId={card.unionId}
           esModoEdicion={esModoEdicion}
+          puedeEditarUnion={puedeEditarUnionCard(card)}
+          alCambiarTipoUnion={(nuevoTipo) => cambiarTipoUnion(card, nuevoTipo)}
           alSeleccionar={seleccionarNodo}
           modoRelacionar={modoRelacionar}
           esDestinoValido={esDestinoValido}
@@ -1711,14 +2702,14 @@ export default function ArbolGenealogico() {
           </button>
 
           {esUsuarioAdmin && (
-            <div className={`interruptor-edicion ${esModoEdicion ? 'activo' : ''}`} onClick={() => establecerModoEdicion(!esModoEdicion)}>
+            <div className={`interruptor-edicion ${esModoEdicion ? 'activo' : ''}`} onClick={alternarModoEdicion}>
               <span>Modo Edición</span>
               <div className="switch-deslizador"></div>
             </div>
           )}
 
           <button
-            className={`boton-accion-arbol ${mostrarFiltros && !nodoSeleccionado && !mostrarInvitar && !mostrarEventos ? 'activo' : ''}`}
+            className={`boton-accion-arbol ${(mostrarFiltros && !nodoSeleccionado && !mostrarInvitar && !mostrarEventos) || hayFiltrosAplicados ? 'activo' : ''}`}
             onClick={() => {
               establecerMostrarFiltros(!mostrarFiltros);
               establecerNodoSeleccionado(null);
@@ -1765,7 +2756,7 @@ export default function ArbolGenealogico() {
                 </>
               )}
 
-              {generacionesExistentes.map((generacion, index) => (
+              {nodosFiltrados.length > 0 && generacionesExistentes.map((generacion, index) => (
                 <React.Fragment key={`gen-${generacion}`}>
                   {renderColumnaGeneracion(generacion)}
                   {index < generacionesExistentes.length - 1 && (
@@ -1791,6 +2782,25 @@ export default function ArbolGenealogico() {
                   <Celda fila={0}>
                     <div className="placeholder-añadir text-center">
                       <i className="bi bi-tree"></i> Tu árbol está vacío
+                    </div>
+                  </Celda>
+                </div>
+              )}
+
+              {nodos.length > 0 && nodosFiltrados.length === 0 && !modoColocacion && (
+                <div className="columna-generacion" style={{ height: `${ALTURA_LIENZO}px` }}>
+                  <div className="etiqueta-generacion">SIN RESULTADOS</div>
+                  <Celda fila={0}>
+                    <div className="mensaje-filtros-vacios-arbol">
+                      <div className="icono-filtro-vacio">
+                        <i className="bi bi-funnel"></i>
+                      </div>
+                      <h6>No hay familiares con estos filtros</h6>
+                      <p>Prueba con otra combinación o restablece los filtros para ver todo el árbol.</p>
+                      <button type="button" onClick={restablecerFiltrosArbol}>
+                        <i className="bi bi-arrow-counterclockwise"></i>
+                        Restablecer filtros
+                      </button>
                     </div>
                   </Celda>
                 </div>
@@ -1888,11 +2898,30 @@ export default function ArbolGenealogico() {
               </button>
 
               <div className="separador-vertical"></div>
-              <button className="btn-herramienta-edicion" onClick={descartarTodo}>
+              <button
+                className="btn-herramienta-edicion"
+                onClick={descartarTodo}
+                disabled={guardandoCambiosArbol}
+              >
                 Descartar
               </button>
-              <button className="btn-guardar-edicion" onClick={() => establecerMensajeSistema('Los cambios se guardan automáticamente.')}>
-                <i className="bi bi-check2-circle"></i> Guardar cambios
+
+              <button
+                className="btn-guardar-edicion"
+                onClick={guardarCambiosArbol}
+                disabled={guardandoCambiosArbol}
+              >
+                {guardandoCambiosArbol ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm"></span>
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-check2-circle"></i>
+                    Guardar cambios
+                  </>
+                )}
               </button>
             </div>
           )}
@@ -1907,8 +2936,30 @@ export default function ArbolGenealogico() {
 
                 <div className="scroll-contenido flex-grow-1 p-4">
                   <div className="text-center mb-4 mt-2">
-                    <div className="avatar-iniciales-biografia shadow-sm mb-3" style={{ backgroundColor: nodoSeleccionado.colorFondo, color: nodoSeleccionado.colorTexto || 'inherit' }}>
-                      {nodoSeleccionado.iniciales}
+                    <div
+                      className="avatar-iniciales-biografia shadow-sm mb-3"
+                      style={{
+                        backgroundColor: nodoSeleccionado.colorFondo,
+                        color: nodoSeleccionado.colorTexto || 'inherit',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {nodoSeleccionado.fotoPerfil ? (
+                        <img
+                          src={nodoSeleccionado.fotoPerfil}
+                          alt={nodoSeleccionado.nombre}
+                          className="avatar-foto-biografia-arbol"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            const fallback = e.currentTarget.nextElementSibling;
+                            if (fallback) fallback.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+
+                      <span style={{ display: nodoSeleccionado.fotoPerfil ? 'none' : 'flex' }}>
+                        {nodoSeleccionado.iniciales}
+                      </span>
                     </div>
                     <h4 className="fw-bold mb-1" style={{ color: 'var(--texto-principal)', fontFamily: "'Playfair Display', serif" }}>{nodoSeleccionado.nombre}</h4>
 
@@ -1965,49 +3016,85 @@ export default function ArbolGenealogico() {
                     </div>
                   )}
 
-                  {nodoSeleccionado.estadoFamiliar && (
+                  {estadoFamiliarSeleccionado && (
                     <div className="mb-4">
                       <h6 className="fw-bold mb-3 small text-uppercase text-muted" style={{ letterSpacing: '1px' }}>Estado Familiar</h6>
 
-                      {nodoSeleccionado.estadoFamiliar.conyuge && (
-                        <div className="d-flex align-items-start gap-3 mb-3">
-                          <div className="icono-estado-familia">
-                            <div className="icono-anillos" style={{ transform: 'scale(1.2)' }}>
-                              <span className="anillo"></span><span className="anillo"></span>
+                      {estadoFamiliarSeleccionado.conyuge && (() => {
+                        const tipoUnion = estadoFamiliarSeleccionado.tipoUnion || 'pareja';
+                        const puedeEditarFecha = puedeEditarEstadoFamiliarSeleccionado(estadoFamiliarSeleccionado);
+                        const campoFecha = obtenerCampoFechaUnion(tipoUnion);
+                        const valorFechaInput = formatearFechaParaInput(
+                          campoFecha === 'fechaFin'
+                            ? estadoFamiliarSeleccionado.fechaFin
+                            : estadoFamiliarSeleccionado.fechaInicio
+                        );
+
+                        return (
+                          <div className="bloque-estado-union-perfil d-flex align-items-start gap-3 mb-3">
+                            <div className="icono-estado-familia">
+                              <IconoUnion tipoUnion={tipoUnion} />
+                            </div>
+
+                            <div className="flex-grow-1">
+                              <p className="mb-0 fw-bold fs-6" style={{ color: 'var(--texto-principal)' }}>
+                                {obtenerTextoEstadoUnion(tipoUnion, estadoFamiliarSeleccionado.conyuge)}
+                              </p>
+
+                              <div className="linea-fecha-union-perfil">
+                                <span>
+                                  {obtenerTextoFechaUnion(
+                                    tipoUnion,
+                                    estadoFamiliarSeleccionado.fechaInicio,
+                                    estadoFamiliarSeleccionado.fechaFin
+                                  )}
+                                </span>
+
+                                {puedeEditarFecha && (
+                                  <label
+                                    className="boton-calendario-union"
+                                    title={`Editar ${obtenerLabelFechaUnion(tipoUnion).toLowerCase()}`}
+                                  >
+                                    <i className="bi bi-calendar-event"></i>
+                                    <input
+                                      type="date"
+                                      value={valorFechaInput}
+                                      aria-label={obtenerLabelFechaUnion(tipoUnion)}
+                                      onChange={(e) => actualizarFechaUnionDesdePerfil(estadoFamiliarSeleccionado, e.target.value)}
+                                    />
+                                  </label>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          <div>
-                            <p className="mb-0 fw-bold fs-6" style={{ color: 'var(--texto-principal)' }}>Casado con {nodoSeleccionado.estadoFamiliar.conyuge}</p>
-                            <p className="mb-0 text-muted small">Desde {nodoSeleccionado.estadoFamiliar.fechaMatrimonio || 'Desconocido'}</p>
-                          </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
-                      {nodoSeleccionado.estadoFamiliar.hijos && nodoSeleccionado.estadoFamiliar.hijos.length > 0 && (
+                      {estadoFamiliarSeleccionado.hijos && estadoFamiliarSeleccionado.hijos.length > 0 && (
                         <div className="d-flex align-items-start gap-3 mb-3">
                           <div className="icono-estado-familia text-secondary fs-4"><i className="bi bi-people"></i></div>
                           <div>
-                            <p className="mb-0 fw-bold fs-6" style={{ color: 'var(--texto-principal)' }}>{nodoSeleccionado.estadoFamiliar.hijos.length} hijos</p>
-                            <p className="mb-0 text-muted small">{nodoSeleccionado.estadoFamiliar.hijos.join(', ')}</p>
+                            <p className="mb-0 fw-bold fs-6" style={{ color: 'var(--texto-principal)' }}>{estadoFamiliarSeleccionado.hijos.length} hijos</p>
+                            <p className="mb-0 text-muted small">{estadoFamiliarSeleccionado.hijos.join(', ')}</p>
                           </div>
                         </div>
                       )}
 
-                      {nodoSeleccionado.estadoFamiliar.padres && nodoSeleccionado.estadoFamiliar.padres.length > 0 && (
+                      {estadoFamiliarSeleccionado.padres && estadoFamiliarSeleccionado.padres.length > 0 && (
                         <div className="d-flex align-items-start gap-3 mb-3">
                           <div className="icono-estado-familia text-secondary fs-4"><i className="bi bi-person-lines-fill"></i></div>
                           <div>
                             <p className="mb-0 fw-bold fs-6" style={{ color: 'var(--texto-principal)' }}>Hijo de</p>
-                            <p className="mb-0 text-muted small">{nodoSeleccionado.estadoFamiliar.padres.join(' y ')}</p>
+                            <p className="mb-0 text-muted small">{estadoFamiliarSeleccionado.padres.join(' y ')}</p>
                           </div>
                         </div>
                       )}
 
-                      {nodoSeleccionado.estadoFamiliar.generacion && (
+                      {estadoFamiliarSeleccionado.generacion && (
                         <div className="d-flex align-items-start gap-3 mb-3">
                           <div className="icono-estado-familia text-secondary fs-4"><i className="bi bi-diagram-3"></i></div>
                           <div>
-                            <p className="mb-0 fw-bold fs-6" style={{ color: 'var(--texto-principal)' }}>{nodoSeleccionado.estadoFamiliar.generacion}</p>
+                            <p className="mb-0 fw-bold fs-6" style={{ color: 'var(--texto-principal)' }}>{estadoFamiliarSeleccionado.generacion}</p>
                           </div>
                         </div>
                       )}
@@ -2052,10 +3139,14 @@ export default function ArbolGenealogico() {
 
                   <div className="mb-4">
                     <p className="text-muted fw-bold mb-2 text-uppercase" style={{ fontSize: '0.65rem', letterSpacing: '1px' }}>Generación</p>
-                    <select className="select-filtro">
-                      <option value="todas">Todas</option>
-                      {generacionesExistentes.map(gen => (
-                        <option key={gen} value={gen}>Generación {romano(gen)}</option>
+                    <select
+                      className="select-filtro"
+                      value={filtroGeneracion}
+                      onChange={(e) => establecerFiltroGeneracion(e.target.value)}
+                    >
+                      <option value="Todas">Todas</option>
+                      {generacionesFiltroDisponibles.map(gen => (
+                        <option key={gen} value={String(gen)}>Generación {romano(gen)}</option>
                       ))}
                     </select>
                   </div>
@@ -2080,16 +3171,14 @@ export default function ArbolGenealogico() {
                 </div>
 
                 <div className="p-4 border-top d-flex justify-content-between align-items-center" style={{ borderColor: 'var(--borde-color)', backgroundColor: 'var(--fondo-tarjeta)' }}>
-                  <button className="btn-limpiar-filtros" onClick={() => {
-                    establecerFiltroVista('Ancestros');
-                    establecerFiltroRama('Ambas');
-                    establecerFiltroEstado('Todos');
-                    establecerFiltroConCuenta('Ambos');
-                    establecerFiltroConFoto('Ambos');
-                  }}>
+                  <button className="btn-limpiar-filtros" onClick={restablecerFiltrosArbol}>
                     <i className="bi bi-arrow-counterclockwise fs-5"></i> Limpiar filtros
                   </button>
-                  <button className="btn rounded-3 px-4 py-2" style={{ backgroundColor: 'var(--dorado)', color: 'white', fontWeight: 'bold' }}>
+                  <button
+                    className="btn rounded-3 px-4 py-2"
+                    style={{ backgroundColor: 'var(--dorado)', color: 'white', fontWeight: 'bold' }}
+                    onClick={aplicarFiltrosArbol}
+                  >
                     <i className="bi bi-check2 me-2"></i> Aplicar filtros
                   </button>
                 </div>

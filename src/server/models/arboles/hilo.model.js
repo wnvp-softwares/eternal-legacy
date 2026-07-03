@@ -62,14 +62,14 @@ hiloSchema.index(
 
 // Evita que un nodo se relacione consigo mismo.
 // También normaliza relaciones no direccionales para evitar A-B y B-A duplicados.
-hiloSchema.pre('validate', function (next) {
-    if (!this.nodoOrigen || !this.nodoDestino) return next();
+hiloSchema.pre('validate', function () {
+    if (!this.nodoOrigen || !this.nodoDestino) return;
 
     const origen = String(this.nodoOrigen);
     const destino = String(this.nodoDestino);
 
     if (origen === destino) {
-        return next(new Error('Un nodo no puede relacionarse consigo mismo.'));
+        throw new Error('Un nodo no puede relacionarse consigo mismo.');
     }
 
     const relacionesNoDireccionales = ['pareja', 'matrimonio', 'divorcio'];
@@ -81,8 +81,6 @@ hiloSchema.pre('validate', function (next) {
             this.nodoDestino = temp;
         }
     }
-
-    next();
 });
 
 module.exports = mongoose.model('Hilo', hiloSchema);

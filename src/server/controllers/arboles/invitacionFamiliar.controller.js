@@ -7,7 +7,26 @@ const {
     InvitacionFamiliar
 } = require('../../models/index.model');
 
-const sonMismoId = (id1, id2) => String(id1) === String(id2);
+const obtenerIdSeguro = (valor) => {
+    if (!valor) return null;
+
+    if (typeof valor === 'string') return valor;
+
+    if (valor._id) return String(valor._id);
+
+    if (valor.id) return String(valor.id);
+
+    return String(valor);
+};
+
+const sonMismoId = (id1, id2) => {
+    const valor1 = obtenerIdSeguro(id1);
+    const valor2 = obtenerIdSeguro(id2);
+
+    if (!valor1 || !valor2) return false;
+
+    return valor1 === valor2;
+};
 
 const obtenerIniciales = (nombre = '') => {
     const partes = nombre.trim().split(' ').filter(Boolean);
@@ -26,10 +45,14 @@ const usuarioPuedeVerArbol = (arbol, usuarioId) => {
 
     if (sonMismoId(arbol.creador, usuarioId)) return true;
 
-    const esAdmin = arbol.admins.some(adminId => sonMismoId(adminId, usuarioId));
+    const admins = Array.isArray(arbol.admins) ? arbol.admins : [];
+    const esAdmin = admins.some(adminId => sonMismoId(adminId, usuarioId));
+
     if (esAdmin) return true;
 
-    return arbol.miembros.some(miembro =>
+    const miembros = Array.isArray(arbol.miembros) ? arbol.miembros : [];
+
+    return miembros.some(miembro =>
         sonMismoId(miembro.usuario, usuarioId) && miembro.estado === 'Activo'
     );
 };
@@ -39,7 +62,9 @@ const usuarioPuedeEditarArbol = (arbol, usuarioId) => {
 
     if (sonMismoId(arbol.creador, usuarioId)) return true;
 
-    return arbol.admins.some(adminId => sonMismoId(adminId, usuarioId));
+    const admins = Array.isArray(arbol.admins) ? arbol.admins : [];
+
+    return admins.some(adminId => sonMismoId(adminId, usuarioId));
 };
 
 const verificarAmistadMutua = async (usuarioA, usuarioB) => {
@@ -54,6 +79,27 @@ const verificarAmistadMutua = async (usuarioA, usuarioB) => {
     });
 
     return Boolean(yoSigo && meSigue);
+};
+
+const cancelarInvitacionesSinArbol = async (invitaciones = []) => {
+    const idsInvalidas = invitaciones
+        .filter(invitacion => !invitacion.arbol)
+        .map(invitacion => invitacion._id);
+
+    if (idsInvalidas.length > 0) {
+        await InvitacionFamiliar.updateMany(
+            {
+                _id: { $in: idsInvalidas },
+                estado: 'Pendiente'
+            },
+            {
+                $set: {
+                    estado: 'Cancelada',
+                    respondidaEn: new Date()
+                }
+            }
+        );
+    }
 };
 
 const obtenerAmigosDisponiblesParaInvitar = async (req, res) => {
@@ -276,14 +322,29 @@ const obtenerInvitacionesPendientes = async (req, res) => {
             invitado: req.usuario.id,
             estado: 'Pendiente'
         })
-            .populate('arbol', 'nombreFamilia descripcion privacidad creador')
-            .populate('invitadoPor', 'nombreUsuario imagenPerfil')
+            .populate({
+                path: 'arbol',
+                match: { activo: true },
+                select: 'nombreFamilia descripcion privacidad creador activo'
+            })
+            .populate({
+                path: 'invitadoPor',
+                select: 'nombreUsuario imagenPerfil',
+                populate: {
+                    path: 'imagenPerfil',
+                    select: 'urlArchivo'
+                }
+            })
             .sort({ createdAt: -1 });
+
+        await cancelarInvitacionesSinArbol(invitaciones);
+
+        const invitacionesValidas = invitaciones.filter(invitacion => invitacion.arbol);
 
         res.status(200).json({
             mensaje: 'Invitaciones pendientes recuperadas correctamente',
-            total: invitaciones.length,
-            invitaciones
+            total: invitacionesValidas.length,
+            invitaciones: invitacionesValidas
         });
     } catch (error) {
         console.error('❌ Error al obtener invitaciones pendientes:', error);
@@ -314,7 +375,13 @@ const aceptarInvitacionFamiliar = async (req, res) => {
         });
 
         if (!arbol) {
-            return res.status(404).json({ mensaje: 'Árbol no encontrado' });
+            invitacion.estado = 'Cancelada';
+            invitacion.respondidaEn = new Date();
+            await invitacion.save();
+
+            return res.status(404).json({
+                mensaje: 'El árbol de esta invitación ya no existe o fue eliminado. La invitación se canceló automáticamente.'
+            });
         }
 
         const nodoExistente = await Nodo.findOne({
@@ -324,8 +391,28 @@ const aceptarInvitacionFamiliar = async (req, res) => {
         });
 
         if (nodoExistente) {
-            return res.status(400).json({
-                mensaje: 'Ya perteneces a este árbol.'
+            const yaEsMiembro = arbol.miembros.some(miembro =>
+                sonMismoId(miembro.usuario, usuarioId)
+            );
+
+            if (!yaEsMiembro) {
+                arbol.miembros.push({
+                    usuario: usuarioId,
+                    rol: 'Miembro',
+                    estado: 'Activo'
+                });
+
+                await arbol.save();
+            }
+
+            invitacion.estado = 'Aceptada';
+            invitacion.respondidaEn = new Date();
+            await invitacion.save();
+
+            return res.status(200).json({
+                mensaje: 'Ya pertenecías a este árbol. Invitación marcada como aceptada.',
+                nodo: nodoExistente,
+                hilo: null
             });
         }
 
@@ -364,6 +451,7 @@ const aceptarInvitacionFamiliar = async (req, res) => {
                 if (sonMismoId(miembro.usuario, usuarioId)) {
                     miembro.estado = 'Activo';
                 }
+
                 return miembro;
             });
         }
@@ -397,6 +485,15 @@ const aceptarInvitacionFamiliar = async (req, res) => {
                         nodoOrigen = nuevoNodo._id;
                         nodoDestino = nodoRelacionado._id;
                     }
+                }
+
+                if (
+                    tipoRelacion === 'matrimonio' ||
+                    tipoRelacion === 'pareja' ||
+                    tipoRelacion === 'divorcio'
+                ) {
+                    nodoOrigen = nodoRelacionado._id;
+                    nodoDestino = nuevoNodo._id;
                 }
 
                 try {
@@ -482,10 +579,19 @@ const cancelarInvitacionFamiliar = async (req, res) => {
             });
         }
 
-        const arbol = await Arbol.findById(invitacion.arbol);
+        const arbol = await Arbol.findOne({
+            _id: invitacion.arbol,
+            activo: true
+        });
 
         if (!arbol) {
-            return res.status(404).json({ mensaje: 'Árbol no encontrado' });
+            invitacion.estado = 'Cancelada';
+            invitacion.respondidaEn = new Date();
+            await invitacion.save();
+
+            return res.status(404).json({
+                mensaje: 'El árbol de esta invitación ya no existe. La invitación fue cancelada.'
+            });
         }
 
         const puedeCancelar =
