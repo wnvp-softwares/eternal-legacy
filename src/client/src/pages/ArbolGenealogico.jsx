@@ -30,6 +30,9 @@ const resolverUrlImagen = (url) => {
 };
 
 const ESPACIADO_Y = 175;
+// Desplazamiento vertical aproximado desde el centro de una tarjeta de pareja
+// hasta el centro visual de cada persona dentro de esa misma tarjeta.
+const DESPLAZAMIENTO_PERSONA_PAREJA_Y = 31;
 const COLORES_AVATAR = [
   '#86efac', '#bae6fd', '#e9d5ff', '#fde047', '#fca5a5',
   '#f472b6', '#7dd3fc', '#cbd5e1', '#93c5fd', '#fdba74'
@@ -77,6 +80,25 @@ const FILTROS_ARBOL_DEFECTO = {
   generacion: 'Todas',
   conCuenta: 'Ambos',
   conFoto: 'Ambos'
+};
+
+const FORMULARIO_PERFIL_SIN_CUENTA_INICIAL = {
+  nombre: '',
+  fechaNacimiento: '',
+  fechaFallecimiento: '',
+  descripcion: '',
+  fotoPerfil: null,
+  fotosGaleria: []
+};
+
+const leerArchivoComoDataUrl = (archivo) => {
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+
+    lector.onload = () => resolve(lector.result);
+    lector.onerror = () => reject(new Error('No se pudo leer la imagen seleccionada.'));
+    lector.readAsDataURL(archivo);
+  });
 };
 
 const obtenerValorRamaNodo = (nodo = {}) => {
@@ -381,6 +403,28 @@ const normalizarHilo = (hilo) => ({
   estado: hilo.estado || 'Activa'
 });
 
+const obtenerDesplazamientoPersonaEnCard = (card, nodoId) => {
+  if (!card || card.tipo !== 'pareja' || !nodoId) return 0;
+
+  if (String(card.pareja1?.id) === String(nodoId)) {
+    return -DESPLAZAMIENTO_PERSONA_PAREJA_Y;
+  }
+
+  if (String(card.pareja2?.id) === String(nodoId)) {
+    return DESPLAZAMIENTO_PERSONA_PAREJA_Y;
+  }
+
+  return 0;
+};
+
+const obtenerYPersonaEnCard = (card, nodoId) => {
+  const filaBase = Number(card?.fila || 0);
+
+  return (filaBase * ESPACIADO_Y) +
+    (ESPACIADO_Y / 2) +
+    obtenerDesplazamientoPersonaEnCard(card, nodoId);
+};
+
 // ==========================================
 // COMPONENTES DE LA ESTRUCTURA DEL ÁRBOL
 // ==========================================
@@ -395,9 +439,35 @@ const FilaPersona = ({
   estaFallecido,
   esModoEdicion,
   tieneDescendencia,
-  alHacerClic
+  alHacerClic,
+  draggableMover = false,
+  esNodoEnMovimiento = false,
+  esDestinoMover = false,
+  alIniciarArrastre,
+  alSoltarSobre
 }) => (
-  <div className="fila-persona" onClick={alHacerClic}>
+  <div
+    className={`fila-persona ${esNodoEnMovimiento ? 'nodo-en-movimiento' : ''} ${esDestinoMover ? 'destino-mover' : ''}`}
+    onClick={alHacerClic}
+    draggable={draggableMover}
+    onDragStart={(e) => {
+      if (draggableMover && alIniciarArrastre) {
+        alIniciarArrastre(e);
+      }
+    }}
+    onDragOver={(e) => {
+      if (esDestinoMover && alSoltarSobre) {
+        e.preventDefault();
+      }
+    }}
+    onDrop={(e) => {
+      if (esDestinoMover && alSoltarSobre) {
+        e.preventDefault();
+        e.stopPropagation();
+        alSoltarSobre();
+      }
+    }}
+  >
     <div className="foto-contenedor">
       {fotoPerfil && (
         <img
@@ -497,7 +567,12 @@ const TarjetaPareja = ({
   onDestinoClick,
   modoEliminar,
   alEliminar,
-  alEliminarUnion
+  alEliminarUnion,
+  modoMover,
+  nodoEnMovimientoId,
+  alSeleccionarMover,
+  alMoverComoPareja,
+  alIniciarArrastreMovimiento
 }) => {
   const [menuUnionAbierto, establecerMenuUnionAbierto] = useState(false);
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
@@ -517,7 +592,33 @@ const TarjetaPareja = ({
       <FilaPersona
         {...pareja1}
         esModoEdicion={esModoEdicion}
+        draggableMover={esModoEdicion && !modoEliminar}
+        esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(pareja1.id)}
+        esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(pareja1.id)}
+        alIniciarArrastre={(e) => alIniciarArrastreMovimiento(pareja1, e)}
+        alSoltarSobre={() => alMoverComoPareja(pareja1)}
         alHacerClic={(e) => {
+          if (modoRelacionar && esDestinoValido && !modoEliminar) {
+            e.stopPropagation();
+            onDestinoClick(pareja1);
+            return;
+          }
+
+          if (modoMover) {
+            e.stopPropagation();
+
+            if (!nodoEnMovimientoId) {
+              alSeleccionarMover(pareja1);
+              return;
+            }
+
+            if (String(nodoEnMovimientoId) !== String(pareja1.id)) {
+              alMoverComoPareja(pareja1);
+            }
+
+            return;
+          }
+
           if (modoEliminar) {
             e.stopPropagation();
             alEliminar(pareja1.id, pareja1.nombre);
@@ -531,7 +632,33 @@ const TarjetaPareja = ({
         <FilaPersona
           {...pareja2}
           esModoEdicion={esModoEdicion}
+          draggableMover={esModoEdicion && !modoEliminar}
+          esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(pareja2.id)}
+          esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(pareja2.id)}
+          alIniciarArrastre={(e) => alIniciarArrastreMovimiento(pareja2, e)}
+          alSoltarSobre={() => alMoverComoPareja(pareja2)}
           alHacerClic={(e) => {
+            if (modoRelacionar && esDestinoValido && !modoEliminar) {
+              e.stopPropagation();
+              onDestinoClick(pareja2);
+              return;
+            }
+
+            if (modoMover) {
+              e.stopPropagation();
+
+              if (!nodoEnMovimientoId) {
+                alSeleccionarMover(pareja2);
+                return;
+              }
+
+              if (String(nodoEnMovimientoId) !== String(pareja2.id)) {
+                alMoverComoPareja(pareja2);
+              }
+
+              return;
+            }
+
             if (modoEliminar) {
               e.stopPropagation();
               alEliminar(pareja2.id, pareja2.nombre);
@@ -617,7 +744,12 @@ const TarjetaIndividual = ({
   onOrigenClick,
   onDestinoClick,
   modoEliminar,
-  alEliminar
+  alEliminar,
+  modoMover,
+  nodoEnMovimientoId,
+  alSeleccionarMover,
+  alMoverComoPareja,
+  alIniciarArrastreMovimiento
 }) => {
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
   const clasePendiente = persona.estado === 'Pendiente' ? 'nodo-pendiente' : '';
@@ -634,7 +766,33 @@ const TarjetaIndividual = ({
       <FilaPersona
         {...persona}
         esModoEdicion={esModoEdicion}
+        draggableMover={esModoEdicion && !modoEliminar}
+        esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(persona.id)}
+        esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
+        alIniciarArrastre={(e) => alIniciarArrastreMovimiento(persona, e)}
+        alSoltarSobre={() => alMoverComoPareja(persona)}
         alHacerClic={(e) => {
+          if (modoRelacionar && esDestinoValido && !modoEliminar) {
+            e.stopPropagation();
+            onDestinoClick(persona);
+            return;
+          }
+
+          if (modoMover) {
+            e.stopPropagation();
+
+            if (!nodoEnMovimientoId) {
+              alSeleccionarMover(persona);
+              return;
+            }
+
+            if (String(nodoEnMovimientoId) !== String(persona.id)) {
+              alMoverComoPareja(persona);
+            }
+
+            return;
+          }
+
           if (modoEliminar) {
             e.stopPropagation();
             alEliminar(persona.id, persona.nombre);
@@ -659,14 +817,13 @@ const TarjetaIndividual = ({
   );
 };
 
-const ConectorDinamico = ({ filaIn, salidas, modoEliminar, alEliminarLinea }) => {
+const ConectorDinamico = ({ yIn, salidas, modoEliminar, alEliminarLinea }) => {
   const salidasActivas = salidas || [];
-  if (salidasActivas.length === 0) return null;
+  if (salidasActivas.length === 0 || yIn === undefined || yIn === null) return null;
 
-  const yIn = filaIn * ESPACIADO_Y + (ESPACIADO_Y / 2);
-  const yOuts = salidasActivas.map(s => s.fila * ESPACIADO_Y + (ESPACIADO_Y / 2));
-  const minY = Math.min(...yOuts, yIn);
-  const maxY = Math.max(...yOuts, yIn);
+  const yOuts = salidasActivas.map(s => Number(s.y));
+  const minY = Math.min(...yOuts, Number(yIn));
+  const maxY = Math.max(...yOuts, Number(yIn));
 
   return (
     <>
@@ -674,9 +831,9 @@ const ConectorDinamico = ({ filaIn, salidas, modoEliminar, alEliminarLinea }) =>
       <div className="linea-horizontal" style={{ top: `${yIn}px`, width: '50%', left: 0 }}></div>
       <div className="linea-vertical" style={{ top: `${minY}px`, height: `${maxY - minY}px`, left: '50%' }}></div>
       {salidasActivas.map((salida) => {
-        const y = salida.fila * ESPACIADO_Y + (ESPACIADO_Y / 2);
+        const y = Number(salida.y);
         return (
-          <React.Fragment key={salida.hiloId || `${filaIn}-${salida.fila}`}>
+          <React.Fragment key={salida.hiloId || `${yIn}-${y}`}>
             <div
               className={`linea-horizontal ${modoEliminar ? 'linea-rama' : ''}`}
               style={{ top: `${y}px`, width: '50%', left: '50%' }}
@@ -725,6 +882,11 @@ export default function ArbolGenealogico() {
   const [mostrarFiltros, establecerMostrarFiltros] = useState(false);
   const [mostrarInvitar, establecerMostrarInvitar] = useState(false);
   const [mostrarEventos, establecerMostrarEventos] = useState(false);
+  const [mostrandoFormularioPerfilSinCuenta, establecerMostrandoFormularioPerfilSinCuenta] = useState(false);
+  const [formularioPerfilSinCuenta, establecerFormularioPerfilSinCuenta] = useState(FORMULARIO_PERFIL_SIN_CUENTA_INICIAL);
+  const [procesandoFotosPerfilSinCuenta, establecerProcesandoFotosPerfilSinCuenta] = useState(false);
+  const [modoFormularioPerfilSinCuenta, establecerModoFormularioPerfilSinCuenta] = useState('crear');
+  const [nodoEditandoPerfilSinCuenta, establecerNodoEditandoPerfilSinCuenta] = useState(null);
 
   // Estados: Colocación
   const [modoColocacion, establecerModoColocacion] = useState(false);
@@ -736,6 +898,10 @@ export default function ArbolGenealogico() {
 
   // Estado: Eliminación
   const [modoEliminar, establecerModoEliminar] = useState(false);
+
+  // Estado: Movimiento
+  const [modoMover, establecerModoMover] = useState(false);
+  const [nodoEnMovimiento, establecerNodoEnMovimiento] = useState(null);
 
   // Menú de Exportación
   const [mostrarMenuExportar, establecerMostrarMenuExportar] = useState(false);
@@ -880,11 +1046,18 @@ export default function ArbolGenealogico() {
     establecerMostrarFiltros(false);
     establecerMostrarInvitar(false);
     establecerMostrarEventos(false);
+    establecerMostrandoFormularioPerfilSinCuenta(false);
+    establecerFormularioPerfilSinCuenta(FORMULARIO_PERFIL_SIN_CUENTA_INICIAL);
+    establecerProcesandoFotosPerfilSinCuenta(false);
+    establecerModoFormularioPerfilSinCuenta('crear');
+    establecerNodoEditandoPerfilSinCuenta(null);
     establecerModoColocacion(false);
     establecerPersonaEnColocacion(null);
     establecerModoRelacionar(false);
     establecerOrigenRelacion(null);
     establecerModoEliminar(false);
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
     establecerModoEdicion(false);
     establecerEsUsuarioAdmin(false);
   };
@@ -1418,6 +1591,7 @@ export default function ArbolGenealogico() {
         pareja2: destino,
         generacion,
         fila,
+        filaOriginal: fila,
         nodoPrincipalId: origen.id,
         nodosIds: [origen.id, destino.id]
       });
@@ -1426,14 +1600,114 @@ export default function ArbolGenealogico() {
     nodosFiltrados.forEach((nodo) => {
       if (idsUsados.has(String(nodo.id))) return;
 
+      const generacion = Number(nodo.generacion);
+      const fila = Number(nodo.fila);
+
       cards.push({
         id: `nodo-${nodo.id}`,
         tipo: 'individual',
         persona: nodo,
-        generacion: Number(nodo.generacion),
-        fila: Number(nodo.fila),
+        generacion,
+        fila,
+        filaOriginal: fila,
         nodoPrincipalId: nodo.id,
         nodosIds: [nodo.id]
+      });
+    });
+
+    const mapaCardTemporal = new Map();
+
+    cards.forEach((card) => {
+      card.nodosIds.forEach(nodoId => {
+        mapaCardTemporal.set(String(nodoId), card);
+      });
+    });
+
+    const gruposFamiliares = new Map();
+
+    hilosActivosFiltrados
+      .filter(hilo => hilo.tipoRelacion === 'padre_hijo')
+      .forEach((hilo) => {
+        const cardPadre = mapaCardTemporal.get(String(hilo.nodoOrigenId));
+        const cardHijo = mapaCardTemporal.get(String(hilo.nodoDestinoId));
+
+        if (!cardPadre || !cardHijo || String(cardPadre.id) === String(cardHijo.id)) return;
+
+        const keyPadre = String(hilo.nodoOrigenId);
+
+        if (!gruposFamiliares.has(keyPadre)) {
+          gruposFamiliares.set(keyPadre, {
+            cardPadre,
+            cardsHijos: new Map(),
+            totalRelaciones: 0
+          });
+        }
+
+        const grupo = gruposFamiliares.get(keyPadre);
+
+        grupo.cardsHijos.set(String(cardHijo.id), cardHijo);
+        grupo.totalRelaciones += 1;
+      });
+
+    const zonasReservadasPorGeneracion = new Map();
+    const GAP_FILAS_GRUPO_FAMILIAR = 0.01;
+
+    const agregarZonaReservada = (generacion, zona) => {
+      const key = Number(generacion);
+
+      if (!zonasReservadasPorGeneracion.has(key)) {
+        zonasReservadasPorGeneracion.set(key, []);
+      }
+
+      if (Number(zona.end) < Number(zona.start)) return;
+
+      zonasReservadasPorGeneracion.get(key).push({
+        ...zona,
+        start: Number(zona.start),
+        end: Number(zona.end)
+      });
+    };
+
+    gruposFamiliares.forEach((grupo) => {
+      const cardsHijos = Array.from(grupo.cardsHijos.values());
+
+      if (grupo.totalRelaciones < 2 && cardsHijos.length < 2) return;
+
+      const todasLasCardsFamilia = [grupo.cardPadre, ...cardsHijos];
+      const idsCardsFamilia = new Set(todasLasCardsFamilia.map(card => String(card.id)));
+      const filasFamilia = todasLasCardsFamilia.map(card => Number(card.filaOriginal ?? card.fila));
+      const filaMinimaFamilia = Math.min(...filasFamilia);
+      const filaMaximaFamilia = Math.max(...filasFamilia);
+
+      agregarZonaReservada(Number(grupo.cardPadre.generacion), {
+        start: Number(grupo.cardPadre.filaOriginal ?? grupo.cardPadre.fila) + 1,
+        end: filaMaximaFamilia + GAP_FILAS_GRUPO_FAMILIAR,
+        idsPermitidos: idsCardsFamilia
+      });
+
+      const hijosPorGeneracion = new Map();
+
+      cardsHijos.forEach((cardHijo) => {
+        const key = Number(cardHijo.generacion);
+
+        if (!hijosPorGeneracion.has(key)) {
+          hijosPorGeneracion.set(key, []);
+        }
+
+        hijosPorGeneracion.get(key).push(cardHijo);
+      });
+
+      hijosPorGeneracion.forEach((cardsDeGeneracion, generacionHijos) => {
+        const filasHijos = cardsDeGeneracion.map(card => Number(card.filaOriginal ?? card.fila));
+        const filaMinimaHijos = Math.min(...filasHijos);
+        const filaMaximaHijos = Math.max(...filasHijos);
+        const idsPermitidos = new Set(cardsDeGeneracion.map(card => String(card.id)));
+
+        agregarZonaReservada(generacionHijos, {
+          start: Math.min(filaMinimaFamilia, filaMinimaHijos),
+          end: Math.max(filaMaximaFamilia, filaMaximaHijos) + GAP_FILAS_GRUPO_FAMILIAR,
+          idsPermitidos
+        });
       });
     });
 
@@ -1442,10 +1716,61 @@ export default function ArbolGenealogico() {
     cards.forEach((card) => {
       const key = Number(card.generacion);
       if (!agrupadas.has(key)) agrupadas.set(key, []);
-      agrupadas.get(key).push(card);
+      agrupadas.get(key).push({
+        ...card,
+        fila: Number(card.filaOriginal ?? card.fila)
+      });
     });
 
-    agrupadas.forEach((lista) => {
+    agrupadas.forEach((lista, generacion) => {
+      const zonas = zonasReservadasPorGeneracion.get(Number(generacion)) || [];
+      const filasOcupadas = new Set();
+
+      const cardEstaProtegida = (card) => {
+        return zonas.some(zona => zona.idsPermitidos?.has(String(card.id)));
+      };
+
+      lista.sort((a, b) => {
+        const diferenciaFila = Number(a.filaOriginal ?? a.fila) - Number(b.filaOriginal ?? b.fila);
+
+        if (diferenciaFila !== 0) return diferenciaFila;
+
+        const aProtegida = cardEstaProtegida(a) ? 0 : 1;
+        const bProtegida = cardEstaProtegida(b) ? 0 : 1;
+
+        return aProtegida - bProtegida;
+      });
+
+      lista.forEach((card) => {
+        let filaVisual = Number(card.filaOriginal ?? card.fila);
+
+        let huboAjuste = true;
+
+        while (huboAjuste) {
+          huboAjuste = false;
+
+          const zonaBloqueante = zonas.find(zona => {
+            const permitido = zona.idsPermitidos?.has(String(card.id));
+
+            return !permitido && filaVisual >= zona.start && filaVisual <= zona.end;
+          });
+
+          if (zonaBloqueante) {
+            filaVisual = zonaBloqueante.end + 1;
+            huboAjuste = true;
+            continue;
+          }
+
+          if (filasOcupadas.has(filaVisual)) {
+            filaVisual += 1;
+            huboAjuste = true;
+          }
+        }
+
+        card.fila = filaVisual;
+        filasOcupadas.add(filaVisual);
+      });
+
       lista.sort((a, b) => Number(a.fila) - Number(b.fila));
     });
 
@@ -1487,8 +1812,10 @@ export default function ArbolGenealogico() {
         return {
           hiloId: hilo.id,
           genIn: Number(cardOrigen.generacion),
-          filaIn: Number(cardOrigen.fila),
-          filaOut: Number(cardDestino.fila)
+          yIn: obtenerYPersonaEnCard(cardOrigen, hilo.nodoOrigenId),
+          yOut: obtenerYPersonaEnCard(cardDestino, hilo.nodoDestinoId),
+          nodoOrigenId: hilo.nodoOrigenId,
+          nodoDestinoId: hilo.nodoDestinoId
         };
       })
       .filter(Boolean);
@@ -1520,39 +1847,293 @@ export default function ArbolGenealogico() {
     establecerModoRelacionar(false);
     establecerOrigenRelacion(null);
     establecerModoEliminar(false);
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
+  };
+
+  const restablecerFormularioPerfilSinCuenta = () => {
+    establecerFormularioPerfilSinCuenta(FORMULARIO_PERFIL_SIN_CUENTA_INICIAL);
+    establecerProcesandoFotosPerfilSinCuenta(false);
+    establecerModoFormularioPerfilSinCuenta('crear');
+    establecerNodoEditandoPerfilSinCuenta(null);
+  };
+
+  const obtenerFotosFormularioDesdeNodo = (nodo = {}) => {
+    const fotos = Array.isArray(nodo.fotos) ? nodo.fotos.filter(Boolean) : [];
+    const fotoPrincipal = nodo.fotoPerfil || fotos[0] || null;
+    const fotosGaleria = fotoPrincipal
+      ? fotos.filter(foto => foto && foto !== fotoPrincipal)
+      : fotos.slice(1);
+
+    return {
+      fotoPrincipal,
+      fotosGaleria
+    };
+  };
+
+  const actualizarCampoPerfilSinCuenta = (campo, valor) => {
+    establecerFormularioPerfilSinCuenta(prev => ({
+      ...prev,
+      [campo]: valor
+    }));
   };
 
   const iniciarCrearPerfilSinCuenta = () => {
-    const nombre = window.prompt('Nombre del familiar sin cuenta:', 'Nuevo Familiar');
-    if (!nombre || !nombre.trim()) return;
+    establecerModoFormularioPerfilSinCuenta('crear');
+    establecerNodoEditandoPerfilSinCuenta(null);
+    establecerFormularioPerfilSinCuenta(FORMULARIO_PERFIL_SIN_CUENTA_INICIAL);
+    establecerMostrandoFormularioPerfilSinCuenta(true);
+    establecerNodoSeleccionado(null);
+    establecerMostrarInvitar(true);
+    establecerMostrarFiltros(false);
+    establecerMostrarEventos(false);
+    establecerModoColocacion(false);
+    establecerPersonaEnColocacion(null);
+  };
 
-    iniciarColocacion({
-      nombre: nombre.trim(),
+  const iniciarEditarPerfilSinCuenta = (nodo) => {
+    if (!nodo || nodo.origen !== 'perfil_sin_cuenta') {
+      window.alert('Solo puedes editar perfiles creados sin cuenta desde este panel.');
+      return;
+    }
+
+    const { fotoPrincipal, fotosGaleria } = obtenerFotosFormularioDesdeNodo(nodo);
+
+    establecerModoFormularioPerfilSinCuenta('editar');
+    establecerNodoEditandoPerfilSinCuenta(nodo);
+    establecerFormularioPerfilSinCuenta({
+      nombre: nodo.nombre || '',
+      fechaNacimiento: formatearFechaParaInput(nodo.fechaNacimiento),
+      fechaFallecimiento: formatearFechaParaInput(nodo.fechaFallecimiento),
+      descripcion: nodo.biografia || '',
+      fotoPerfil: fotoPrincipal,
+      fotosGaleria
+    });
+
+    establecerMostrandoFormularioPerfilSinCuenta(true);
+    establecerMostrarInvitar(true);
+    establecerNodoSeleccionado(null);
+    establecerMostrarFiltros(false);
+    establecerMostrarEventos(false);
+    establecerModoColocacion(false);
+    establecerPersonaEnColocacion(null);
+    establecerModoRelacionar(false);
+    establecerOrigenRelacion(null);
+    establecerModoEliminar(false);
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
+  };
+
+  const volverASugerenciasDesdePerfilSinCuenta = () => {
+    establecerMostrandoFormularioPerfilSinCuenta(false);
+    restablecerFormularioPerfilSinCuenta();
+  };
+
+  const cerrarPanelInvitar = () => {
+    establecerMostrarInvitar(false);
+    establecerMostrandoFormularioPerfilSinCuenta(false);
+    restablecerFormularioPerfilSinCuenta();
+  };
+
+  const manejarFotoPrincipalPerfilSinCuenta = async (evento) => {
+    const archivo = evento.target.files?.[0];
+
+    if (!archivo) return;
+
+    if (!archivo.type.startsWith('image/')) {
+      window.alert('Selecciona un archivo de imagen válido.');
+      evento.target.value = '';
+      return;
+    }
+
+    try {
+      establecerProcesandoFotosPerfilSinCuenta(true);
+      const dataUrl = await leerArchivoComoDataUrl(archivo);
+
+      establecerFormularioPerfilSinCuenta(prev => ({
+        ...prev,
+        fotoPerfil: dataUrl
+      }));
+    } catch (error) {
+      window.alert(error.message || 'No se pudo cargar la foto de perfil.');
+    } finally {
+      establecerProcesandoFotosPerfilSinCuenta(false);
+      evento.target.value = '';
+    }
+  };
+
+  const manejarGaleriaPerfilSinCuenta = async (evento) => {
+    const archivos = Array.from(evento.target.files || []);
+
+    if (archivos.length === 0) return;
+
+    const imagenes = archivos.filter(archivo => archivo.type.startsWith('image/'));
+
+    if (imagenes.length !== archivos.length) {
+      window.alert('Algunos archivos fueron ignorados porque no eran imágenes.');
+    }
+
+    if (imagenes.length === 0) {
+      evento.target.value = '';
+      return;
+    }
+
+    try {
+      establecerProcesandoFotosPerfilSinCuenta(true);
+      const nuevasFotos = await Promise.all(imagenes.map(leerArchivoComoDataUrl));
+
+      establecerFormularioPerfilSinCuenta(prev => ({
+        ...prev,
+        fotosGaleria: [...prev.fotosGaleria, ...nuevasFotos].slice(0, 8)
+      }));
+    } catch (error) {
+      window.alert(error.message || 'No se pudieron cargar las fotos.');
+    } finally {
+      establecerProcesandoFotosPerfilSinCuenta(false);
+      evento.target.value = '';
+    }
+  };
+
+  const quitarFotoGaleriaPerfilSinCuenta = (indiceFoto) => {
+    establecerFormularioPerfilSinCuenta(prev => ({
+      ...prev,
+      fotosGaleria: prev.fotosGaleria.filter((_, indice) => indice !== indiceFoto)
+    }));
+  };
+
+  const construirDatosPerfilSinCuentaDesdeFormulario = () => {
+    const nombre = formularioPerfilSinCuenta.nombre.trim();
+    const descripcion = formularioPerfilSinCuenta.descripcion.trim();
+    const fechaNacimiento = formularioPerfilSinCuenta.fechaNacimiento || null;
+    const fechaFallecimiento = formularioPerfilSinCuenta.fechaFallecimiento || null;
+
+    if (!nombre) {
+      window.alert('Ingresa el nombre completo del familiar.');
+      return null;
+    }
+
+    if (fechaNacimiento && fechaFallecimiento) {
+      const nacimiento = obtenerFechaValida(fechaNacimiento);
+      const fallecimiento = obtenerFechaValida(fechaFallecimiento);
+
+      if (nacimiento && fallecimiento && fallecimiento < nacimiento) {
+        window.alert('La fecha de deceso no puede ser anterior a la fecha de nacimiento.');
+        return null;
+      }
+    }
+
+    const estaFallecido = Boolean(fechaFallecimiento);
+    const fotos = [
+      formularioPerfilSinCuenta.fotoPerfil,
+      ...formularioPerfilSinCuenta.fotosGaleria
+    ].filter(Boolean);
+
+    return {
+      nombre,
       iniciales: obtenerIniciales(nombre),
       color: colorPorTexto(nombre),
+      colorFondo: colorPorTexto(nombre),
+      colorTexto: '#0f172a',
+      fechaNacimiento,
+      fechaFallecimiento,
+      fechaCorta: construirFechaCorta({
+        fechaNacimiento,
+        fechaFallecimiento,
+        estaFallecido,
+        fechaCorta: 'Nacimiento pendiente'
+      }),
+      estaFallecido,
+      biografia: descripcion,
+      fotos,
+      fotoPerfil: fotos[0] || null,
+      edad: calcularEdad(fechaNacimiento, estaFallecido ? fechaFallecimiento : null),
+      estado: 'Incompleto',
       origen: 'perfil_sin_cuenta'
-    });
+    };
+  };
+
+  const aplicarEdicionPerfilSinCuenta = (datosPerfil) => {
+    if (!nodoEditandoPerfilSinCuenta || !arbol?._id) return;
+
+    const nodoId = nodoEditandoPerfilSinCuenta.id;
+    const datosActualizados = {
+      nombre: datosPerfil.nombre,
+      iniciales: datosPerfil.iniciales,
+      colorFondo: datosPerfil.colorFondo,
+      colorTexto: datosPerfil.colorTexto,
+      fechaNacimiento: datosPerfil.fechaNacimiento,
+      fechaFallecimiento: datosPerfil.fechaFallecimiento,
+      fechaCorta: datosPerfil.fechaCorta,
+      estaFallecido: datosPerfil.estaFallecido,
+      edad: datosPerfil.edad,
+      fotos: datosPerfil.fotos,
+      fotoPerfil: datosPerfil.fotoPerfil,
+      biografia: datosPerfil.biografia,
+      estado: datosPerfil.estado,
+      origen: 'perfil_sin_cuenta'
+    };
+
+    actualizarNodoVisual(nodoId, datosActualizados);
+    registrarCambioNodoPendiente(nodoId, datosActualizados);
+
+    establecerMensajeSistema('Perfil actualizado. Presiona Guardar cambios para aplicarlo.');
+    establecerMostrandoFormularioPerfilSinCuenta(false);
+    establecerMostrarInvitar(false);
+    restablecerFormularioPerfilSinCuenta();
+  };
+
+  const prepararPerfilSinCuenta = () => {
+    const datosPerfil = construirDatosPerfilSinCuentaDesdeFormulario();
+
+    if (!datosPerfil) return;
+
+    if (modoFormularioPerfilSinCuenta === 'editar') {
+      aplicarEdicionPerfilSinCuenta(datosPerfil);
+      return;
+    }
+
+    iniciarColocacion(datosPerfil);
+    establecerMostrandoFormularioPerfilSinCuenta(false);
+    restablecerFormularioPerfilSinCuenta();
   };
 
   const iniciarColocacion = (datosFamiliar) => {
+    const nombreBase = datosFamiliar.nombre || 'Nuevo Familiar';
+    const fechaNacimiento = datosFamiliar.fechaNacimiento || null;
+    const fechaFallecimiento = datosFamiliar.fechaFallecimiento || null;
+    const estaFallecido = Boolean(datosFamiliar.estaFallecido || fechaFallecimiento);
+    const fotos = Array.isArray(datosFamiliar.fotos) ? datosFamiliar.fotos : [];
+
     establecerPersonaEnColocacion({
       id: datosFamiliar.id || Date.now(),
       usuarioId: datosFamiliar.usuarioId || datosFamiliar.id || null,
-      nombre: datosFamiliar.nombre || 'Nuevo Familiar',
-      iniciales: datosFamiliar.iniciales || obtenerIniciales(datosFamiliar.nombre || 'Nuevo Familiar'),
+      nombre: nombreBase,
+      iniciales: datosFamiliar.iniciales || obtenerIniciales(nombreBase),
       colorFondo: datosFamiliar.color || datosFamiliar.colorFondo || '#e2e8f0',
-      colorTexto: '#0f172a',
-      fechaCorta: 'Pendiente',
-      estaFallecido: false,
-      tipo: 'normal',
-      estado: 'Pendiente',
-      fotos: [],
+      colorTexto: datosFamiliar.colorTexto || '#0f172a',
+      fechaNacimiento,
+      fechaFallecimiento,
+      fechaCorta: datosFamiliar.fechaCorta || construirFechaCorta({
+        fechaNacimiento,
+        fechaFallecimiento,
+        estaFallecido,
+        fechaCorta: 'Pendiente'
+      }),
+      estaFallecido,
+      tipo: datosFamiliar.tipo || 'normal',
+      estado: datosFamiliar.estado || 'Pendiente',
+      fotos,
+      biografia: datosFamiliar.biografia || '',
       origen: datosFamiliar.origen || 'usuario_real'
     });
+
     establecerModoColocacion(true);
     establecerMostrarInvitar(false);
+    establecerMostrandoFormularioPerfilSinCuenta(false);
     establecerModoRelacionar(false);
     establecerModoEliminar(false);
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
     establecerMostrarEventos(false);
   };
 
@@ -1565,13 +2146,15 @@ export default function ArbolGenealogico() {
         iniciales: persona.iniciales,
         colorFondo: persona.colorFondo,
         colorTexto: persona.colorTexto,
-        fechaCorta: 'Pendiente',
-        estaFallecido: false,
-        estado: 'Incompleto',
+        fechaNacimiento: persona.fechaNacimiento || null,
+        fechaFallecimiento: persona.fechaFallecimiento || null,
+        fechaCorta: persona.fechaCorta || 'Pendiente',
+        estaFallecido: Boolean(persona.estaFallecido),
+        estado: persona.estado || 'Incompleto',
         generacion,
         fila,
-        fotos: [],
-        biografia: ''
+        fotos: Array.isArray(persona.fotos) ? persona.fotos : [],
+        biografia: persona.biografia || ''
       })
     });
 
@@ -1616,15 +2199,17 @@ export default function ArbolGenealogico() {
         iniciales: personaEnColocacion.iniciales,
         colorFondo: personaEnColocacion.colorFondo,
         colorTexto: personaEnColocacion.colorTexto,
-        fechaCorta: 'Pendiente',
-        estaFallecido: false,
+        fechaNacimiento: personaEnColocacion.fechaNacimiento || null,
+        fechaFallecimiento: personaEnColocacion.fechaFallecimiento || null,
+        fechaCorta: personaEnColocacion.fechaCorta || 'Pendiente',
+        estaFallecido: Boolean(personaEnColocacion.estaFallecido),
         tipo: 'normal',
         estado: 'Incompleto',
         origen: 'perfil_sin_cuenta',
         generacion: numGeneracion,
         fila: filaDestino,
-        fotos: [],
-        biografia: '',
+        fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
+        biografia: personaEnColocacion.biografia || '',
         visible: true
       }, usuarioActualId);
 
@@ -1639,13 +2224,15 @@ export default function ArbolGenealogico() {
           iniciales: personaEnColocacion.iniciales,
           colorFondo: personaEnColocacion.colorFondo,
           colorTexto: personaEnColocacion.colorTexto,
-          fechaCorta: 'Pendiente',
-          estaFallecido: false,
+          fechaNacimiento: personaEnColocacion.fechaNacimiento || null,
+          fechaFallecimiento: personaEnColocacion.fechaFallecimiento || null,
+          fechaCorta: personaEnColocacion.fechaCorta || 'Pendiente',
+          estaFallecido: Boolean(personaEnColocacion.estaFallecido),
           estado: 'Incompleto',
           generacion: numGeneracion,
           fila: filaDestino,
-          fotos: [],
-          biografia: ''
+          fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
+          biografia: personaEnColocacion.biografia || ''
         }
       });
 
@@ -1693,15 +2280,17 @@ export default function ArbolGenealogico() {
         iniciales: personaEnColocacion.iniciales,
         colorFondo: personaEnColocacion.colorFondo,
         colorTexto: personaEnColocacion.colorTexto,
-        fechaCorta: 'Pendiente',
-        estaFallecido: false,
+        fechaNacimiento: personaEnColocacion.fechaNacimiento || null,
+        fechaFallecimiento: personaEnColocacion.fechaFallecimiento || null,
+        fechaCorta: personaEnColocacion.fechaCorta || 'Pendiente',
+        estaFallecido: Boolean(personaEnColocacion.estaFallecido),
         tipo: 'normal',
         estado: 'Incompleto',
         origen: 'perfil_sin_cuenta',
         generacion: personaDestino.generacion,
         fila: personaDestino.fila,
-        fotos: [],
-        biografia: '',
+        fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
+        biografia: personaEnColocacion.biografia || '',
         visible: true
       }, usuarioActualId);
 
@@ -1729,13 +2318,15 @@ export default function ArbolGenealogico() {
           iniciales: personaEnColocacion.iniciales,
           colorFondo: personaEnColocacion.colorFondo,
           colorTexto: personaEnColocacion.colorTexto,
-          fechaCorta: 'Pendiente',
-          estaFallecido: false,
+          fechaNacimiento: personaEnColocacion.fechaNacimiento || null,
+          fechaFallecimiento: personaEnColocacion.fechaFallecimiento || null,
+          fechaCorta: personaEnColocacion.fechaCorta || 'Pendiente',
+          estaFallecido: Boolean(personaEnColocacion.estaFallecido),
           estado: 'Incompleto',
           generacion: personaDestino.generacion,
           fila: personaDestino.fila,
-          fotos: [],
-          biografia: ''
+          fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
+          biografia: personaEnColocacion.biografia || ''
         }
       });
 
@@ -1787,31 +2378,78 @@ export default function ArbolGenealogico() {
     establecerOrigenRelacion(null);
     establecerModoColocacion(false);
     establecerModoEliminar(false);
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
     establecerMostrarInvitar(false);
     establecerMostrarFiltros(false);
     establecerMostrarEventos(false);
     establecerNodoSeleccionado(null);
   };
 
-  const manejarClicOrigen = (card) => {
-    establecerOrigenRelacion({
-      nodoId: card.nodoPrincipalId,
-      generacion: card.generacion,
-      fila: card.fila
+  const relacionCoincide = (hilo, nodoOrigenId, nodoDestinoId, tipoRelacion) => {
+    if (!hilo || !nodoOrigenId || !nodoDestinoId || !tipoRelacion) return false;
+
+    if (hilo.tipoRelacion !== tipoRelacion) return false;
+
+    const origenActual = String(hilo.nodoOrigenId);
+    const destinoActual = String(hilo.nodoDestinoId);
+    const origenNuevo = String(nodoOrigenId);
+    const destinoNuevo = String(nodoDestinoId);
+
+    const esRelacionNoDireccional = ['pareja', 'matrimonio', 'divorcio'].includes(tipoRelacion);
+
+    if (esRelacionNoDireccional) {
+      return (
+        (origenActual === origenNuevo && destinoActual === destinoNuevo) ||
+        (origenActual === destinoNuevo && destinoActual === origenNuevo)
+      );
+    }
+
+    return origenActual === origenNuevo && destinoActual === destinoNuevo;
+  };
+
+  const existeRelacionActiva = (nodoOrigenId, nodoDestinoId, tipoRelacion) => {
+    return hilosActivos.some(hilo =>
+      relacionCoincide(hilo, nodoOrigenId, nodoDestinoId, tipoRelacion)
+    );
+  };
+
+  const existeRelacionPendiente = (nodoOrigenId, nodoDestinoId, tipoRelacion) => {
+    return cambiosPendientes.some(cambio => {
+      if (cambio.tipo !== 'crearHilo') return false;
+
+      return relacionCoincide(
+        {
+          nodoOrigenId: cambio.payload?.nodoOrigenId,
+          nodoDestinoId: cambio.payload?.nodoDestinoId,
+          tipoRelacion: cambio.payload?.tipoRelacion
+        },
+        nodoOrigenId,
+        nodoDestinoId,
+        tipoRelacion
+      );
     });
   };
 
-  const manejarClicDestino = async (card) => {
-    if (!origenRelacion || !card || !arbol?._id) return;
+  const prepararRelacionTemporal = ({
+    nodoOrigenId,
+    nodoDestinoId,
+    tipoRelacion,
+    mensajeDuplicado = 'Esta relación ya existe en el árbol.'
+  }) => {
+    if (!arbol?._id || !nodoOrigenId || !nodoDestinoId || !tipoRelacion) return null;
 
-    if (Number(origenRelacion.generacion) >= Number(card.generacion)) {
-      window.alert(
-        'Para crear una relación padre/hijo, el familiar destino debe estar en una generación posterior. Ejemplo: Marco en Generación I → Hugo en Generación II.'
-      );
+    if (String(nodoOrigenId) === String(nodoDestinoId)) {
+      window.alert('No puedes relacionar una persona consigo misma.');
+      return null;
+    }
 
-      establecerModoRelacionar(false);
-      establecerOrigenRelacion(null);
-      return;
+    if (
+      existeRelacionActiva(nodoOrigenId, nodoDestinoId, tipoRelacion) ||
+      existeRelacionPendiente(nodoOrigenId, nodoDestinoId, tipoRelacion)
+    ) {
+      window.alert(mensajeDuplicado);
+      return null;
     }
 
     const tempHiloId = generarIdTemporal('hilo');
@@ -1820,11 +2458,11 @@ export default function ArbolGenealogico() {
       id: tempHiloId,
       _id: tempHiloId,
       arbol: arbol._id,
-      nodoOrigen: origenRelacion.nodoId,
-      nodoDestino: card.nodoPrincipalId,
-      nodoOrigenId: origenRelacion.nodoId,
-      nodoDestinoId: card.nodoPrincipalId,
-      tipoRelacion: 'padre_hijo',
+      nodoOrigen: nodoOrigenId,
+      nodoDestino: nodoDestinoId,
+      nodoOrigenId,
+      nodoDestinoId,
+      tipoRelacion,
       estado: 'Activa'
     };
 
@@ -1832,13 +2470,60 @@ export default function ArbolGenealogico() {
 
     registrarCambioPendiente({
       tipo: 'crearHilo',
+      tempId: tempHiloId,
       payload: {
         arbolId: arbol._id,
-        nodoOrigenId: origenRelacion.nodoId,
-        nodoDestinoId: card.nodoPrincipalId,
-        tipoRelacion: 'padre_hijo'
+        nodoOrigenId,
+        nodoDestinoId,
+        tipoRelacion
       }
     });
+
+    return tempHiloId;
+  };
+
+  const manejarClicOrigen = (card, personaOrigen = null) => {
+    const persona = personaOrigen || mapaNodos.get(String(card.nodoPrincipalId));
+
+    establecerOrigenRelacion({
+      nodoId: persona?.id || card.nodoPrincipalId,
+      generacion: persona?.generacion ?? card.generacion,
+      fila: persona?.fila ?? card.fila
+    });
+  };
+
+  const manejarClicDestino = async (card, nodoDestinoIdSeleccionado = null) => {
+    if (!origenRelacion || !card || !arbol?._id) return;
+
+    const destinoId = nodoDestinoIdSeleccionado || card.nodoPrincipalId;
+    const nodoDestino = mapaNodos.get(String(destinoId));
+
+    if (!destinoId) return;
+
+    const generacionDestino = Number(nodoDestino?.generacion ?? card.generacion);
+
+    if (Number(origenRelacion.generacion) >= generacionDestino) {
+      window.alert(
+        'Para crear una relación padre/hijo, el familiar destino debe estar en una generación posterior. Ejemplo: Marco en Generación I → Draculona en Generación II.'
+      );
+
+      establecerModoRelacionar(false);
+      establecerOrigenRelacion(null);
+      return;
+    }
+
+    const tempHiloId = prepararRelacionTemporal({
+      nodoOrigenId: origenRelacion.nodoId,
+      nodoDestinoId: destinoId,
+      tipoRelacion: 'padre_hijo',
+      mensajeDuplicado: 'Esta relación padre/hijo ya existe en el árbol.'
+    });
+
+    if (!tempHiloId) {
+      establecerModoRelacionar(false);
+      establecerOrigenRelacion(null);
+      return;
+    }
 
     establecerMensajeSistema('Relación preparada. Presiona Guardar cambios para aplicarla.');
     establecerModoRelacionar(false);
@@ -1850,10 +2535,417 @@ export default function ArbolGenealogico() {
     establecerModoColocacion(false);
     establecerModoRelacionar(false);
     establecerOrigenRelacion(null);
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
     establecerMostrarInvitar(false);
     establecerMostrarFiltros(false);
     establecerMostrarEventos(false);
     establecerNodoSeleccionado(null);
+  };
+
+  const obtenerUnionDeNodo = (nodoId) => {
+    if (!nodoId) return null;
+
+    return hilosActivos.find(hilo =>
+      ['pareja', 'matrimonio', 'divorcio'].includes(hilo.tipoRelacion) &&
+      (
+        String(hilo.nodoOrigenId) === String(nodoId) ||
+        String(hilo.nodoDestinoId) === String(nodoId)
+      )
+    ) || null;
+  };
+
+  const obtenerParejaDeNodo = (nodoId) => {
+    const union = obtenerUnionDeNodo(nodoId);
+
+    if (!union) return null;
+
+    const parejaId = String(union.nodoOrigenId) === String(nodoId)
+      ? union.nodoDestinoId
+      : union.nodoOrigenId;
+
+    return mapaNodos.get(String(parejaId)) || null;
+  };
+
+  const registrarCambioNodoPendiente = (nodoId, datosActualizados) => {
+    establecerCambiosPendientes(prev => {
+      const cambioPrevio = prev.find(cambio =>
+        cambio.tipo === 'actualizarNodo' &&
+        String(cambio.payload?.nodoId) === String(nodoId)
+      );
+
+      const sinCambioPrevio = prev.filter(cambio =>
+        !(cambio.tipo === 'actualizarNodo' && String(cambio.payload?.nodoId) === String(nodoId))
+      );
+
+      return [
+        ...sinCambioPrevio,
+        {
+          tipo: 'actualizarNodo',
+          payload: {
+            ...(cambioPrevio?.payload || {}),
+            arbolId: arbol._id,
+            nodoId,
+            ...datosActualizados
+          }
+        }
+      ];
+    });
+  };
+
+  const actualizarNodoVisual = (nodoId, datosActualizados) => {
+    establecerNodos(prev => prev.map(nodo => {
+      if (String(nodo.id) !== String(nodoId)) return nodo;
+
+      return {
+        ...nodo,
+        ...datosActualizados
+      };
+    }));
+  };
+
+  const registrarEliminacionHiloPendiente = (hiloId) => {
+    if (!hiloId || !arbol?._id) return;
+
+    establecerCambiosPendientes(prev => {
+      if (esIdTemporal(hiloId)) {
+        return prev.filter(cambio =>
+          !(cambio.tipo === 'crearHilo' && String(cambio.tempId) === String(hiloId))
+        );
+      }
+
+      const sinCambiosDelHilo = prev.filter(cambio =>
+        !(
+          (cambio.tipo === 'eliminarHilo' || cambio.tipo === 'actualizarHilo') &&
+          String(cambio.payload?.hiloId) === String(hiloId)
+        )
+      );
+
+      return [
+        ...sinCambiosDelHilo,
+        {
+          tipo: 'eliminarHilo',
+          payload: {
+            arbolId: arbol._id,
+            hiloId
+          }
+        }
+      ];
+    });
+  };
+
+  const obtenerSiguienteFilaDesdeLista = (nodosLista, generacion, nodoExcluidoId = null) => {
+    const filas = nodosLista
+      .filter(nodo =>
+        Number(nodo.generacion) === Number(generacion) &&
+        (!nodoExcluidoId || String(nodo.id) !== String(nodoExcluidoId))
+      )
+      .map(nodo => Number(nodo.fila))
+      .filter(num => Number.isFinite(num));
+
+    return filas.length > 0 ? Math.max(...filas) + 1 : 0;
+  };
+
+  const obtenerHilosPadreHijoInvalidos = (nodosLista, hilosLista) => {
+    const mapaGeneraciones = new Map(
+      nodosLista.map(nodo => [String(nodo.id), Number(nodo.generacion)])
+    );
+
+    return hilosLista.filter(hilo => {
+      if (hilo.estado === 'Eliminada' || hilo.tipoRelacion !== 'padre_hijo') return false;
+
+      const generacionOrigen = mapaGeneraciones.get(String(hilo.nodoOrigenId));
+      const generacionDestino = mapaGeneraciones.get(String(hilo.nodoDestinoId));
+
+      if (!Number.isFinite(generacionOrigen) || !Number.isFinite(generacionDestino)) return false;
+
+      return generacionOrigen >= generacionDestino;
+    });
+  };
+
+  const normalizarGeneracionesDesdeCero = (nodosLista) => {
+    const generaciones = nodosLista
+      .map(nodo => Number(nodo.generacion))
+      .filter(num => Number.isFinite(num));
+
+    if (generaciones.length === 0) {
+      return {
+        nodosNormalizados: nodosLista,
+        desplazamiento: 0
+      };
+    }
+
+    const menorGeneracion = Math.min(...generaciones);
+
+    if (menorGeneracion === 0) {
+      return {
+        nodosNormalizados: nodosLista,
+        desplazamiento: 0
+      };
+    }
+
+    return {
+      nodosNormalizados: nodosLista.map(nodo => ({
+        ...nodo,
+        generacion: Number(nodo.generacion) - menorGeneracion
+      })),
+      desplazamiento: menorGeneracion
+    };
+  };
+
+  const aplicarAjustesEstructurales = ({ nodosBase, hilosBase }) => {
+    const hilosInvalidos = obtenerHilosPadreHijoInvalidos(nodosBase, hilosBase);
+    const idsHilosInvalidos = new Set(hilosInvalidos.map(hilo => String(hilo.id)));
+
+    const hilosDepurados = hilosBase.filter(hilo => !idsHilosInvalidos.has(String(hilo.id)));
+
+    hilosInvalidos.forEach(hilo => {
+      registrarEliminacionHiloPendiente(hilo.id);
+    });
+
+    const { nodosNormalizados, desplazamiento } = normalizarGeneracionesDesdeCero(nodosBase);
+
+    nodosNormalizados.forEach((nodoNormalizado) => {
+      const nodoOriginal = nodosBase.find(nodo => String(nodo.id) === String(nodoNormalizado.id));
+
+      if (
+        nodoOriginal &&
+        (
+          Number(nodoOriginal.generacion) !== Number(nodoNormalizado.generacion) ||
+          Number(nodoOriginal.fila) !== Number(nodoNormalizado.fila)
+        )
+      ) {
+        registrarCambioNodoPendiente(nodoNormalizado.id, {
+          generacion: Number(nodoNormalizado.generacion),
+          fila: Number(nodoNormalizado.fila)
+        });
+      }
+    });
+
+    establecerNodos(nodosNormalizados);
+    establecerHilos(hilosDepurados);
+
+    return {
+      nodosNormalizados,
+      hilosDepurados,
+      hilosEliminados: hilosInvalidos,
+      huboNormalizacion: desplazamiento !== 0
+    };
+  };
+
+  const eliminarUnionVisualYPendiente = (union) => {
+    if (!union?.id || !arbol?._id) return;
+
+    establecerHilos(prev => prev.filter(hilo => String(hilo.id) !== String(union.id)));
+    registrarEliminacionHiloPendiente(union.id);
+  };
+
+  const iniciarModoMover = () => {
+    establecerModoMover(true);
+    establecerNodoEnMovimiento(null);
+    establecerModoColocacion(false);
+    establecerPersonaEnColocacion(null);
+    establecerModoRelacionar(false);
+    establecerOrigenRelacion(null);
+    establecerModoEliminar(false);
+    establecerMostrarInvitar(false);
+    establecerMostrarFiltros(false);
+    establecerMostrarEventos(false);
+    establecerNodoSeleccionado(null);
+    establecerMensajeSistema('Modo mover activo. Selecciona la persona que quieres reubicar.');
+  };
+
+  const cancelarModoMover = () => {
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
+  };
+
+  const seleccionarNodoParaMover = (persona) => {
+    if (!persona?.id) return;
+
+    establecerNodoEnMovimiento(persona);
+    establecerNodoSeleccionado(null);
+    establecerMensajeSistema(`Selecciona una generación o toca otra persona para mover a ${persona.nombre} como pareja.`);
+  };
+
+  const moverNodoAGeneracion = (generacionDestino) => {
+    if (!nodoEnMovimiento || !arbol?._id) return;
+
+    const unionActual = obtenerUnionDeNodo(nodoEnMovimiento.id);
+    let hilosTrabajo = [...hilos];
+
+    if (unionActual) {
+      const parejaActual = obtenerParejaDeNodo(nodoEnMovimiento.id);
+      const confirmado = window.confirm(
+        `${nodoEnMovimiento.nombre} está en una relación${parejaActual?.nombre ? ` con ${parejaActual.nombre}` : ''}. Para moverlo como individual se quitará esa relación. ¿Deseas continuar?`
+      );
+
+      if (!confirmado) return;
+
+      hilosTrabajo = hilosTrabajo.filter(hilo => String(hilo.id) !== String(unionActual.id));
+      registrarEliminacionHiloPendiente(unionActual.id);
+    }
+
+    const filaDestino = obtenerSiguienteFilaDesdeLista(nodos, generacionDestino, nodoEnMovimiento.id);
+
+    const nodosTrabajo = nodos.map(nodo => {
+      if (String(nodo.id) !== String(nodoEnMovimiento.id)) return nodo;
+
+      return {
+        ...nodo,
+        generacion: Number(generacionDestino),
+        fila: filaDestino
+      };
+    });
+
+    registrarCambioNodoPendiente(nodoEnMovimiento.id, {
+      generacion: Number(generacionDestino),
+      fila: filaDestino
+    });
+
+    const resultadoAjustes = aplicarAjustesEstructurales({
+      nodosBase: nodosTrabajo,
+      hilosBase: hilosTrabajo
+    });
+
+    const detalles = [];
+
+    if (resultadoAjustes.hilosEliminados.length > 0) {
+      detalles.push('Se quitaron relaciones padre/hijo que ya no tenían sentido por la generación.');
+    }
+
+    if (resultadoAjustes.huboNormalizacion) {
+      detalles.push('Las generaciones se recorrieron automáticamente para iniciar desde Generación I.');
+    }
+
+    establecerMensajeSistema(
+      `${nodoEnMovimiento.nombre} fue reubicado. ${detalles.join(' ')} Presiona Guardar cambios para aplicarlo.`
+    );
+    establecerNodoEnMovimiento(null);
+  };
+
+  const moverNodoComoPareja = (personaDestino) => {
+    if (!nodoEnMovimiento || !personaDestino || !arbol?._id) return;
+
+    if (String(nodoEnMovimiento.id) === String(personaDestino.id)) {
+      return;
+    }
+
+    const unionDestino = obtenerUnionDeNodo(personaDestino.id);
+
+    if (unionDestino && String(unionDestino.nodoOrigenId) !== String(nodoEnMovimiento.id) && String(unionDestino.nodoDestinoId) !== String(nodoEnMovimiento.id)) {
+      window.alert(`${personaDestino.nombre} ya tiene una relación de pareja. Primero elimina esa relación o elige otra persona.`);
+      return;
+    }
+
+    const unionActual = obtenerUnionDeNodo(nodoEnMovimiento.id);
+    const yaEstanUnidos =
+      unionActual &&
+      (
+        String(unionActual.nodoOrigenId) === String(personaDestino.id) ||
+        String(unionActual.nodoDestinoId) === String(personaDestino.id)
+      );
+
+    const confirmado = window.confirm(
+      yaEstanUnidos
+        ? `¿Deseas mover a ${nodoEnMovimiento.nombre} junto a ${personaDestino.nombre}?`
+        : `¿Deseas mover a ${nodoEnMovimiento.nombre} como pareja de ${personaDestino.nombre}?`
+    );
+
+    if (!confirmado) return;
+
+    let hilosTrabajo = [...hilos];
+
+    if (unionActual && !yaEstanUnidos) {
+      hilosTrabajo = hilosTrabajo.filter(hilo => String(hilo.id) !== String(unionActual.id));
+      registrarEliminacionHiloPendiente(unionActual.id);
+    }
+
+    const nodosTrabajo = nodos.map(nodo => {
+      if (String(nodo.id) !== String(nodoEnMovimiento.id)) return nodo;
+
+      return {
+        ...nodo,
+        generacion: Number(personaDestino.generacion),
+        fila: Number(personaDestino.fila)
+      };
+    });
+
+    registrarCambioNodoPendiente(nodoEnMovimiento.id, {
+      generacion: Number(personaDestino.generacion),
+      fila: Number(personaDestino.fila)
+    });
+
+    if (!yaEstanUnidos) {
+      if (
+        existeRelacionActiva(personaDestino.id, nodoEnMovimiento.id, 'pareja') ||
+        existeRelacionPendiente(personaDestino.id, nodoEnMovimiento.id, 'pareja')
+      ) {
+        window.alert('Esta relación de pareja ya existe en el árbol.');
+        establecerNodoEnMovimiento(null);
+        establecerModoMover(false);
+        return;
+      }
+
+      const tempHiloId = generarIdTemporal('hilo');
+
+      const hiloTemporal = {
+        id: tempHiloId,
+        _id: tempHiloId,
+        arbol: arbol._id,
+        nodoOrigen: personaDestino.id,
+        nodoDestino: nodoEnMovimiento.id,
+        nodoOrigenId: personaDestino.id,
+        nodoDestinoId: nodoEnMovimiento.id,
+        tipoRelacion: 'pareja',
+        estado: 'Activa'
+      };
+
+      hilosTrabajo = [...hilosTrabajo, hiloTemporal];
+
+      registrarCambioPendiente({
+        tipo: 'crearHilo',
+        tempId: tempHiloId,
+        payload: {
+          arbolId: arbol._id,
+          nodoOrigenId: personaDestino.id,
+          nodoDestinoId: nodoEnMovimiento.id,
+          tipoRelacion: 'pareja'
+        }
+      });
+    }
+
+    const resultadoAjustes = aplicarAjustesEstructurales({
+      nodosBase: nodosTrabajo,
+      hilosBase: hilosTrabajo
+    });
+
+    const detalles = [];
+
+    if (resultadoAjustes.hilosEliminados.length > 0) {
+      detalles.push('Se quitaron relaciones padre/hijo que ya no tenían sentido por la generación.');
+    }
+
+    if (resultadoAjustes.huboNormalizacion) {
+      detalles.push('Las generaciones se recorrieron automáticamente para iniciar desde Generación I.');
+    }
+
+    establecerMensajeSistema(
+      `${nodoEnMovimiento.nombre} fue movido como pareja de ${personaDestino.nombre}. ${detalles.join(' ')} Presiona Guardar cambios para aplicarlo.`
+    );
+    establecerNodoEnMovimiento(null);
+    establecerModoMover(false);
+  };
+
+  const iniciarArrastreMovimiento = (persona, evento) => {
+    if (!esModoEdicion || !esUsuarioAdmin || !persona?.id) return;
+
+    seleccionarNodoParaMover(persona);
+
+    if (evento?.dataTransfer) {
+      evento.dataTransfer.effectAllowed = 'move';
+      evento.dataTransfer.setData('text/plain', String(persona.id));
+    }
   };
 
   const manejarEliminacion = (idPersona, nombrePersona) => {
@@ -2190,10 +3282,31 @@ export default function ArbolGenealogico() {
           payload.nodoOrigenId = mapaIdsTemporales[payload.nodoOrigenId] || payload.nodoOrigenId;
           payload.nodoDestinoId = mapaIdsTemporales[payload.nodoDestinoId] || payload.nodoDestinoId;
 
-          await apiFetch('/api/hilos/crear', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-          });
+          const relacionYaEstaEnEstadoActual = hilosOriginales.some(hilo =>
+            relacionCoincide(hilo, payload.nodoOrigenId, payload.nodoDestinoId, payload.tipoRelacion)
+          );
+
+          if (relacionYaEstaEnEstadoActual) {
+            continue;
+          }
+
+          try {
+            await apiFetch('/api/hilos/crear', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            });
+          } catch (error) {
+            const esDuplicado =
+              error.status === 400 &&
+              String(error.message || '').toLowerCase().includes('ya existe');
+
+            if (esDuplicado) {
+              console.warn('Relación duplicada omitida al guardar:', payload);
+              continue;
+            }
+
+            throw error;
+          }
         }
 
         if (cambio.tipo === 'actualizarHilo') {
@@ -2206,6 +3319,19 @@ export default function ArbolGenealogico() {
               descripcion: cambio.payload.descripcion
             })
           });
+        }
+
+        if (cambio.tipo === 'actualizarNodo') {
+          const nodoIdReal = mapaIdsTemporales[cambio.payload.nodoId] || cambio.payload.nodoId;
+
+          if (!esIdTemporal(nodoIdReal)) {
+            const { arbolId, nodoId, ...datosNodoActualizados } = cambio.payload;
+
+            await apiFetch(`/api/nodos/arbol/${arbolId}/${nodoIdReal}`, {
+              method: 'PATCH',
+              body: JSON.stringify(datosNodoActualizados)
+            });
+          }
         }
 
         if (cambio.tipo === 'eliminarNodo') {
@@ -2244,16 +3370,18 @@ export default function ArbolGenealogico() {
 
     const agrupadas = {};
     rels.forEach((rel) => {
-      const key = String(rel.filaIn);
-      if (!agrupadas[key]) agrupadas[key] = [];
-      agrupadas[key].push({ fila: rel.filaOut, hiloId: rel.hiloId });
+      const key = String(Math.round(rel.yIn));
+      if (!agrupadas[key]) {
+        agrupadas[key] = { yIn: rel.yIn, salidas: [] };
+      }
+      agrupadas[key].salidas.push({ y: rel.yOut, hiloId: rel.hiloId });
     });
 
-    return Object.keys(agrupadas).map(filaIn => (
+    return Object.keys(agrupadas).map(key => (
       <ConectorDinamico
-        key={`linea-${genOrigen}-${filaIn}`}
-        filaIn={Number(filaIn)}
-        salidas={agrupadas[filaIn]}
+        key={`linea-${genOrigen}-${key}`}
+        yIn={agrupadas[key].yIn}
+        salidas={agrupadas[key].salidas}
         modoEliminar={modoEliminar}
         alEliminarLinea={manejarEliminacionLinea}
       />
@@ -2277,10 +3405,15 @@ export default function ArbolGenealogico() {
           modoRelacionar={modoRelacionar}
           esDestinoValido={esDestinoValido}
           onOrigenClick={() => manejarClicOrigen(card)}
-          onDestinoClick={() => manejarClicDestino(card)}
+          onDestinoClick={(personaDestino) => manejarClicDestino(card, personaDestino?.id)}
           modoEliminar={modoEliminar}
           alEliminar={manejarEliminacion}
           alEliminarUnion={manejarEliminacionUnion}
+          modoMover={modoMover}
+          nodoEnMovimientoId={nodoEnMovimiento?.id || null}
+          alSeleccionarMover={seleccionarNodoParaMover}
+          alMoverComoPareja={moverNodoComoPareja}
+          alIniciarArrastreMovimiento={iniciarArrastreMovimiento}
         />
       );
     }
@@ -2295,9 +3428,14 @@ export default function ArbolGenealogico() {
         modoRelacionar={modoRelacionar}
         esDestinoValido={esDestinoValido}
         onOrigenClick={() => manejarClicOrigen(card)}
-        onDestinoClick={() => manejarClicDestino(card)}
+        onDestinoClick={(personaDestino) => manejarClicDestino(card, personaDestino?.id)}
         modoEliminar={modoEliminar}
         alEliminar={manejarEliminacion}
+        modoMover={modoMover}
+        nodoEnMovimientoId={nodoEnMovimiento?.id || null}
+        alSeleccionarMover={seleccionarNodoParaMover}
+        alMoverComoPareja={moverNodoComoPareja}
+        alIniciarArrastreMovimiento={iniciarArrastreMovimiento}
       />
     );
   };
@@ -2305,9 +3443,24 @@ export default function ArbolGenealogico() {
   const renderColumnaGeneracion = (generacion, etiquetaExtra = '') => {
     const cards = cardsPorGeneracion.get(Number(generacion)) || [];
     const filaPlaceholder = obtenerSiguienteFila(generacion);
+    const puedeSoltarMovimiento = modoMover && nodoEnMovimiento;
 
     return (
-      <div className="columna-generacion" style={{ height: `${ALTURA_LIENZO}px` }}>
+      <div
+        className={`columna-generacion ${puedeSoltarMovimiento ? 'columna-mover-activa' : ''}`}
+        style={{ height: `${ALTURA_LIENZO}px` }}
+        onDragOver={(e) => {
+          if (puedeSoltarMovimiento) {
+            e.preventDefault();
+          }
+        }}
+        onDrop={(e) => {
+          if (puedeSoltarMovimiento) {
+            e.preventDefault();
+            moverNodoAGeneracion(generacion);
+          }
+        }}
+      >
         <div className={`etiqueta-generacion ${etiquetaExtra ? 'fantasma' : ''}`}>
           {etiquetaExtra || `GENERACIÓN ${romano(generacion)}`}
         </div>
@@ -2322,6 +3475,14 @@ export default function ArbolGenealogico() {
           <Celda fila={filaPlaceholder}>
             <button className="placeholder-añadir" onClick={() => colocarEnGeneracion(generacion)}>
               <i className="bi bi-plus-circle"></i> Añadir Familia
+            </button>
+          </Celda>
+        )}
+
+        {modoMover && nodoEnMovimiento && (
+          <Celda fila={filaPlaceholder}>
+            <button className="placeholder-añadir" onClick={() => moverNodoAGeneracion(generacion)}>
+              <i className="bi bi-arrows-move"></i> Mover aquí
             </button>
           </Celda>
         )}
@@ -2615,6 +3776,7 @@ export default function ArbolGenealogico() {
   let claseLienzo = '';
   if (modoRelacionar && origenRelacion) claseLienzo = 'lienzo-oscurecido';
   if (modoEliminar) claseLienzo = 'lienzo-eliminar';
+  if (modoMover) claseLienzo = 'lienzo-mover';
 
   if (cargandoArbol) {
     return (
@@ -2688,6 +3850,21 @@ export default function ArbolGenealogico() {
         </div>
       )}
 
+      {modoMover && (
+        <div className="mensaje-colocacion-flotante">
+          {!nodoEnMovimiento ? (
+            <span>Modo Mover: <strong>selecciona la persona</strong> que quieres reubicar</span>
+          ) : (
+            <span>
+              Moviendo a <strong>{nodoEnMovimiento.nombre}</strong>. Elige una generación o toca otra persona para hacerlo pareja.
+            </span>
+          )}
+          <button className="btn-cancelar-colocacion" onClick={cancelarModoMover}>
+            <i className="bi bi-x-circle me-1"></i> Cancelar
+          </button>
+        </div>
+      )}
+
       {/* --- CABECERA --- */}
       <div className="cabecera-arbol d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3">
         <div>
@@ -2747,7 +3924,7 @@ export default function ArbolGenealogico() {
           <div className={`lienzo-arbol ${claseLienzo}`} onClick={() => establecerMostrarMenuExportar(false)}>
             <div style={{ display: 'flex', transform: `scale(${nivelZoom})`, transformOrigin: 'top left', transition: 'transform 0.2s ease-out' }}>
 
-              {modoColocacion && (
+              {(modoColocacion || (modoMover && nodoEnMovimiento)) && (
                 <>
                   {renderColumnaGeneracion(generacionesExistentes[0] - 1, 'NUEVOS ANCESTROS')}
                   <div className="columna-conector" style={{ height: `${ALTURA_LIENZO}px` }}>
@@ -2767,7 +3944,7 @@ export default function ArbolGenealogico() {
                 </React.Fragment>
               ))}
 
-              {modoColocacion && (
+              {(modoColocacion || (modoMover && nodoEnMovimiento)) && (
                 <>
                   <div className="columna-conector" style={{ height: `${ALTURA_LIENZO}px` }}>
                     {renderLineasGeneracion(generacionesExistentes[generacionesExistentes.length - 1])}
@@ -2869,14 +4046,26 @@ export default function ArbolGenealogico() {
                 title="Añadir un nuevo nodo al árbol"
                 onClick={() => {
                   establecerMostrarInvitar(true);
+                  establecerMostrandoFormularioPerfilSinCuenta(false);
                   establecerMostrarFiltros(false);
                   establecerNodoSeleccionado(null);
                   establecerModoRelacionar(false);
                   establecerModoEliminar(false);
+                  establecerModoMover(false);
+                  establecerNodoEnMovimiento(null);
                   establecerMostrarEventos(false);
                 }}
               >
                 <i className="bi bi-person-plus"></i> Añadir familiar
+              </button>
+              <div className="separador-vertical"></div>
+
+              <button
+                className={`btn-herramienta-edicion ${modoMover ? 'activo' : ''}`}
+                title="Mover una persona a otra generación o como pareja"
+                onClick={iniciarModoMover}
+              >
+                <i className="bi bi-arrows-move"></i> Mover
               </button>
               <div className="separador-vertical"></div>
 
@@ -2928,11 +4117,22 @@ export default function ArbolGenealogico() {
         </div>
 
         {/* --- PANELES LATERALES DERECHOS CONDICIONALES --- */}
-        {(nodoSeleccionado || mostrarFiltros || mostrarInvitar || mostrarEventos) && !modoColocacion && !modoRelacionar && !modoEliminar && (
+        {(nodoSeleccionado || mostrarFiltros || mostrarInvitar || mostrarEventos) && !modoColocacion && !modoRelacionar && !modoEliminar && !modoMover && (
           <div className="panel-lateral-derecho d-none d-lg-flex">
             {nodoSeleccionado ? (
               <div className="d-flex flex-column h-100 position-relative">
                 <button className="boton-cerrar-panel btn-cerrar-absoluto" onClick={() => establecerNodoSeleccionado(null)}><i className="bi bi-x"></i></button>
+
+                {esModoEdicion && esUsuarioAdmin && nodoSeleccionado.origen === 'perfil_sin_cuenta' && (
+                  <button
+                    type="button"
+                    className="boton-editar-perfil-sin-cuenta-panel"
+                    onClick={() => iniciarEditarPerfilSinCuenta(nodoSeleccionado)}
+                    title="Editar información de este familiar"
+                  >
+                    <i className="bi bi-pencil-fill"></i>
+                  </button>
+                )}
 
                 <div className="scroll-contenido flex-grow-1 p-4">
                   <div className="text-center mb-4 mt-2">
@@ -3186,83 +4386,245 @@ export default function ArbolGenealogico() {
             ) : mostrarInvitar ? (
               <div className="d-flex flex-column h-100 position-relative">
                 <div className="p-4 border-bottom d-flex justify-content-between align-items-center" style={{ borderColor: 'var(--borde-color)' }}>
-                  <h6 className="fw-bold m-0" style={{ color: 'var(--texto-principal)', fontSize: '0.9rem' }}>Añadir al Árbol</h6>
-                  <button className="boton-cerrar-panel" onClick={() => establecerMostrarInvitar(false)}>
+                  <div>
+                    <h6 className="fw-bold m-0" style={{ color: 'var(--texto-principal)', fontSize: '0.95rem' }}>
+                      {mostrandoFormularioPerfilSinCuenta
+                        ? (modoFormularioPerfilSinCuenta === 'editar' ? 'Editar perfil sin cuenta' : 'Crear perfil sin cuenta')
+                        : 'Añadir al Árbol'}
+                    </h6>
+                    <p className="text-muted small mb-0 mt-1">
+                      {mostrandoFormularioPerfilSinCuenta
+                        ? (modoFormularioPerfilSinCuenta === 'editar'
+                          ? 'Actualiza la información, fechas y recuerdos de este familiar.'
+                          : 'Agrega familiares sin necesidad de cuenta o verificación.')
+                        : 'Invita amigos reales o crea un familiar manual.'}
+                    </p>
+                  </div>
+
+                  <button className="boton-cerrar-panel" onClick={cerrarPanelInvitar}>
                     <i className="bi bi-x-lg"></i>
                   </button>
                 </div>
 
-                <div className="px-4 pt-3 pb-2">
-                  <button
-                    className="btn w-100 d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-sm"
-                    style={{ backgroundColor: 'var(--dorado)', color: 'white', border: 'none', padding: '8px 12px' }}
-                    onClick={iniciarCrearPerfilSinCuenta}
-                  >
-                    <i className="bi bi-person-add" style={{ fontSize: '0.85rem' }}></i><span style={{ fontSize: '0.80rem', fontWeight: 'bold' }}>Crear perfil sin cuenta</span>
-                  </button>
-                </div>
-
-                <div className="px-4 py-3 border-bottom" style={{ borderColor: 'var(--borde-color)' }}>
-                  <div className="buscador-invitaciones position-relative">
-                    <i className="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style={{ fontSize: '0.8rem' }}></i>
-                    <input
-                      type="text"
-                      className="form-control rounded-pill py-2"
-                      style={{ paddingLeft: '2.5rem' }}
-                      placeholder="Buscar por nombre..."
-                      value={busquedaInvitaciones}
-                      onChange={(e) => establecerBusquedaInvitaciones(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="scroll-contenido p-2 flex-grow-1">
-                  <p className="text-muted fw-bold px-3 mb-2 mt-2" style={{ fontSize: '0.65rem', letterSpacing: '0.5px' }}>SUGERENCIAS (AMIGOS)</p>
-
-                  {cargandoAmigos ? (
-                    <div className="text-center p-4">
-                      <div className="spinner-border spinner-border-sm text-warning" role="status"></div>
-                      <p className="text-muted small mt-2 mb-0">Buscando amigos...</p>
-                    </div>
-                  ) : amigosFiltrados.length > 0 ? (
-                    amigosFiltrados.map(amigo => (
-                      <div key={amigo.id} className="elemento-sugerencia d-flex align-items-center justify-content-between p-2 px-3 rounded-3 mb-1 mx-2">
-                        <div className="d-flex align-items-center gap-2">
-                          {amigo.img ? (
-                            <img
-                              src={amigo.img.startsWith('/uploads') ? `${URL_BASE_BACKEND}${amigo.img}` : amigo.img}
-                              alt={amigo.nombre}
-                              className="foto-perfil-pequena"
-                            />
+                {mostrandoFormularioPerfilSinCuenta ? (
+                  <div className="scroll-contenido p-4 flex-grow-1">
+                    <div className="formulario-perfil-sin-cuenta">
+                      <div className="encabezado-formulario-sin-cuenta">
+                        <div className="avatar-preview-sin-cuenta">
+                          {formularioPerfilSinCuenta.fotoPerfil ? (
+                            <img src={formularioPerfilSinCuenta.fotoPerfil} alt="Foto de perfil" />
                           ) : (
-                            <div className="foto-perfil-pequena rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ backgroundColor: amigo.color, fontSize: '0.75rem', fontWeight: 'bold', color: '#0f172a' }}>
-                              {amigo.iniciales}
-                            </div>
+                            <span>{obtenerIniciales(formularioPerfilSinCuenta.nombre || 'Nuevo Familiar')}</span>
                           )}
-                          <div>
-                            <p className="mb-0 fw-bold" style={{ fontSize: '0.80rem', color: 'var(--texto-principal)' }}>{amigo.nombre}</p>
-                            <p className="mb-0 text-muted" style={{ fontSize: '0.70rem' }}>{amigo.relacion}</p>
-                          </div>
+
+                          <label className="boton-cambiar-foto-sin-cuenta" title="Agregar foto de perfil">
+                            <i className="bi bi-camera-fill"></i>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={manejarFotoPrincipalPerfilSinCuenta}
+                            />
+                          </label>
                         </div>
-                        <button
-                          className="btn btn-outline-primary rounded-circle p-0 d-flex align-items-center justify-content-center flex-shrink-0"
-                          style={{ width: '26px', height: '26px' }}
-                          onClick={() => iniciarColocacion({ ...amigo, origen: 'usuario_real' })}
-                          title="Enviar invitación familiar"
-                        >
-                          <i className="bi bi-plus-lg" style={{ fontSize: '0.8rem' }}></i>
-                        </button>
+
+                        <div>
+                          <p className="titulo-mini-form-sin-cuenta mb-1">{modoFormularioPerfilSinCuenta === 'editar' ? 'Editar perfil familiar' : 'Perfil familiar'}</p>
+                          <p className="text-muted small mb-0">
+                            La primera foto se usará como avatar dentro del árbol.
+                          </p>
+                        </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center p-4">
-                      <i className="bi bi-people text-muted" style={{ fontSize: '2rem' }}></i>
-                      <p className="text-muted small mt-2 mb-0">
-                        No hay amigos disponibles para invitar. Recuerda que solo aparecen usuarios que se siguen mutuamente y que aún no están en este árbol.
-                      </p>
+
+                      <div className="campo-formulario-sin-cuenta">
+                        <label>Nombre completo</label>
+                        <input
+                          type="text"
+                          value={formularioPerfilSinCuenta.nombre}
+                          onChange={(e) => actualizarCampoPerfilSinCuenta('nombre', e.target.value)}
+                          placeholder="Ej. Celia Gallegos"
+                        />
+                      </div>
+
+                      <div className="grid-fechas-sin-cuenta">
+                        <div className="campo-formulario-sin-cuenta">
+                          <label>Fecha de nacimiento</label>
+                          <input
+                            type="date"
+                            value={formularioPerfilSinCuenta.fechaNacimiento}
+                            onChange={(e) => actualizarCampoPerfilSinCuenta('fechaNacimiento', e.target.value)}
+                          />
+                        </div>
+
+                        <div className="campo-formulario-sin-cuenta">
+                          <label>Fecha de deceso <span>opcional</span></label>
+                          <input
+                            type="date"
+                            value={formularioPerfilSinCuenta.fechaFallecimiento}
+                            onChange={(e) => actualizarCampoPerfilSinCuenta('fechaFallecimiento', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="campo-formulario-sin-cuenta">
+                        <label>Descripción <span>opcional</span></label>
+                        <textarea
+                          rows="4"
+                          value={formularioPerfilSinCuenta.descripcion}
+                          onChange={(e) => actualizarCampoPerfilSinCuenta('descripcion', e.target.value)}
+                          placeholder="Escribe una breve historia, recuerdo o descripción familiar..."
+                        />
+                      </div>
+
+                      <div className="bloque-galeria-sin-cuenta">
+                        <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+                          <div>
+                            <p className="titulo-mini-form-sin-cuenta mb-0">Fotos de galería</p>
+                            <p className="text-muted small mb-0">Puedes agregar hasta 8 fotos.</p>
+                          </div>
+
+                          <label className="boton-agregar-galeria-sin-cuenta">
+                            <i className="bi bi-images"></i>
+                            Agregar
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={manejarGaleriaPerfilSinCuenta}
+                            />
+                          </label>
+                        </div>
+
+                        {formularioPerfilSinCuenta.fotosGaleria.length > 0 ? (
+                          <div className="grid-galeria-sin-cuenta">
+                            {formularioPerfilSinCuenta.fotosGaleria.map((foto, indice) => (
+                              <div key={`${foto.slice(0, 20)}-${indice}`} className="miniatura-galeria-sin-cuenta">
+                                <img src={foto} alt={`Foto ${indice + 1}`} />
+                                <button
+                                  type="button"
+                                  onClick={() => quitarFotoGaleriaPerfilSinCuenta(indice)}
+                                  title="Quitar foto"
+                                >
+                                  <i className="bi bi-x"></i>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="estado-vacio-galeria-sin-cuenta">
+                            <i className="bi bi-image"></i>
+                            <span>Aún no agregas fotos de galería.</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {procesandoFotosPerfilSinCuenta && (
+                        <div className="alerta-procesando-fotos">
+                          <span className="spinner-border spinner-border-sm"></span>
+                          Cargando imágenes...
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="px-4 pt-3 pb-2">
+                      <button
+                        className="btn w-100 d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-sm"
+                        style={{ backgroundColor: 'var(--dorado)', color: 'white', border: 'none', padding: '9px 12px' }}
+                        onClick={iniciarCrearPerfilSinCuenta}
+                      >
+                        <i className="bi bi-person-add" style={{ fontSize: '0.85rem' }}></i>
+                        <span style={{ fontSize: '0.80rem', fontWeight: 'bold' }}>Crear perfil sin cuenta</span>
+                      </button>
+                    </div>
+
+                    <div className="px-4 py-3 border-bottom" style={{ borderColor: 'var(--borde-color)' }}>
+                      <div className="buscador-invitaciones position-relative">
+                        <i className="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style={{ fontSize: '0.8rem' }}></i>
+                        <input
+                          type="text"
+                          className="form-control rounded-pill py-2"
+                          style={{ paddingLeft: '2.5rem' }}
+                          placeholder="Buscar por nombre..."
+                          value={busquedaInvitaciones}
+                          onChange={(e) => establecerBusquedaInvitaciones(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="scroll-contenido p-2 flex-grow-1">
+                      <p className="text-muted fw-bold px-3 mb-2 mt-2" style={{ fontSize: '0.65rem', letterSpacing: '0.5px' }}>SUGERENCIAS (AMIGOS)</p>
+
+                      {cargandoAmigos ? (
+                        <div className="text-center p-4">
+                          <div className="spinner-border spinner-border-sm text-warning" role="status"></div>
+                          <p className="text-muted small mt-2 mb-0">Buscando amigos...</p>
+                        </div>
+                      ) : amigosFiltrados.length > 0 ? (
+                        amigosFiltrados.map(amigo => (
+                          <div key={amigo.id} className="elemento-sugerencia d-flex align-items-center justify-content-between p-2 px-3 rounded-3 mb-1 mx-2">
+                            <div className="d-flex align-items-center gap-2">
+                              {amigo.img ? (
+                                <img
+                                  src={amigo.img.startsWith('/uploads') ? `${URL_BASE_BACKEND}${amigo.img}` : amigo.img}
+                                  alt={amigo.nombre}
+                                  className="foto-perfil-pequena"
+                                />
+                              ) : (
+                                <div className="foto-perfil-pequena rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ backgroundColor: amigo.color, fontSize: '0.75rem', fontWeight: 'bold', color: '#0f172a' }}>
+                                  {amigo.iniciales}
+                                </div>
+                              )}
+                              <div>
+                                <p className="mb-0 fw-bold" style={{ fontSize: '0.80rem', color: 'var(--texto-principal)' }}>{amigo.nombre}</p>
+                                <p className="mb-0 text-muted" style={{ fontSize: '0.70rem' }}>{amigo.relacion}</p>
+                              </div>
+                            </div>
+                            <button
+                              className="btn btn-outline-primary rounded-circle p-0 d-flex align-items-center justify-content-center flex-shrink-0"
+                              style={{ width: '26px', height: '26px' }}
+                              onClick={() => iniciarColocacion({ ...amigo, origen: 'usuario_real' })}
+                              title="Enviar invitación familiar"
+                            >
+                              <i className="bi bi-plus-lg" style={{ fontSize: '0.8rem' }}></i>
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center p-4">
+                          <i className="bi bi-people text-muted" style={{ fontSize: '2rem' }}></i>
+                          <p className="text-muted small mt-2 mb-0">
+                            No hay amigos disponibles para invitar. Recuerda que solo aparecen usuarios que se siguen mutuamente y que aún no están en este árbol.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {mostrandoFormularioPerfilSinCuenta && (
+                  <div className="p-4 border-top d-flex align-items-center gap-2" style={{ borderColor: 'var(--borde-color)', backgroundColor: 'var(--fondo-tarjeta)' }}>
+                    <button
+                      type="button"
+                      className="btn-volver-form-sin-cuenta"
+                      onClick={volverASugerenciasDesdePerfilSinCuenta}
+                      disabled={procesandoFotosPerfilSinCuenta}
+                    >
+                      <i className="bi bi-arrow-left"></i>
+                      Volver
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-crear-form-sin-cuenta"
+                      onClick={prepararPerfilSinCuenta}
+                      disabled={procesandoFotosPerfilSinCuenta}
+                    >
+                      <i className="bi bi-check2-circle"></i>
+                      {modoFormularioPerfilSinCuenta === 'editar' ? 'Actualizar perfil' : 'Preparar perfil'}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : mostrarEventos ? (
               <div className="d-flex flex-column h-100 position-relative">

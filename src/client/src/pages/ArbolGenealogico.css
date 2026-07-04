@@ -2316,3 +2316,427 @@
     color: #fde68a;
     border-color: rgba(234, 179, 8, 0.35);
 }
+
+/* =========================================
+   MODO MOVER NODOS DEL ÁRBOL
+   ========================================= */
+
+.lienzo-mover .tarjeta-nodo-unificada {
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.lienzo-mover .fila-persona {
+    cursor: grab;
+}
+
+.lienzo-mover .fila-persona:active {
+    cursor: grabbing;
+}
+
+.fila-persona.nodo-en-movimiento {
+    background-color: rgba(203, 164, 52, 0.12);
+    border-radius: 16px;
+    outline: 2px solid rgba(203, 164, 52, 0.45);
+    outline-offset: 3px;
+}
+
+.fila-persona.destino-mover {
+    border-radius: 16px;
+}
+
+.fila-persona.destino-mover:hover {
+    background-color: rgba(203, 164, 52, 0.10);
+    outline: 2px dashed rgba(203, 164, 52, 0.55);
+    outline-offset: 3px;
+}
+
+.columna-generacion.columna-mover-activa {
+    border-radius: 22px;
+}
+
+.columna-generacion.columna-mover-activa:hover .etiqueta-generacion {
+    box-shadow: 0 8px 22px rgba(203, 164, 52, 0.18);
+}
+
+.lienzo-mover .placeholder-añadir {
+    border-style: dashed;
+    border-color: rgba(203, 164, 52, 0.55);
+    color: var(--dorado-oscuro);
+    background-color: rgba(203, 164, 52, 0.08);
+}
+
+.lienzo-mover .placeholder-añadir:hover {
+    background-color: rgba(203, 164, 52, 0.16);
+    transform: translateY(-1px);
+}
+
+[data-tema="oscuro"] .fila-persona.nodo-en-movimiento {
+    background-color: rgba(234, 179, 8, 0.14);
+    outline-color: rgba(234, 179, 8, 0.45);
+}
+
+[data-tema="oscuro"] .fila-persona.destino-mover:hover {
+    background-color: rgba(234, 179, 8, 0.12);
+    outline-color: rgba(234, 179, 8, 0.50);
+}
+
+[data-tema="oscuro"] .lienzo-mover .placeholder-añadir {
+    border-color: rgba(234, 179, 8, 0.45);
+    color: #fde68a;
+    background-color: rgba(234, 179, 8, 0.10);
+}
+
+/* =========================================
+   FORMULARIO PERFIL SIN CUENTA
+   ========================================= */
+
+.formulario-perfil-sin-cuenta {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.encabezado-formulario-sin-cuenta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid var(--borde-color);
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at top right, rgba(203, 164, 52, 0.10), transparent 35%),
+        var(--fondo-app);
+}
+
+.avatar-preview-sin-cuenta {
+    width: 82px;
+    min-width: 82px;
+    height: 82px;
+    border-radius: 999px;
+    background-color: rgba(203, 164, 52, 0.12);
+    border: 3px solid var(--fondo-tarjeta);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: visible;
+}
+
+.avatar-preview-sin-cuenta img {
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    object-fit: cover;
+    display: block;
+}
+
+.avatar-preview-sin-cuenta span {
+    color: var(--texto-principal);
+    font-size: 1.5rem;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+}
+
+.boton-cambiar-foto-sin-cuenta {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background-color: var(--dorado);
+    color: #ffffff;
+    border: 2px solid var(--fondo-tarjeta);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.boton-cambiar-foto-sin-cuenta:hover {
+    background-color: var(--dorado-oscuro);
+    transform: translateY(-1px);
+}
+
+.boton-cambiar-foto-sin-cuenta input,
+.boton-agregar-galeria-sin-cuenta input {
+    display: none;
+}
+
+.titulo-mini-form-sin-cuenta {
+    color: var(--texto-principal);
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+.campo-formulario-sin-cuenta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.campo-formulario-sin-cuenta label {
+    color: var(--texto-secundario);
+    font-size: 0.70rem;
+    font-weight: 900;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+}
+
+.campo-formulario-sin-cuenta label span {
+    color: var(--dorado);
+    font-weight: 800;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.campo-formulario-sin-cuenta input,
+.campo-formulario-sin-cuenta textarea {
+    width: 100%;
+    border: 1px solid var(--borde-color);
+    border-radius: 14px;
+    padding: 11px 13px;
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    font-size: 0.85rem;
+    font-weight: 600;
+    outline: none;
+    transition: all 0.18s ease;
+}
+
+.campo-formulario-sin-cuenta textarea {
+    resize: vertical;
+    min-height: 110px;
+    line-height: 1.45;
+    font-weight: 500;
+}
+
+.campo-formulario-sin-cuenta input:focus,
+.campo-formulario-sin-cuenta textarea:focus {
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 3px rgba(203, 164, 52, 0.15);
+    background-color: var(--fondo-tarjeta);
+}
+
+.grid-fechas-sin-cuenta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.bloque-galeria-sin-cuenta {
+    border: 1px solid var(--borde-color);
+    border-radius: 18px;
+    padding: 14px;
+    background-color: var(--fondo-app);
+}
+
+.boton-agregar-galeria-sin-cuenta {
+    border: 1px solid rgba(203, 164, 52, 0.35);
+    background-color: rgba(203, 164, 52, 0.10);
+    color: var(--dorado-oscuro);
+    border-radius: 999px;
+    padding: 7px 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.74rem;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+}
+
+.boton-agregar-galeria-sin-cuenta:hover {
+    background-color: var(--dorado);
+    color: #ffffff;
+    border-color: var(--dorado);
+}
+
+.grid-galeria-sin-cuenta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 9px;
+}
+
+.miniatura-galeria-sin-cuenta {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-tarjeta);
+}
+
+.miniatura-galeria-sin-cuenta img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.miniatura-galeria-sin-cuenta button {
+    position: absolute;
+    right: 5px;
+    top: 5px;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: none;
+    background-color: rgba(15, 23, 42, 0.78);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.miniatura-galeria-sin-cuenta button:hover {
+    background-color: #ef4444;
+}
+
+.estado-vacio-galeria-sin-cuenta {
+    min-height: 92px;
+    border: 1px dashed var(--borde-color);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--texto-secundario);
+    font-size: 0.78rem;
+    text-align: center;
+    padding: 12px;
+}
+
+.estado-vacio-galeria-sin-cuenta i {
+    font-size: 1.35rem;
+    color: var(--dorado);
+}
+
+.alerta-procesando-fotos {
+    border: 1px solid rgba(203, 164, 52, 0.20);
+    background-color: rgba(203, 164, 52, 0.10);
+    color: var(--dorado-oscuro);
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.80rem;
+    font-weight: 700;
+}
+
+.btn-volver-form-sin-cuenta,
+.btn-crear-form-sin-cuenta {
+    border: none;
+    border-radius: 999px;
+    padding: 10px 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-size: 0.80rem;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.btn-volver-form-sin-cuenta {
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+    border: 1px solid var(--borde-color);
+}
+
+.btn-volver-form-sin-cuenta:hover {
+    color: var(--texto-principal);
+    background-color: var(--hover-menu);
+}
+
+.btn-crear-form-sin-cuenta {
+    flex: 1;
+    background-color: var(--dorado);
+    color: #ffffff;
+}
+
+.btn-crear-form-sin-cuenta:hover {
+    background-color: var(--dorado-oscuro);
+}
+
+.btn-volver-form-sin-cuenta:disabled,
+.btn-crear-form-sin-cuenta:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+[data-tema="oscuro"] .encabezado-formulario-sin-cuenta,
+[data-tema="oscuro"] .bloque-galeria-sin-cuenta {
+    background-color: rgba(15, 23, 42, 0.45);
+}
+
+[data-tema="oscuro"] .campo-formulario-sin-cuenta input,
+[data-tema="oscuro"] .campo-formulario-sin-cuenta textarea {
+    background-color: rgba(15, 23, 42, 0.55);
+}
+
+@media (max-width: 768px) {
+    .grid-fechas-sin-cuenta {
+        grid-template-columns: 1fr;
+    }
+
+    .grid-galeria-sin-cuenta {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .encabezado-formulario-sin-cuenta {
+        align-items: flex-start;
+    }
+}
+/* =========================================
+   EDITAR PERFIL SIN CUENTA DESDE PANEL
+   ========================================= */
+
+.boton-editar-perfil-sin-cuenta-panel {
+    position: absolute;
+    top: 1.15rem;
+    right: 3.35rem;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid rgba(203, 164, 52, 0.35);
+    background-color: rgba(203, 164, 52, 0.12);
+    color: var(--dorado-oscuro);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 12;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.boton-editar-perfil-sin-cuenta-panel:hover {
+    background-color: var(--dorado);
+    color: #ffffff;
+    border-color: var(--dorado);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(203, 164, 52, 0.22);
+}
+
+.boton-editar-perfil-sin-cuenta-panel i {
+    font-size: 0.86rem;
+}
+
+[data-tema="oscuro"] .boton-editar-perfil-sin-cuenta-panel {
+    color: #fde68a;
+    background-color: rgba(234, 179, 8, 0.12);
+    border-color: rgba(234, 179, 8, 0.32);
+}
+
+@media (max-width: 991.98px) {
+    .boton-editar-perfil-sin-cuenta-panel {
+        right: 3.1rem;
+    }
+}

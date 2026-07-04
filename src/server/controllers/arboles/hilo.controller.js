@@ -65,6 +65,32 @@ const usuarioEsParteDeRelacion = async ({ arbolId, hilo, usuarioId }) => {
     return nodosRelacion.some(nodo => sonMismoId(nodo.usuario, usuarioId));
 };
 
+const construirFiltroRelacionExacta = ({ arbolId, nodoOrigenId, nodoDestinoId, tipoRelacion }) => {
+    if (TIPOS_RELACION_PAREJA.includes(tipoRelacion)) {
+        return {
+            arbol: arbolId,
+            tipoRelacion: { $in: TIPOS_RELACION_PAREJA },
+            $or: [
+                { nodoOrigen: nodoOrigenId, nodoDestino: nodoDestinoId },
+                { nodoOrigen: nodoDestinoId, nodoDestino: nodoOrigenId }
+            ]
+        };
+    }
+
+    return {
+        arbol: arbolId,
+        nodoOrigen: nodoOrigenId,
+        nodoDestino: nodoDestinoId,
+        tipoRelacion
+    };
+};
+
+const poblarHilo = async (hiloId) => {
+    return Hilo.findById(hiloId)
+        .populate('nodoOrigen')
+        .populate('nodoDestino');
+};
+
 const crearHilo = async (req, res) => {
     try {
         const {
@@ -138,6 +164,38 @@ const crearHilo = async (req, res) => {
             }
         }
 
+        const filtroRelacion = construirFiltroRelacionExacta({
+            arbolId,
+            nodoOrigenId,
+            nodoDestinoId,
+            tipoRelacion
+        });
+
+        const relacionExistente = await Hilo.findOne(filtroRelacion);
+
+        if (relacionExistente) {
+            relacionExistente.estado = 'Activa';
+            relacionExistente.creadoPor = relacionExistente.creadoPor || req.usuario.id;
+
+            if (TIPOS_RELACION_PAREJA.includes(tipoRelacion)) {
+                relacionExistente.tipoRelacion = tipoRelacion;
+            }
+
+            if (fechaInicio !== undefined) relacionExistente.fechaInicio = fechaInicio || null;
+            if (fechaFin !== undefined) relacionExistente.fechaFin = fechaFin || null;
+            if (descripcion !== undefined) relacionExistente.descripcion = descripcion;
+
+            await relacionExistente.save();
+
+            const hiloPoblado = await poblarHilo(relacionExistente._id);
+
+            return res.status(200).json({
+                mensaje: 'La relación ya existía y fue reactivada/actualizada correctamente.',
+                hilo: hiloPoblado || relacionExistente,
+                yaExistia: true
+            });
+        }
+
         const nuevoHilo = await Hilo.create({
             arbol: arbolId,
             nodoOrigen: nodoOrigenId,
@@ -150,18 +208,62 @@ const crearHilo = async (req, res) => {
             descripcion
         });
 
-        const hiloPoblado = await Hilo.findById(nuevoHilo._id)
-            .populate('nodoOrigen')
-            .populate('nodoDestino');
+        const hiloPoblado = await poblarHilo(nuevoHilo._id);
 
         res.status(201).json({
             mensaje: 'Relación creada correctamente',
-            hilo: hiloPoblado || nuevoHilo
+            hilo: hiloPoblado || nuevoHilo,
+            yaExistia: false
         });
     } catch (error) {
         console.error('❌ Error al crear hilo:', error);
 
         if (error.code === 11000) {
+            try {
+                const {
+                    arbolId,
+                    nodoOrigenId,
+                    nodoDestinoId,
+                    tipoRelacion,
+                    fechaInicio = null,
+                    fechaFin = null,
+                    descripcion = ''
+                } = req.body;
+
+                const filtroRelacion = construirFiltroRelacionExacta({
+                    arbolId,
+                    nodoOrigenId,
+                    nodoDestinoId,
+                    tipoRelacion
+                });
+
+                const relacionExistente = await Hilo.findOne(filtroRelacion);
+
+                if (relacionExistente) {
+                    relacionExistente.estado = 'Activa';
+
+                    if (TIPOS_RELACION_PAREJA.includes(tipoRelacion)) {
+                        relacionExistente.tipoRelacion = tipoRelacion;
+                    }
+
+                    if (fechaInicio !== undefined) relacionExistente.fechaInicio = fechaInicio || null;
+                    if (fechaFin !== undefined) relacionExistente.fechaFin = fechaFin || null;
+                    if (descripcion !== undefined) relacionExistente.descripcion = descripcion;
+
+                    await relacionExistente.save();
+
+                    const hiloPoblado = await poblarHilo(relacionExistente._id);
+
+                    return res.status(200).json({
+                        mensaje: 'La relación ya existía y fue reactivada/actualizada correctamente.',
+                        hilo: hiloPoblado || relacionExistente,
+                        yaExistia: true
+                    });
+                }
+            } catch (errorRecuperacion) {
+                console.error('❌ Error al recuperar relación duplicada:', errorRecuperacion);
+            }
+
             return res.status(400).json({
                 mensaje: 'Esta relación ya existe en el árbol.'
             });
@@ -310,9 +412,7 @@ const actualizarHilo = async (req, res) => {
 
         await hilo.save();
 
-        const hiloActualizado = await Hilo.findById(hilo._id)
-            .populate('nodoOrigen')
-            .populate('nodoDestino');
+        const hiloActualizado = await poblarHilo(hilo._id);
 
         res.status(200).json({
             mensaje: 'Relación actualizada correctamente',
@@ -324,6 +424,12 @@ const actualizarHilo = async (req, res) => {
         if (error.name === 'ValidationError') {
             return res.status(400).json({
                 mensaje: error.message || 'La relación no es válida.'
+            });
+        }
+
+        if (error.code === 11000) {
+            return res.status(400).json({
+                mensaje: 'Ya existe otra relación igual en este árbol.'
             });
         }
 
