@@ -760,3 +760,1424 @@
         justify-content: center;
     }
 }
+
+/* =========================================
+   WIDGET PRÓXIMOS EVENTOS / ANIVERSARIOS REALES
+   ========================================= */
+.lista-eventos-inicio {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.evento-inicio-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 10px;
+    border-radius: 14px;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+.evento-inicio-card:hover {
+    transform: translateY(-1px);
+}
+
+.info-evento-inicio {
+    flex: 1;
+    min-width: 0;
+    padding-top: 2px;
+}
+
+.titulo-evento-inicio {
+    font-size: 0.95rem;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.detalle-evento-inicio,
+.arbol-evento-inicio {
+    color: var(--texto-secundario);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 3px;
+}
+
+.detalle-evento-inicio i,
+.arbol-evento-inicio i {
+    color: var(--dorado-oscuro);
+    font-size: 0.82rem;
+    margin-top: 1px;
+    flex-shrink: 0;
+}
+
+.estado-eventos-inicio {
+    margin-top: 14px;
+    padding: 16px 14px;
+    border: 1px solid var(--borde-color);
+    border-radius: 14px;
+    color: var(--texto-secundario);
+    background-color: var(--fondo-app);
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+}
+
+.estado-eventos-inicio.error {
+    color: #b91c1c;
+    background-color: #fef2f2;
+    border-color: #fecaca;
+}
+
+.estado-eventos-inicio.vacio {
+    flex-direction: column;
+    text-align: center;
+    gap: 6px;
+    padding: 22px 16px;
+}
+
+.estado-eventos-inicio.vacio i {
+    color: var(--dorado);
+    font-size: 1.7rem;
+}
+
+.estado-eventos-inicio.vacio span {
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.btn-recargar-eventos {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.btn-recargar-eventos:hover:not(:disabled) {
+    color: var(--dorado-oscuro);
+    border-color: rgba(203, 161, 53, 0.4);
+    background-color: #fef8eb;
+}
+
+.btn-recargar-eventos:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.girando {
+    animation: girarEventoInicio 0.8s linear infinite;
+}
+
+@keyframes girarEventoInicio {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+[data-tema="oscuro"] .estado-eventos-inicio.error {
+    color: #fecaca;
+    background-color: rgba(127, 29, 29, 0.25);
+    border-color: rgba(248, 113, 113, 0.25);
+}
+
+[data-tema="oscuro"] .btn-recargar-eventos:hover:not(:disabled) {
+    background-color: rgba(234, 179, 8, 0.12);
+    color: #fde68a;
+}
+
+
+/* =========================================
+   SELECTOR DE TIPO DE PUBLICACIÓN
+   ========================================= */
+.modal-selector-tipo-publicacion {
+    width: min(920px, calc(100vw - 32px));
+    min-height: 340px;
+    background-color: var(--fondo-tarjeta);
+    border-radius: 28px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+    overflow: hidden;
+    position: relative;
+    animation: slideUp 0.25s ease-out;
+}
+
+.btn-cerrar-selector {
+    top: 16px;
+    right: 18px;
+    z-index: 20;
+}
+
+.selector-tipo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 340px;
+}
+
+.opcion-tipo-card {
+    border: none;
+    text-align: left;
+    padding: 44px 38px;
+    min-height: 340px;
+    cursor: pointer;
+    transition: transform 0.22s ease, filter 0.22s ease, box-shadow 0.22s ease;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+
+.opcion-tipo-card:hover {
+    transform: translateY(-2px);
+    z-index: 2;
+}
+
+.opcion-tipo-card.historico {
+    background-color: var(--dorado);
+    color: #ffffff;
+}
+
+.opcion-tipo-card.familiar {
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-principal);
+}
+
+.opcion-tipo-card.familiar:hover {
+    box-shadow: inset 0 0 0 2px rgba(203, 164, 52, 0.25);
+}
+
+.opcion-tipo-encabezado {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.opcion-tipo-icono {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    flex-shrink: 0;
+}
+
+.opcion-tipo-card.historico .opcion-tipo-icono {
+    border: 3px solid rgba(255, 255, 255, 0.95);
+    color: #ffffff;
+}
+
+.opcion-tipo-card.familiar .opcion-tipo-icono {
+    color: var(--texto-secundario);
+}
+
+.opcion-tipo-card h3 {
+    margin: 0;
+    font-size: clamp(1.35rem, 2vw, 1.9rem);
+    font-weight: 800;
+    line-height: 1.1;
+    font-family: 'Inter', sans-serif;
+}
+
+.opcion-tipo-linea {
+    height: 3px;
+    width: 100%;
+    border-radius: 999px;
+}
+
+.opcion-tipo-card.historico .opcion-tipo-linea {
+    background-color: rgba(255, 255, 255, 0.95);
+}
+
+.opcion-tipo-card.familiar .opcion-tipo-linea {
+    background-color: rgba(15, 23, 42, 0.55);
+}
+
+.opcion-tipo-card p {
+    margin: 0;
+    font-size: clamp(0.95rem, 1.5vw, 1.15rem);
+    line-height: 1.35;
+    font-weight: 700;
+}
+
+.opcion-tipo-card.historico p {
+    color: rgba(255, 255, 255, 0.96);
+}
+
+.opcion-tipo-card.familiar p {
+    color: #555555;
+}
+
+/* =========================================
+   CABECERA ÚNICA DEL MODAL DE PUBLICACIÓN
+   ========================================= */
+.modal-cabecera-unica {
+    padding: 18px 68px 16px 26px;
+    border-bottom: 1px solid var(--borde-color);
+}
+
+.titulo-modal-publicacion {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.icono-modal-publicacion {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.25rem;
+    background-color: #fef8eb;
+    color: var(--dorado-oscuro);
+}
+
+.modal-cabecera-unica.familiar .icono-modal-publicacion {
+    background-color: var(--hover-menu);
+    color: var(--texto-secundario);
+}
+
+.titulo-modal-publicacion h4 {
+    margin: 0;
+    color: var(--texto-principal);
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+
+.titulo-modal-publicacion p {
+    margin: 2px 0 0;
+    color: var(--texto-secundario);
+    font-size: 0.80rem;
+    line-height: 1.3;
+}
+
+[data-tema="oscuro"] .opcion-tipo-card.familiar {
+    background-color: var(--fondo-tarjeta);
+}
+
+[data-tema="oscuro"] .opcion-tipo-card.familiar .opcion-tipo-linea {
+    background-color: rgba(226, 232, 240, 0.45);
+}
+
+[data-tema="oscuro"] .opcion-tipo-card.familiar p {
+    color: var(--texto-secundario);
+}
+
+@media (max-width: 768px) {
+    .modal-selector-tipo-publicacion {
+        width: min(440px, calc(100vw - 24px));
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+        border-radius: 24px;
+    }
+
+    .selector-tipo-grid {
+        grid-template-columns: 1fr;
+        min-height: auto;
+    }
+
+    .opcion-tipo-card {
+        min-height: 235px;
+        padding: 32px 26px;
+    }
+
+    .modal-cabecera-unica {
+        padding: 18px 62px 16px 20px;
+    }
+}
+
+@media (max-width: 576px) {
+    .modal-publicacion {
+        height: auto;
+        max-height: calc(100vh - 24px);
+        border-radius: 20px;
+    }
+
+    .modal-cuerpo {
+        display: block;
+    }
+
+    .textarea-publicacion {
+        min-height: 150px;
+    }
+}
+
+/* =========================================
+   HERRAMIENTAS DEL MODAL DE PUBLICACIÓN
+   ========================================= */
+.grupo-herramientas-modal {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-herramienta-modal {
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    border: 1px solid var(--borde-color);
+    background-color: transparent;
+    color: var(--texto-secundario);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-size: 1.05rem;
+    padding: 0;
+}
+
+.btn-herramienta-modal:hover:not(:disabled),
+.btn-herramienta-modal.activo {
+    background-color: #fef8eb;
+    color: var(--dorado-oscuro);
+    border-color: rgba(203, 161, 53, 0.36);
+    transform: translateY(-1px);
+}
+
+.btn-herramienta-modal:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+}
+
+.btn-herramienta-modal .icono-arroba {
+    font-weight: 900;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.contenedor-vista-previa {
+    background-color: var(--fondo-app) !important;
+    border-color: var(--borde-color) !important;
+    overflow: hidden;
+}
+
+.btn-eliminar-preview {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: none;
+    background-color: rgba(220, 38, 38, 0.95);
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 4;
+    transition: all 0.18s ease;
+}
+
+.btn-eliminar-preview:hover {
+    transform: scale(1.05);
+    background-color: #b91c1c;
+}
+
+.chips-publicacion-modal {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.chip-publicacion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border: 1px solid var(--borde-color);
+    color: var(--texto-principal);
+    background-color: var(--fondo-app);
+}
+
+.chip-publicacion.ubicacion {
+    color: var(--dorado-oscuro);
+    background-color: #fef8eb;
+    border-color: rgba(203, 161, 53, 0.25);
+}
+
+.chip-publicacion.mencion {
+    color: #2563eb;
+    background-color: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.16);
+}
+
+.chip-publicacion.etiqueta {
+    color: #7c3aed;
+    background-color: rgba(124, 58, 237, 0.08);
+    border-color: rgba(124, 58, 237, 0.16);
+}
+
+.chip-publicacion button {
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    border: none;
+    background-color: transparent;
+    color: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0.75;
+}
+
+.chip-publicacion button:hover {
+    background-color: rgba(15, 23, 42, 0.08);
+    opacity: 1;
+}
+
+.panel-herramienta-publicacion {
+    margin-top: 14px;
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-app);
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+    animation: slideUp 0.2s ease-out;
+}
+
+.panel-emojis {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+}
+
+.panel-emojis button {
+    border: none;
+    background-color: var(--fondo-tarjeta);
+    border-radius: 12px;
+    min-height: 36px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.panel-emojis button:hover {
+    background-color: #fef8eb;
+    transform: translateY(-1px);
+}
+
+.input-ubicacion-publicacion {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--borde-color);
+    border-radius: 14px;
+    background-color: var(--fondo-tarjeta);
+    padding: 10px 12px;
+}
+
+.input-ubicacion-publicacion i {
+    color: var(--dorado-oscuro);
+    flex-shrink: 0;
+}
+
+.input-ubicacion-publicacion input {
+    border: none;
+    outline: none;
+    width: 100%;
+    background-color: transparent;
+    color: var(--texto-principal);
+    font-size: 0.92rem;
+}
+
+.input-ubicacion-publicacion input::placeholder {
+    color: var(--texto-secundario);
+}
+
+.acciones-panel-publicacion {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.btn-cancelar-panel,
+.btn-guardar-panel {
+    border: none;
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-weight: 800;
+    font-size: 0.82rem;
+    transition: all 0.18s ease;
+}
+
+.btn-cancelar-panel {
+    background-color: transparent;
+    color: var(--texto-secundario);
+}
+
+.btn-cancelar-panel:hover {
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+}
+
+.btn-guardar-panel {
+    background-color: var(--dorado);
+    color: white;
+}
+
+.btn-guardar-panel:hover {
+    background-color: var(--dorado-oscuro);
+}
+
+.lista-sugerencias-publicacion {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 230px;
+    overflow-y: auto;
+}
+
+.persona-sugerida-publicacion {
+    width: 100%;
+    border: none;
+    background-color: transparent;
+    border-radius: 14px;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    transition: background-color 0.16s ease;
+    cursor: pointer;
+}
+
+.persona-sugerida-publicacion:hover {
+    background-color: var(--hover-menu);
+}
+
+.persona-sugerida-publicacion img,
+.persona-sugerida-publicacion span {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.persona-sugerida-publicacion img {
+    object-fit: cover;
+}
+
+.persona-sugerida-publicacion span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #fef8eb;
+    color: var(--dorado-oscuro);
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.persona-sugerida-publicacion strong {
+    display: block;
+    color: var(--texto-principal);
+    font-size: 0.90rem;
+    line-height: 1.1;
+}
+
+.persona-sugerida-publicacion small,
+.estado-sugerencias-publicacion {
+    color: var(--texto-secundario);
+    font-size: 0.76rem;
+}
+
+.estado-sugerencias-publicacion {
+    padding: 12px;
+    text-align: center;
+}
+
+.etiquetas-imagen-modal {
+    margin-top: 10px;
+    text-align: left;
+}
+
+.titulo-etiquetas-imagen {
+    color: var(--texto-secundario);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ubicacion-post-render,
+.etiquetas-post-render {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--texto-secundario);
+    font-size: 0.78rem;
+    margin-top: 4px;
+    font-weight: 600;
+}
+
+.ubicacion-post-render i {
+    color: var(--dorado-oscuro);
+}
+
+.etiquetas-post-render {
+    margin-top: 10px;
+    color: #7c3aed;
+}
+
+.etiquetas-post-render i {
+    color: #7c3aed;
+}
+
+[data-tema="oscuro"] .btn-herramienta-modal:hover:not(:disabled),
+[data-tema="oscuro"] .btn-herramienta-modal.activo,
+[data-tema="oscuro"] .panel-emojis button:hover,
+[data-tema="oscuro"] .chip-publicacion.ubicacion {
+    background-color: rgba(234, 179, 8, 0.12);
+    color: #fde68a;
+    border-color: rgba(234, 179, 8, 0.25);
+}
+
+[data-tema="oscuro"] .panel-herramienta-publicacion {
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+}
+
+[data-tema="oscuro"] .chip-publicacion button:hover {
+    background-color: rgba(255, 255, 255, 0.10);
+}
+
+@media (max-width: 576px) {
+    .modal-pie {
+        align-items: stretch !important;
+    }
+
+    .grupo-herramientas-modal {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .boton-publicar-modal {
+        width: 100%;
+    }
+
+    .panel-emojis {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* =========================================
+   EVENTO FAMILIAR Y MENCIONES DORADAS
+   ========================================= */
+.input-publicacion {
+    min-height: 120px;
+    line-height: 1.5;
+    color: var(--texto-principal) !important;
+    caret-color: var(--texto-principal);
+}
+
+.mencion-dorada {
+    color: var(--dorado-oscuro);
+    font-weight: 800;
+}
+
+.chip-publicacion.mencion,
+.chip-publicacion.evento {
+    color: var(--dorado-oscuro);
+    background-color: #fef8eb;
+    border-color: rgba(203, 161, 53, 0.28);
+}
+
+.chip-publicacion.evento i {
+    color: var(--dorado-oscuro);
+}
+
+.panel-eventos-publicacion {
+    padding: 0;
+    overflow: hidden;
+}
+
+.encabezado-panel-eventos-publicacion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--borde-color);
+    background-color: var(--fondo-tarjeta);
+}
+
+.encabezado-panel-eventos-publicacion strong {
+    display: block;
+    color: var(--texto-principal);
+    font-size: 0.9rem;
+    line-height: 1.15;
+}
+
+.encabezado-panel-eventos-publicacion small {
+    display: block;
+    margin-top: 2px;
+    color: var(--texto-secundario);
+    font-size: 0.74rem;
+    line-height: 1.25;
+}
+
+.encabezado-panel-eventos-publicacion button {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.18s ease;
+    flex-shrink: 0;
+}
+
+.encabezado-panel-eventos-publicacion button:hover:not(:disabled) {
+    color: var(--dorado-oscuro);
+    background-color: #fef8eb;
+    border-color: rgba(203, 161, 53, 0.28);
+}
+
+.lista-eventos-publicacion {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.evento-sugerido-publicacion {
+    width: 100%;
+    border: none;
+    background-color: transparent;
+    border-radius: 14px;
+    padding: 9px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.16s ease;
+}
+
+.evento-sugerido-publicacion:hover {
+    background-color: var(--hover-menu);
+    transform: translateY(-1px);
+}
+
+.evento-sugerido-fecha {
+    width: 48px;
+    min-width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background-color: #fef8eb;
+    border: 1px solid rgba(203, 161, 53, 0.24);
+    color: var(--dorado-oscuro);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.evento-sugerido-fecha strong {
+    font-size: 1.05rem;
+    font-weight: 900;
+    color: var(--texto-principal);
+}
+
+.evento-sugerido-fecha small {
+    margin-top: 3px;
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: var(--dorado-oscuro);
+    text-transform: uppercase;
+}
+
+.evento-sugerido-info {
+    min-width: 0;
+}
+
+.evento-sugerido-info strong {
+    display: block;
+    color: var(--texto-principal);
+    font-size: 0.88rem;
+    line-height: 1.2;
+}
+
+.evento-sugerido-info small {
+    display: block;
+    color: var(--texto-secundario);
+    font-size: 0.74rem;
+    line-height: 1.3;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.evento-post-render {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 999px;
+    background-color: #fef8eb;
+    border: 1px solid rgba(203, 161, 53, 0.24);
+    color: var(--dorado-oscuro);
+}
+
+.evento-post-render > i {
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.evento-post-render div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.evento-post-render strong {
+    color: var(--texto-principal);
+    font-size: 0.80rem;
+    line-height: 1.1;
+}
+
+.evento-post-render span {
+    color: var(--texto-secundario);
+    font-size: 0.70rem;
+    line-height: 1.1;
+    margin-top: 2px;
+}
+
+.estado-sugerencias-publicacion.error {
+    color: #b91c1c;
+}
+
+[data-tema="oscuro"] .chip-publicacion.mencion,
+[data-tema="oscuro"] .chip-publicacion.evento,
+[data-tema="oscuro"] .evento-sugerido-fecha,
+[data-tema="oscuro"] .evento-post-render {
+    background-color: rgba(234, 179, 8, 0.12);
+    color: #fde68a;
+    border-color: rgba(234, 179, 8, 0.28);
+}
+
+[data-tema="oscuro"] .mencion-dorada,
+[data-tema="oscuro"] .chip-publicacion.evento i,
+[data-tema="oscuro"] .evento-post-render > i,
+[data-tema="oscuro"] .evento-sugerido-fecha small {
+    color: #fde68a;
+}
+
+[data-tema="oscuro"] .encabezado-panel-eventos-publicacion button:hover:not(:disabled) {
+    background-color: rgba(234, 179, 8, 0.12);
+    color: #fde68a;
+    border-color: rgba(234, 179, 8, 0.28);
+}
+
+@media (max-width: 576px) {
+    .input-publicacion {
+        min-height: 150px;
+    }
+
+    .lista-eventos-publicacion {
+        max-height: 220px;
+    }
+}
+
+/* =========================================
+   TEXTAREA CON MENCIONES DORADAS (OVERLAY)
+   ========================================= */
+.contenedor-input-superpuesto {
+    position: relative;
+    width: 100%;
+    min-height: 120px;
+    display: flex;
+}
+
+.input-overlay {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-y: auto;
+    color: var(--texto-principal);
+    margin: 0;
+    z-index: 1;
+    background-color: transparent !important;
+}
+
+/* Ocultamos el scrollbar del overlay para evitar desajustes visuales */
+.input-overlay::-webkit-scrollbar {
+    display: none;
+}
+
+.textarea-transparente {
+    position: relative !important;
+    color: transparent !important;
+    background: transparent !important;
+    caret-color: var(--texto-principal);
+    z-index: 2;
+    width: 100%;
+    margin: 0;
+}
+
+/* Forzamos a que el placeholder sí se vea aunque el texto del textarea sea transparente */
+.textarea-transparente::placeholder {
+    color: var(--texto-secundario);
+    opacity: 0.7;
+}
+
+/* =========================================
+   FIX FINAL: OVERLAY DE MENCIONES SIN DESFASE
+   =========================================
+   El textarea conserva el cursor real y el overlay pinta las menciones.
+   Para que el cursor no se meta dentro de las palabras, el overlay debe usar
+   exactamente el mismo peso/ancho de fuente que el textarea mientras se escribe.
+*/
+.contenedor-input-superpuesto {
+    position: relative;
+    width: 100%;
+    min-height: 120px;
+    display: block;
+}
+
+.contenedor-input-superpuesto .input-publicacion,
+.contenedor-input-superpuesto .input-overlay,
+.contenedor-input-superpuesto .textarea-transparente {
+    width: 100% !important;
+    min-height: 120px !important;
+    font-family: inherit !important;
+    font-size: 1.1rem !important;
+    font-weight: 400 !important;
+    line-height: 1.5 !important;
+    letter-spacing: normal !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+}
+
+.input-overlay {
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    color: var(--texto-principal) !important;
+    background-color: transparent !important;
+    z-index: 1 !important;
+}
+
+/* La mención se ve dorada, pero NO en negritas dentro del editor.
+   Si se pone en negritas aquí, cambia el ancho del texto y desacomoda el cursor. */
+.input-overlay .mencion-dorada {
+    color: var(--dorado-oscuro) !important;
+    font-weight: 400 !important;
+}
+
+.textarea-transparente {
+    position: relative !important;
+    z-index: 2 !important;
+    resize: none !important;
+    overflow-y: auto !important;
+    background-color: transparent !important;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+    caret-color: var(--texto-principal) !important;
+}
+
+.textarea-transparente::placeholder {
+    color: var(--texto-secundario) !important;
+    -webkit-text-fill-color: var(--texto-secundario) !important;
+    opacity: 0.7 !important;
+}
+
+/* Evita que al seleccionar todo se vea una segunda copia del texto del textarea. */
+.textarea-transparente::selection {
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+    background-color: rgba(37, 99, 235, 0.35) !important;
+}
+
+.textarea-transparente::-moz-selection {
+    color: transparent !important;
+    background-color: rgba(37, 99, 235, 0.35) !important;
+}
+
+/* En publicaciones ya renderizadas sí puede quedar más marcada la mención. */
+.texto-post .mencion-dorada {
+    color: var(--dorado-oscuro) !important;
+    font-weight: 800 !important;
+}
+
+[data-tema="oscuro"] .input-overlay .mencion-dorada,
+[data-tema="oscuro"] .texto-post .mencion-dorada {
+    color: #fde68a !important;
+}
+
+@media (max-width: 576px) {
+    .contenedor-input-superpuesto,
+    .contenedor-input-superpuesto .input-publicacion,
+    .contenedor-input-superpuesto .input-overlay,
+    .contenedor-input-superpuesto .textarea-transparente {
+        min-height: 150px !important;
+    }
+}
+
+
+
+/* =========================================
+   ÁLBUM / HILO DE EVENTO FAMILIAR
+   ========================================= */
+.evento-post-render-clickable {
+    border: 1px solid rgba(203, 161, 53, 0.24);
+    cursor: pointer;
+    text-align: left;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.evento-post-render-clickable:hover {
+    transform: translateY(-1px);
+    border-color: rgba(203, 161, 53, 0.48);
+    box-shadow: 0 10px 22px rgba(203, 161, 53, 0.12);
+}
+
+.evento-inicio-card-boton {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+}
+
+.modal-album-evento {
+    width: min(860px, calc(100vw - 32px));
+    max-height: min(86vh, 820px);
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+    border-radius: 26px;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.26);
+    overflow: hidden;
+    position: relative;
+    animation: slideUp 0.25s ease-out;
+    display: flex;
+    flex-direction: column;
+}
+
+.btn-cerrar-album-evento {
+    top: 18px;
+    right: 18px;
+}
+
+.album-evento-hero {
+    padding: 30px 74px 28px 30px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    background:
+        radial-gradient(circle at top right, rgba(203, 161, 53, 0.22), transparent 34%),
+        linear-gradient(135deg, #0D1B2A 0%, #14253a 100%);
+    color: #ffffff;
+}
+
+.album-evento-icono {
+    width: 62px;
+    height: 62px;
+    border-radius: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #f6d77f;
+    font-size: 1.8rem;
+    flex-shrink: 0;
+}
+
+.album-evento-info {
+    min-width: 0;
+}
+
+.album-evento-kicker {
+    display: block;
+    color: #f6d77f;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+.album-evento-info h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.45rem, 3vw, 2.15rem);
+    line-height: 1.05;
+    margin: 0;
+    color: #ffffff;
+}
+
+.album-evento-info p {
+    margin: 8px 0 0;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.92rem;
+    line-height: 1.35;
+}
+
+.album-evento-cuerpo {
+    padding: 22px;
+    overflow-y: auto;
+}
+
+.album-evento-resumen {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--borde-color);
+    border-radius: 18px;
+    background-color: var(--fondo-app);
+}
+
+.album-evento-resumen strong {
+    color: var(--texto-principal);
+    font-size: 1.6rem;
+    line-height: 1;
+    display: block;
+}
+
+.album-evento-resumen span {
+    color: var(--texto-secundario);
+    font-size: 0.85rem;
+}
+
+.btn-refrescar-album-evento {
+    border: 1px solid rgba(203, 161, 53, 0.32);
+    background-color: #fef8eb;
+    color: var(--dorado-oscuro);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-weight: 800;
+    font-size: 0.82rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.btn-refrescar-album-evento:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background-color: #fcefd4;
+}
+
+.btn-refrescar-album-evento:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.lista-publicaciones-album-evento {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.album-evento-publicacion {
+    border: 1px solid var(--borde-color);
+    border-radius: 18px;
+    padding: 14px;
+    background-color: var(--fondo-tarjeta);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.album-evento-publicacion-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.album-evento-publicacion-header strong {
+    display: block;
+    color: var(--texto-principal);
+    font-size: 0.92rem;
+    line-height: 1.1;
+}
+
+.album-evento-publicacion-header span {
+    display: block;
+    color: var(--texto-secundario);
+    font-size: 0.74rem;
+    margin-top: 2px;
+}
+
+.album-evento-publicacion-texto {
+    color: var(--texto-principal);
+    font-size: 0.92rem;
+    line-height: 1.45;
+    white-space: pre-line;
+    margin: 0 0 10px;
+}
+
+.album-evento-multimedia {
+    border-radius: 14px;
+    overflow: hidden;
+    background-color: var(--fondo-app);
+    border: 1px solid var(--borde-color);
+}
+
+.album-evento-multimedia img,
+.album-evento-multimedia video {
+    width: 100%;
+    display: block;
+    max-height: 280px;
+    object-fit: cover;
+}
+
+.estado-album-evento {
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+    border-radius: 18px;
+    padding: 18px;
+    text-align: center;
+}
+
+.estado-album-evento.error {
+    color: #b91c1c;
+    background-color: #fef2f2;
+    border-color: #fecaca;
+}
+
+.estado-album-evento.vacio {
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.estado-album-evento.vacio i {
+    color: var(--dorado);
+    font-size: 2.2rem;
+}
+
+.estado-album-evento.vacio strong {
+    color: var(--texto-principal);
+    font-size: 1rem;
+}
+
+.estado-album-evento.vacio span {
+    max-width: 360px;
+    color: var(--texto-secundario);
+    font-size: 0.86rem;
+    line-height: 1.4;
+}
+
+[data-tema="oscuro"] .modal-album-evento {
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+}
+
+[data-tema="oscuro"] .album-evento-hero {
+    background:
+        radial-gradient(circle at top right, rgba(203, 161, 53, 0.18), transparent 35%),
+        linear-gradient(135deg, #06111f 0%, #0d1b2a 100%);
+}
+
+[data-tema="oscuro"] .btn-refrescar-album-evento {
+    background-color: rgba(234, 179, 8, 0.12);
+    color: #fde68a;
+}
+
+[data-tema="oscuro"] .estado-album-evento.error {
+    color: #fecaca;
+    background-color: rgba(127, 29, 29, 0.25);
+    border-color: rgba(248, 113, 113, 0.25);
+}
+
+@media (max-width: 992px) {
+    .modal-album-evento {
+        width: min(720px, calc(100vw - 28px));
+    }
+
+    .lista-publicaciones-album-evento {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 576px) {
+    .modal-album-evento {
+        width: calc(100vw - 18px);
+        max-height: calc(100vh - 18px);
+        border-radius: 22px;
+    }
+
+    .album-evento-hero {
+        padding: 26px 58px 24px 20px;
+        align-items: flex-start;
+    }
+
+    .album-evento-icono {
+        width: 48px;
+        height: 48px;
+        border-radius: 15px;
+        font-size: 1.4rem;
+    }
+
+    .album-evento-cuerpo {
+        padding: 16px;
+    }
+
+    .album-evento-resumen {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .btn-refrescar-album-evento {
+        width: 100%;
+        justify-content: center;
+    }
+}

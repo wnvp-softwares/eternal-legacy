@@ -14,6 +14,7 @@ router.use('/arboles', require('./arboles/arbol.routes'));
 router.use('/nodos', require('./arboles/nodo.routes'));
 router.use('/hilos', require('./arboles/hilo.routes'));
 router.use('/invitaciones-familiares', require('./arboles/invitacionFamiliar.routes'));
+router.use('/eventos-familiares', require('./arboles/eventoFamiliar.routes'));
 
 // Opcional: alias para no romper llamadas viejas que usen /api/arbol
 router.use('/arbol', require('./arboles/arbol.routes'));

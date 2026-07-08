@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './ArbolGenealogico.css';
 
@@ -89,6 +91,48 @@ const FORMULARIO_PERFIL_SIN_CUENTA_INICIAL = {
   descripcion: '',
   fotoPerfil: null,
   fotosGaleria: []
+};
+
+const FORMULARIO_EVENTO_FAMILIAR_INICIAL = {
+  titulo: '',
+  tipoEvento: 'reunion',
+  fechaInicio: '',
+  horaInicio: '18:00',
+  fechaFin: '',
+  horaFin: '',
+  todoElDia: false,
+  ubicacionTexto: '',
+  ubicacionDireccion: '',
+  ubicacionReferencia: '',
+  descripcion: '',
+  recordatorioActivo: true,
+  recordatorioMinutosAntes: '1440'
+};
+
+const TIPOS_EVENTO_FAMILIAR = [
+  { valor: 'reunion', etiqueta: 'Reunión familiar', icono: 'bi-people' },
+  { valor: 'cumpleanos', etiqueta: 'Cumpleaños', icono: 'bi-cake2' },
+  { valor: 'aniversario', etiqueta: 'Aniversario', icono: 'bi-calendar-heart' },
+  { valor: 'boda', etiqueta: 'Boda', icono: 'bi-heart' },
+  { valor: 'misa', etiqueta: 'Misa / Ceremonia', icono: 'bi-building' },
+  { valor: 'recordatorio', etiqueta: 'Recordatorio', icono: 'bi-bell' },
+  { valor: 'otro', etiqueta: 'Otro evento', icono: 'bi-calendar-event' }
+];
+
+const obtenerConfigEvento = (tipoEvento = 'otro') => {
+  return TIPOS_EVENTO_FAMILIAR.find(tipo => tipo.valor === tipoEvento) || TIPOS_EVENTO_FAMILIAR[TIPOS_EVENTO_FAMILIAR.length - 1];
+};
+
+const esperarFrame = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
+
+const limpiarNombreArchivo = (nombre = 'arbol-genealogico') => {
+  return String(nombre)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase() || 'arbol-genealogico';
 };
 
 const leerArchivoComoDataUrl = (archivo) => {
@@ -218,6 +262,118 @@ const formatearFechaParaInput = (fecha) => {
 
   return `${year}-${month}-${day}`;
 };
+
+const obtenerFechaHoraEventoValida = (fecha) => {
+  if (!fecha) return null;
+
+  const date = new Date(fecha);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date;
+};
+
+const formatearFechaEventoCorta = (fecha) => {
+  const date = obtenerFechaHoraEventoValida(fecha);
+
+  if (!date) return 'PENDIENTE';
+
+  return date.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short'
+  }).replace('.', '').toUpperCase();
+};
+
+const formatearFechaEventoCompleta = (fecha) => {
+  const date = obtenerFechaHoraEventoValida(fecha);
+
+  if (!date) return 'Fecha pendiente';
+
+  return date.toLocaleDateString('es-MX', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+};
+
+const formatearHoraEvento = (fecha, todoElDia = false) => {
+  if (todoElDia) return 'Todo el día';
+
+  const date = obtenerFechaHoraEventoValida(fecha);
+
+  if (!date) return 'Hora pendiente';
+
+  return date.toLocaleTimeString('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const formatearFechaEventoParaInput = (fecha) => {
+  const date = obtenerFechaHoraEventoValida(fecha);
+
+  if (!date) return '';
+
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+const formatearHoraEventoParaInput = (fecha, valorPorDefecto = '') => {
+  const date = obtenerFechaHoraEventoValida(fecha);
+
+  if (!date) return valorPorDefecto;
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${hours}:${minutes}`;
+};
+
+const construirFechaHoraEvento = (fecha, hora, todoElDia = false) => {
+  if (!fecha) return null;
+
+  const horaFinal = todoElDia ? '12:00' : (hora || '09:00');
+
+  return `${fecha}T${horaFinal}:00`;
+};
+
+const obtenerTextoUbicacionEvento = (evento = {}) => {
+  const ubicacion = evento.ubicacion || {};
+
+  return (
+    ubicacion.texto ||
+    ubicacion.direccion ||
+    ubicacion.referencia ||
+    'Ubicación pendiente'
+  );
+};
+
+const normalizarEventoFamiliar = (evento = {}) => ({
+  ...evento,
+  id: obtenerId(evento),
+  creadoPorId: obtenerId(evento.creadoPor),
+  titulo: evento.titulo || 'Evento familiar',
+  descripcion: evento.descripcion || '',
+  tipoEvento: evento.tipoEvento || 'otro',
+  fechaInicio: evento.fechaInicio || null,
+  fechaFin: evento.fechaFin || null,
+  todoElDia: Boolean(evento.todoElDia),
+  zonaHoraria: evento.zonaHoraria || 'America/Mexico_City',
+  ubicacion: {
+    texto: evento.ubicacion?.texto || '',
+    direccion: evento.ubicacion?.direccion || '',
+    referencia: evento.ubicacion?.referencia || '',
+    lat: evento.ubicacion?.lat ?? null,
+    lng: evento.ubicacion?.lng ?? null,
+    proveedor: evento.ubicacion?.proveedor || 'manual',
+    placeId: evento.ubicacion?.placeId || ''
+  },
+  estado: evento.estado || 'Activo'
+});
 
 const obtenerTextoEstadoUnion = (tipoUnion, nombrePareja) => {
   const tipo = tipoUnion || 'pareja';
@@ -473,6 +629,7 @@ const FilaPersona = ({
         <img
           src={fotoPerfil}
           alt={nombre}
+          crossOrigin="anonymous"
           className="avatar-foto-perfil-arbol"
           onError={(e) => {
             e.currentTarget.style.display = 'none';
@@ -882,6 +1039,14 @@ export default function ArbolGenealogico() {
   const [mostrarFiltros, establecerMostrarFiltros] = useState(false);
   const [mostrarInvitar, establecerMostrarInvitar] = useState(false);
   const [mostrarEventos, establecerMostrarEventos] = useState(false);
+  const [eventosFamiliares, establecerEventosFamiliares] = useState([]);
+  const [cargandoEventos, establecerCargandoEventos] = useState(false);
+  const [guardandoEvento, establecerGuardandoEvento] = useState(false);
+  const [errorEventos, establecerErrorEventos] = useState('');
+  const [mostrarFormularioEvento, establecerMostrarFormularioEvento] = useState(false);
+  const [modoFormularioEvento, establecerModoFormularioEvento] = useState('crear');
+  const [eventoEditando, establecerEventoEditando] = useState(null);
+  const [formularioEvento, establecerFormularioEvento] = useState(FORMULARIO_EVENTO_FAMILIAR_INICIAL);
   const [mostrandoFormularioPerfilSinCuenta, establecerMostrandoFormularioPerfilSinCuenta] = useState(false);
   const [formularioPerfilSinCuenta, establecerFormularioPerfilSinCuenta] = useState(FORMULARIO_PERFIL_SIN_CUENTA_INICIAL);
   const [procesandoFotosPerfilSinCuenta, establecerProcesandoFotosPerfilSinCuenta] = useState(false);
@@ -905,6 +1070,9 @@ export default function ArbolGenealogico() {
 
   // Menú de Exportación
   const [mostrarMenuExportar, establecerMostrarMenuExportar] = useState(false);
+  const [exportandoArbol, establecerExportandoArbol] = useState(false);
+  const lienzoExportableRef = useRef(null);
+  const contenidoExportableRef = useRef(null);
 
   const [esModoEdicion, establecerModoEdicion] = useState(false);
   const [nivelZoom, establecerNivelZoom] = useState(1);
@@ -957,6 +1125,183 @@ export default function ArbolGenealogico() {
   };
 
   const hayCambiosPendientes = () => cambiosPendientes.length > 0;
+
+  const obtenerNombreArchivoExportacion = () => {
+    const nombreFamilia = arbol?.nombreFamilia || arbol?.nombre || 'arbol-genealogico';
+    const fecha = new Date().toISOString().slice(0, 10);
+    return `${limpiarNombreArchivo(nombreFamilia)}-${fecha}`;
+  };
+
+  const crearCanvasExportacionArbol = async () => {
+    const lienzo = lienzoExportableRef.current;
+    const contenido = contenidoExportableRef.current;
+
+    if (!lienzo || !contenido) {
+      throw new Error('No se encontró el lienzo del árbol para exportar.');
+    }
+
+    const estilosLienzoOriginales = {
+      overflow: lienzo.style.overflow,
+      width: lienzo.style.width,
+      height: lienzo.style.height,
+      maxWidth: lienzo.style.maxWidth,
+      maxHeight: lienzo.style.maxHeight
+    };
+
+    const estilosContenidoOriginales = {
+      transform: contenido.style.transform,
+      transition: contenido.style.transition,
+      transformOrigin: contenido.style.transformOrigin
+    };
+
+    const scrollLeftOriginal = lienzo.scrollLeft;
+    const scrollTopOriginal = lienzo.scrollTop;
+
+    try {
+      contenido.style.transform = 'scale(1)';
+      contenido.style.transition = 'none';
+      contenido.style.transformOrigin = 'top left';
+
+      lienzo.style.overflow = 'visible';
+      lienzo.style.width = `${Math.max(lienzo.scrollWidth, lienzo.clientWidth)}px`;
+      lienzo.style.height = `${Math.max(lienzo.scrollHeight, lienzo.clientHeight)}px`;
+      lienzo.style.maxWidth = 'none';
+      lienzo.style.maxHeight = 'none';
+      lienzo.scrollLeft = 0;
+      lienzo.scrollTop = 0;
+
+      await esperarFrame();
+      await esperarFrame();
+
+      const ancho = Math.max(lienzo.scrollWidth, contenido.scrollWidth, lienzo.clientWidth);
+      const alto = Math.max(lienzo.scrollHeight, contenido.scrollHeight, lienzo.clientHeight);
+      const estiloCalculado = window.getComputedStyle(lienzo);
+
+      return await html2canvas(lienzo, {
+        backgroundColor: estiloCalculado.backgroundColor || '#ffffff',
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        width: ancho,
+        height: alto,
+        windowWidth: ancho,
+        windowHeight: alto,
+        scrollX: 0,
+        scrollY: 0,
+        onclone: (documentoClonado) => {
+          const lienzoClonado = documentoClonado.querySelector('.lienzo-arbol');
+          const contenidoClonado = documentoClonado.querySelector('.contenido-exportable-arbol');
+
+          if (lienzoClonado) {
+            lienzoClonado.classList.add('modo-exportacion-arbol');
+            lienzoClonado.style.overflow = 'visible';
+            lienzoClonado.style.width = `${ancho}px`;
+            lienzoClonado.style.height = `${alto}px`;
+          }
+
+          if (contenidoClonado) {
+            contenidoClonado.style.transform = 'scale(1)';
+            contenidoClonado.style.transition = 'none';
+            contenidoClonado.style.transformOrigin = 'top left';
+          }
+        }
+      });
+    } finally {
+      contenido.style.transform = estilosContenidoOriginales.transform;
+      contenido.style.transition = estilosContenidoOriginales.transition;
+      contenido.style.transformOrigin = estilosContenidoOriginales.transformOrigin;
+
+      lienzo.style.overflow = estilosLienzoOriginales.overflow;
+      lienzo.style.width = estilosLienzoOriginales.width;
+      lienzo.style.height = estilosLienzoOriginales.height;
+      lienzo.style.maxWidth = estilosLienzoOriginales.maxWidth;
+      lienzo.style.maxHeight = estilosLienzoOriginales.maxHeight;
+      lienzo.scrollLeft = scrollLeftOriginal;
+      lienzo.scrollTop = scrollTopOriginal;
+    }
+  };
+
+  const descargarCanvasComoImagen = (canvas) => {
+    const nombreArchivo = `${obtenerNombreArchivoExportacion()}.png`;
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        const enlaceFallback = document.createElement('a');
+        enlaceFallback.href = canvas.toDataURL('image/png');
+        enlaceFallback.download = nombreArchivo;
+        enlaceFallback.click();
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = nombreArchivo;
+      enlace.click();
+      URL.revokeObjectURL(url);
+    }, 'image/png', 1);
+  };
+
+  const descargarCanvasComoPDF = (canvas) => {
+    const nombreArchivo = `${obtenerNombreArchivoExportacion()}.pdf`;
+    const orientacion = canvas.width >= canvas.height ? 'landscape' : 'portrait';
+    const pdf = new jsPDF({
+      orientation: orientacion,
+      unit: 'px',
+      format: [canvas.width, canvas.height],
+      hotfixes: ['px_scaling']
+    });
+
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+    pdf.save(nombreArchivo);
+  };
+
+  const exportarArbol = async (formato) => {
+    if (exportandoArbol) return;
+
+    if (!arbol?._id) {
+      window.alert('Abre un árbol antes de exportarlo.');
+      return;
+    }
+
+    if (nodosFiltrados.length === 0) {
+      window.alert('No hay familiares visibles para exportar. Ajusta los filtros o restablécelos.');
+      return;
+    }
+
+    if (modoColocacion || modoRelacionar || modoEliminar || modoMover || nodoEnMovimiento) {
+      window.alert('Termina o cancela la herramienta activa antes de exportar el árbol.');
+      return;
+    }
+
+    establecerMostrarMenuExportar(false);
+    establecerExportandoArbol(true);
+    establecerMensajeSistema(formato === 'pdf' ? 'Generando PDF del árbol...' : 'Generando imagen del árbol...');
+
+    try {
+      const canvas = await crearCanvasExportacionArbol();
+
+      if (formato === 'pdf') {
+        descargarCanvasComoPDF(canvas);
+      } else {
+        descargarCanvasComoImagen(canvas);
+      }
+
+      establecerMensajeSistema(formato === 'pdf' ? 'PDF generado correctamente.' : 'Imagen generada correctamente.');
+    } catch (error) {
+      console.error('Error al exportar árbol:', error);
+      establecerMensajeSistema('');
+
+      const mensajeCors = error?.message?.toLowerCase().includes('tainted')
+        ? 'No se pudo exportar porque alguna imagen no permite ser capturada. Revisa que tus uploads tengan CORS habilitado o intenta exportar sin imágenes externas.'
+        : error.message || 'No se pudo exportar el árbol.';
+
+      window.alert(mensajeCors);
+    } finally {
+      establecerExportandoArbol(false);
+    }
+  };
 
   const entrarModoEdicion = () => {
     establecerNodosOriginales(clonarDatos(nodos));
@@ -1046,6 +1391,14 @@ export default function ArbolGenealogico() {
     establecerMostrarFiltros(false);
     establecerMostrarInvitar(false);
     establecerMostrarEventos(false);
+    establecerEventosFamiliares([]);
+    establecerCargandoEventos(false);
+    establecerGuardandoEvento(false);
+    establecerErrorEventos('');
+    establecerMostrarFormularioEvento(false);
+    establecerModoFormularioEvento('crear');
+    establecerEventoEditando(null);
+    establecerFormularioEvento(FORMULARIO_EVENTO_FAMILIAR_INICIAL);
     establecerMostrandoFormularioPerfilSinCuenta(false);
     establecerFormularioPerfilSinCuenta(FORMULARIO_PERFIL_SIN_CUENTA_INICIAL);
     establecerProcesandoFotosPerfilSinCuenta(false);
@@ -1317,6 +1670,12 @@ export default function ArbolGenealogico() {
     }
   }, [mostrarInvitar, arbol?._id]);
 
+  useEffect(() => {
+    if (mostrarEventos && arbol?._id) {
+      cargarEventosFamiliares(arbol._id);
+    }
+  }, [mostrarEventos, arbol?._id]);
+
   const acercarZoom = () => establecerNivelZoom(prev => Math.min(prev + 0.2, 1.8));
   const alejarZoom = () => establecerNivelZoom(prev => Math.max(prev - 0.2, 0.4));
   const restablecerZoom = () => establecerNivelZoom(1);
@@ -1353,10 +1712,214 @@ export default function ArbolGenealogico() {
     );
   }, [filtrosAplicados]);
 
-  const proximosEventos = [
-    { id: 1, titulo: 'Boda de los Abuelos', fecha: '12 OCT', detalle: '58º Aniversario - Salón Principal' },
-    { id: 2, titulo: 'Cumpleaños familiar', fecha: '25 NOV', detalle: 'Evento familiar pendiente de configurar' }
-  ];
+  const cargarEventosFamiliares = async (arbolId = arbol?._id) => {
+    if (!arbolId || !token) return;
+
+    try {
+      establecerCargandoEventos(true);
+      establecerErrorEventos('');
+
+      const data = await apiFetch(`/api/eventos-familiares/arbol/${arbolId}/proximos?limite=30`);
+      const eventos = Array.isArray(data.eventos) ? data.eventos : [];
+
+      establecerEventosFamiliares(eventos.map(normalizarEventoFamiliar));
+    } catch (error) {
+      console.error('Error al cargar eventos familiares:', error);
+      establecerEventosFamiliares([]);
+      establecerErrorEventos(error.message || 'No se pudieron cargar los eventos familiares.');
+    } finally {
+      establecerCargandoEventos(false);
+    }
+  };
+
+  const restablecerFormularioEvento = () => {
+    establecerFormularioEvento(FORMULARIO_EVENTO_FAMILIAR_INICIAL);
+    establecerModoFormularioEvento('crear');
+    establecerEventoEditando(null);
+    establecerMostrarFormularioEvento(false);
+    establecerErrorEventos('');
+  };
+
+  const actualizarCampoEvento = (campo, valor) => {
+    establecerFormularioEvento(prev => ({
+      ...prev,
+      [campo]: valor
+    }));
+  };
+
+  const abrirFormularioCrearEvento = () => {
+    const hoy = new Date();
+    const fechaHoy = formatearFechaEventoParaInput(hoy);
+
+    establecerModoFormularioEvento('crear');
+    establecerEventoEditando(null);
+    establecerFormularioEvento({
+      ...FORMULARIO_EVENTO_FAMILIAR_INICIAL,
+      fechaInicio: fechaHoy,
+      horaInicio: '18:00'
+    });
+    establecerMostrarFormularioEvento(true);
+    establecerErrorEventos('');
+  };
+
+  const usuarioPuedeGestionarEventoLocal = (evento) => {
+    if (!evento || !usuarioActualId) return false;
+
+    if (esUsuarioAdmin) return true;
+
+    return String(evento.creadoPorId || obtenerId(evento.creadoPor)) === String(usuarioActualId);
+  };
+
+  const abrirDetalleEvento = (evento) => {
+    if (!evento) return;
+
+    const puedeGestionar = usuarioPuedeGestionarEventoLocal(evento);
+
+    establecerModoFormularioEvento(puedeGestionar ? 'editar' : 'ver');
+    establecerEventoEditando(evento);
+    establecerFormularioEvento({
+      titulo: evento.titulo || '',
+      tipoEvento: evento.tipoEvento || 'otro',
+      fechaInicio: formatearFechaEventoParaInput(evento.fechaInicio),
+      horaInicio: formatearHoraEventoParaInput(evento.fechaInicio, '18:00'),
+      fechaFin: formatearFechaEventoParaInput(evento.fechaFin),
+      horaFin: formatearHoraEventoParaInput(evento.fechaFin, ''),
+      todoElDia: Boolean(evento.todoElDia),
+      ubicacionTexto: evento.ubicacion?.texto || '',
+      ubicacionDireccion: evento.ubicacion?.direccion || '',
+      ubicacionReferencia: evento.ubicacion?.referencia || '',
+      descripcion: evento.descripcion || '',
+      recordatorioActivo: evento.recordatorio?.activo !== false,
+      recordatorioMinutosAntes: String(evento.recordatorio?.minutosAntes || 1440)
+    });
+    establecerMostrarFormularioEvento(true);
+    establecerErrorEventos('');
+  };
+
+  const cerrarPanelEventos = () => {
+    establecerMostrarEventos(false);
+    restablecerFormularioEvento();
+  };
+
+  const construirPayloadEvento = () => {
+    const titulo = formularioEvento.titulo.trim();
+
+    if (!titulo) {
+      window.alert('Ingresa el título del evento.');
+      return null;
+    }
+
+    if (!formularioEvento.fechaInicio) {
+      window.alert('Selecciona la fecha del evento.');
+      return null;
+    }
+
+    const fechaInicio = construirFechaHoraEvento(
+      formularioEvento.fechaInicio,
+      formularioEvento.horaInicio,
+      formularioEvento.todoElDia
+    );
+
+    const fechaFin = formularioEvento.fechaFin
+      ? construirFechaHoraEvento(
+        formularioEvento.fechaFin,
+        formularioEvento.horaFin || formularioEvento.horaInicio,
+        formularioEvento.todoElDia
+      )
+      : null;
+
+    if (fechaFin && new Date(fechaFin).getTime() < new Date(fechaInicio).getTime()) {
+      window.alert('La fecha de fin no puede ser anterior a la fecha de inicio.');
+      return null;
+    }
+
+    return {
+      arbolId: arbol._id,
+      titulo,
+      descripcion: formularioEvento.descripcion.trim(),
+      tipoEvento: formularioEvento.tipoEvento || 'otro',
+      fechaInicio,
+      fechaFin,
+      todoElDia: Boolean(formularioEvento.todoElDia),
+      zonaHoraria: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City',
+      ubicacion: {
+        texto: formularioEvento.ubicacionTexto.trim(),
+        direccion: formularioEvento.ubicacionDireccion.trim(),
+        referencia: formularioEvento.ubicacionReferencia.trim(),
+        proveedor: 'manual'
+      },
+      recordatorio: {
+        activo: Boolean(formularioEvento.recordatorioActivo),
+        minutosAntes: Number(formularioEvento.recordatorioMinutosAntes || 1440)
+      },
+      privacidad: 'Arbol'
+    };
+  };
+
+  const guardarEventoFamiliar = async () => {
+    if (!arbol?._id || modoFormularioEvento === 'ver') return;
+
+    const payload = construirPayloadEvento();
+
+    if (!payload) return;
+
+    try {
+      establecerGuardandoEvento(true);
+      establecerErrorEventos('');
+
+      if (modoFormularioEvento === 'editar' && eventoEditando?.id) {
+        const { arbolId, ...payloadActualizacion } = payload;
+
+        await apiFetch(`/api/eventos-familiares/${eventoEditando.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payloadActualizacion)
+        });
+
+        establecerMensajeSistema('Evento actualizado correctamente.');
+      } else {
+        await apiFetch('/api/eventos-familiares/crear', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        establecerMensajeSistema('Evento familiar creado correctamente.');
+      }
+
+      restablecerFormularioEvento();
+      await cargarEventosFamiliares(arbol._id);
+    } catch (error) {
+      console.error('Error al guardar evento familiar:', error);
+      establecerErrorEventos(error.message || 'No se pudo guardar el evento familiar.');
+      window.alert(error.message || 'No se pudo guardar el evento familiar.');
+    } finally {
+      establecerGuardandoEvento(false);
+    }
+  };
+
+  const eliminarEventoFamiliar = async () => {
+    if (!eventoEditando?.id) return;
+
+    const confirmado = window.confirm(`¿Deseas eliminar el evento "${eventoEditando.titulo}"?`);
+
+    if (!confirmado) return;
+
+    try {
+      establecerGuardandoEvento(true);
+      await apiFetch(`/api/eventos-familiares/${eventoEditando.id}`, {
+        method: 'DELETE'
+      });
+
+      establecerMensajeSistema('Evento eliminado correctamente.');
+      restablecerFormularioEvento();
+      await cargarEventosFamiliares(arbol._id);
+    } catch (error) {
+      console.error('Error al eliminar evento familiar:', error);
+      establecerErrorEventos(error.message || 'No se pudo eliminar el evento familiar.');
+      window.alert(error.message || 'No se pudo eliminar el evento familiar.');
+    } finally {
+      establecerGuardandoEvento(false);
+    }
+  };
 
   const mapaNodos = useMemo(() => {
     const mapa = new Map();
@@ -3897,19 +4460,22 @@ export default function ArbolGenealogico() {
             <i className="bi bi-funnel"></i> Filtros
           </button>
 
-          {esUsuarioAdmin && (
-            <button
-              className={`boton-accion-arbol ${mostrarEventos && !nodoSeleccionado && !mostrarInvitar && !mostrarFiltros ? 'activo' : ''}`}
-              onClick={() => {
-                establecerMostrarEventos(!mostrarEventos);
-                establecerMostrarFiltros(false);
-                establecerNodoSeleccionado(null);
-                establecerMostrarInvitar(false);
-              }}
-            >
-              <i className="bi bi-calendar-event"></i> Eventos
-            </button>
-          )}
+          <button
+            className={`boton-accion-arbol ${mostrarEventos && !nodoSeleccionado && !mostrarInvitar && !mostrarFiltros ? 'activo' : ''}`}
+            onClick={() => {
+              const nuevoEstado = !mostrarEventos;
+              establecerMostrarEventos(nuevoEstado);
+              establecerMostrarFiltros(false);
+              establecerNodoSeleccionado(null);
+              establecerMostrarInvitar(false);
+              restablecerFormularioEvento();
+              if (nuevoEstado && arbol?._id) {
+                cargarEventosFamiliares(arbol._id);
+              }
+            }}
+          >
+            <i className="bi bi-calendar-event"></i> Eventos
+          </button>
 
           <div className="leyenda-roles-superior ms-md-3">
             <span className="d-flex align-items-center gap-1"><div className="etiqueta-leyenda creador"><i className="bi bi-star-fill"></i></div> Creador</span>
@@ -3921,8 +4487,16 @@ export default function ArbolGenealogico() {
       {/* --- ÁREA DE TRABAJO --- */}
       <div className="area-trabajo mt-3">
         <div className="contenedor-lienzo">
-          <div className={`lienzo-arbol ${claseLienzo}`} onClick={() => establecerMostrarMenuExportar(false)}>
-            <div style={{ display: 'flex', transform: `scale(${nivelZoom})`, transformOrigin: 'top left', transition: 'transform 0.2s ease-out' }}>
+          <div
+            ref={lienzoExportableRef}
+            className={`lienzo-arbol ${claseLienzo}`}
+            onClick={() => establecerMostrarMenuExportar(false)}
+          >
+            <div
+              ref={contenidoExportableRef}
+              className="contenido-exportable-arbol"
+              style={{ display: 'flex', transform: `scale(${nivelZoom})`, transformOrigin: 'top left', transition: 'transform 0.2s ease-out' }}
+            >
 
               {(modoColocacion || (modoMover && nodoEnMovimiento)) && (
                 <>
@@ -4017,18 +4591,32 @@ export default function ArbolGenealogico() {
                 style={{ backgroundColor: 'var(--fondo-tarjeta)', color: 'var(--texto-principal)' }}
                 onClick={() => establecerMostrarMenuExportar(!mostrarMenuExportar)}
                 title="Exportar Árbol"
+                disabled={exportandoArbol}
               >
-                <i className="bi bi-download"></i>
+                <i className={`bi ${exportandoArbol ? 'bi-arrow-repeat exportando-icono' : 'bi-download'}`}></i>
               </button>
 
               {mostrarMenuExportar && (
-                <div className="menu-exportar">
-                  <div className="item-exportar" onClick={() => establecerMostrarMenuExportar(false)}>
-                    <i className="bi bi-file-earmark-pdf text-danger"></i> Descargar como PDF
-                  </div>
-                  <div className="item-exportar" onClick={() => establecerMostrarMenuExportar(false)}>
-                    <i className="bi bi-image text-primary"></i> Descargar como Imagen
-                  </div>
+                <div className="menu-exportar" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="item-exportar"
+                    onClick={() => exportarArbol('pdf')}
+                    disabled={exportandoArbol}
+                  >
+                    <i className="bi bi-file-earmark-pdf text-danger"></i>
+                    <span>{exportandoArbol ? 'Preparando archivo...' : 'Descargar como PDF'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="item-exportar"
+                    onClick={() => exportarArbol('imagen')}
+                    disabled={exportandoArbol}
+                  >
+                    <i className="bi bi-image text-primary"></i>
+                    <span>{exportandoArbol ? 'Preparando archivo...' : 'Descargar como Imagen'}</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -4629,27 +5217,284 @@ export default function ArbolGenealogico() {
             ) : mostrarEventos ? (
               <div className="d-flex flex-column h-100 position-relative">
                 <div className="p-4 border-bottom d-flex justify-content-between align-items-center" style={{ borderColor: 'var(--borde-color)' }}>
-                  <h5 className="fw-bold m-0" style={{ color: 'var(--texto-principal)' }}><i className="bi bi-calendar-event me-2"></i>Eventos Familiares</h5>
-                  <button className="boton-cerrar-panel" onClick={() => establecerMostrarEventos(false)}><i className="bi bi-x-lg"></i></button>
+                  <div>
+                    <h5 className="fw-bold m-0" style={{ color: 'var(--texto-principal)' }}>
+                      <i className="bi bi-calendar-event me-2"></i>
+                      {mostrarFormularioEvento
+                        ? (modoFormularioEvento === 'crear' ? 'Crear evento familiar' : modoFormularioEvento === 'ver' ? 'Detalle del evento' : 'Editar evento familiar')
+                        : 'Eventos Familiares'}
+                    </h5>
+                    <p className="text-muted small mb-0 mt-1">
+                      {mostrarFormularioEvento
+                        ? 'Registra fecha, ubicación manual y detalles del evento.'
+                        : 'Consulta y organiza los próximos momentos importantes del árbol.'}
+                    </p>
+                  </div>
+                  <button className="boton-cerrar-panel" onClick={cerrarPanelEventos}><i className="bi bi-x-lg"></i></button>
                 </div>
 
-                <div className="scroll-contenido p-4 flex-grow-1">
-                  <p className="text-muted fw-bold mb-3 text-uppercase" style={{ fontSize: '0.65rem', letterSpacing: '1px' }}>Próximos Eventos</p>
+                {mostrarFormularioEvento ? (
+                  <>
+                    <div className="scroll-contenido p-4 flex-grow-1">
+                      {errorEventos && (
+                        <div className="alerta-eventos error mb-3">
+                          <i className="bi bi-exclamation-triangle"></i>
+                          <span>{errorEventos}</span>
+                        </div>
+                      )}
 
-                  {proximosEventos.map(evento => (
-                    <div key={evento.id} className="tarjeta-evento">
-                      <div className="evento-fecha">{evento.fecha}</div>
-                      <div className="evento-titulo">{evento.titulo}</div>
-                      <div className="evento-detalle"><i className="bi bi-geo-alt"></i> {evento.detalle}</div>
+                      <div className="formulario-evento-familiar">
+                        <div className="campo-evento">
+                          <label>Título del evento</label>
+                          <input
+                            type="text"
+                            value={formularioEvento.titulo}
+                            disabled={modoFormularioEvento === 'ver'}
+                            placeholder="Ej. Cumpleaños familiar"
+                            onChange={(e) => actualizarCampoEvento('titulo', e.target.value)}
+                          />
+                        </div>
+
+                        <div className="campo-evento">
+                          <label>Tipo de evento</label>
+                          <select
+                            value={formularioEvento.tipoEvento}
+                            disabled={modoFormularioEvento === 'ver'}
+                            onChange={(e) => actualizarCampoEvento('tipoEvento', e.target.value)}
+                          >
+                            {TIPOS_EVENTO_FAMILIAR.map(tipo => (
+                              <option key={tipo.valor} value={tipo.valor}>{tipo.etiqueta}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <label className="check-evento-todo-dia">
+                          <input
+                            type="checkbox"
+                            checked={formularioEvento.todoElDia}
+                            disabled={modoFormularioEvento === 'ver'}
+                            onChange={(e) => actualizarCampoEvento('todoElDia', e.target.checked)}
+                          />
+                          <span>Evento de todo el día</span>
+                        </label>
+
+                        <div className="grid-evento-doble">
+                          <div className="campo-evento">
+                            <label>Fecha de inicio</label>
+                            <input
+                              type="date"
+                              value={formularioEvento.fechaInicio}
+                              disabled={modoFormularioEvento === 'ver'}
+                              onChange={(e) => actualizarCampoEvento('fechaInicio', e.target.value)}
+                            />
+                          </div>
+
+                          {!formularioEvento.todoElDia && (
+                            <div className="campo-evento">
+                              <label>Hora</label>
+                              <input
+                                type="time"
+                                value={formularioEvento.horaInicio}
+                                disabled={modoFormularioEvento === 'ver'}
+                                onChange={(e) => actualizarCampoEvento('horaInicio', e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid-evento-doble">
+                          <div className="campo-evento">
+                            <label>Fecha de fin <span>opcional</span></label>
+                            <input
+                              type="date"
+                              value={formularioEvento.fechaFin}
+                              disabled={modoFormularioEvento === 'ver'}
+                              onChange={(e) => actualizarCampoEvento('fechaFin', e.target.value)}
+                            />
+                          </div>
+
+                          {!formularioEvento.todoElDia && (
+                            <div className="campo-evento">
+                              <label>Hora fin</label>
+                              <input
+                                type="time"
+                                value={formularioEvento.horaFin}
+                                disabled={modoFormularioEvento === 'ver'}
+                                onChange={(e) => actualizarCampoEvento('horaFin', e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="seccion-form-evento">
+                          <div className="titulo-seccion-evento"><i className="bi bi-geo-alt"></i> Ubicación manual</div>
+
+                          <div className="campo-evento">
+                            <label>Nombre del lugar</label>
+                            <input
+                              type="text"
+                              value={formularioEvento.ubicacionTexto}
+                              disabled={modoFormularioEvento === 'ver'}
+                              placeholder="Ej. Casa de la abuela, Salón Principal"
+                              onChange={(e) => actualizarCampoEvento('ubicacionTexto', e.target.value)}
+                            />
+                          </div>
+
+                          <div className="campo-evento">
+                            <label>Dirección</label>
+                            <input
+                              type="text"
+                              value={formularioEvento.ubicacionDireccion}
+                              disabled={modoFormularioEvento === 'ver'}
+                              placeholder="Ej. Ameca, Jalisco"
+                              onChange={(e) => actualizarCampoEvento('ubicacionDireccion', e.target.value)}
+                            />
+                          </div>
+
+                          <div className="campo-evento">
+                            <label>Referencia <span>opcional</span></label>
+                            <input
+                              type="text"
+                              value={formularioEvento.ubicacionReferencia}
+                              disabled={modoFormularioEvento === 'ver'}
+                              placeholder="Ej. Cerca del centro"
+                              onChange={(e) => actualizarCampoEvento('ubicacionReferencia', e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="campo-evento">
+                          <label>Descripción <span>opcional</span></label>
+                          <textarea
+                            value={formularioEvento.descripcion}
+                            disabled={modoFormularioEvento === 'ver'}
+                            rows="4"
+                            placeholder="Agrega detalles importantes del evento..."
+                            onChange={(e) => actualizarCampoEvento('descripcion', e.target.value)}
+                          ></textarea>
+                        </div>
+
+                        <div className="campo-evento">
+                          <label>Recordatorio</label>
+                          <select
+                            value={formularioEvento.recordatorioMinutosAntes}
+                            disabled={modoFormularioEvento === 'ver'}
+                            onChange={(e) => actualizarCampoEvento('recordatorioMinutosAntes', e.target.value)}
+                          >
+                            <option value="60">1 hora antes</option>
+                            <option value="360">6 horas antes</option>
+                            <option value="1440">1 día antes</option>
+                            <option value="10080">1 semana antes</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
 
-                <div className="p-4 border-top" style={{ borderColor: 'var(--borde-color)', backgroundColor: 'var(--fondo-tarjeta)' }}>
-                  <button className="btn w-100 rounded-pill" style={{ backgroundColor: 'var(--dorado)', color: 'white', fontWeight: 'bold', padding: '10px 0' }}>
-                    <i className="bi bi-plus-lg me-2"></i> Crear Nuevo Evento
-                  </button>
-                </div>
+                    <div className="p-4 border-top acciones-form-evento" style={{ borderColor: 'var(--borde-color)', backgroundColor: 'var(--fondo-tarjeta)' }}>
+                      <button
+                        type="button"
+                        className="btn-evento-secundario"
+                        onClick={restablecerFormularioEvento}
+                        disabled={guardandoEvento}
+                      >
+                        <i className="bi bi-arrow-left"></i>
+                        Volver
+                      </button>
+
+                      {modoFormularioEvento === 'editar' && eventoEditando?.id && (
+                        <button
+                          type="button"
+                          className="btn-evento-peligro"
+                          onClick={eliminarEventoFamiliar}
+                          disabled={guardandoEvento}
+                        >
+                          <i className="bi bi-trash"></i>
+                        </button>
+                      )}
+
+                      {modoFormularioEvento !== 'ver' && (
+                        <button
+                          type="button"
+                          className="btn-evento-principal"
+                          onClick={guardarEventoFamiliar}
+                          disabled={guardandoEvento}
+                        >
+                          {guardandoEvento ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm"></span>
+                              Guardando...
+                            </>
+                          ) : (
+                            <>
+                              <i className="bi bi-check2-circle"></i>
+                              {modoFormularioEvento === 'editar' ? 'Actualizar' : 'Crear evento'}
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="scroll-contenido p-4 flex-grow-1">
+                      <div className="d-flex justify-content-between align-items-center mb-3">
+                        <p className="text-muted fw-bold mb-0 text-uppercase" style={{ fontSize: '0.65rem', letterSpacing: '1px' }}>Próximos Eventos</p>
+                        <button className="btn-recargar-eventos" onClick={() => cargarEventosFamiliares(arbol?._id)} disabled={cargandoEventos} title="Actualizar eventos">
+                          <i className={`bi ${cargandoEventos ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
+                        </button>
+                      </div>
+
+                      {errorEventos && (
+                        <div className="alerta-eventos error mb-3">
+                          <i className="bi bi-exclamation-triangle"></i>
+                          <span>{errorEventos}</span>
+                        </div>
+                      )}
+
+                      {cargandoEventos ? (
+                        <div className="estado-eventos-vacio">
+                          <div className="spinner-border spinner-border-sm" role="status"></div>
+                          <p>Cargando eventos familiares...</p>
+                        </div>
+                      ) : eventosFamiliares.length > 0 ? (
+                        eventosFamiliares.map(evento => {
+                          const configEvento = obtenerConfigEvento(evento.tipoEvento);
+                          const puedeGestionar = usuarioPuedeGestionarEventoLocal(evento);
+
+                          return (
+                            <div key={evento.id} className="tarjeta-evento" onClick={() => abrirDetalleEvento(evento)}>
+                              <div className="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                <div className="evento-fecha">{formatearFechaEventoCorta(evento.fechaInicio)}</div>
+                                <span className="etiqueta-tipo-evento"><i className={`bi ${configEvento.icono}`}></i> {configEvento.etiqueta}</span>
+                              </div>
+                              <div className="evento-titulo">{evento.titulo}</div>
+                              <div className="evento-detalle"><i className="bi bi-clock"></i> {formatearFechaEventoCompleta(evento.fechaInicio)} · {formatearHoraEvento(evento.fechaInicio, evento.todoElDia)}</div>
+                              <div className="evento-detalle"><i className="bi bi-geo-alt"></i> {obtenerTextoUbicacionEvento(evento)}</div>
+                              {evento.descripcion && <p className="evento-descripcion-corta">{evento.descripcion}</p>}
+                              {puedeGestionar && <span className="evento-puede-editar"><i className="bi bi-pencil-square"></i> Editar</span>}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="estado-eventos-vacio">
+                          <i className="bi bi-calendar-plus"></i>
+                          <h6>No hay eventos próximos</h6>
+                          <p>Crea cumpleaños, reuniones, aniversarios o recordatorios para este árbol familiar.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-4 border-top" style={{ borderColor: 'var(--borde-color)', backgroundColor: 'var(--fondo-tarjeta)' }}>
+                      <button
+                        className="btn w-100 rounded-pill"
+                        style={{ backgroundColor: 'var(--dorado)', color: 'white', fontWeight: 'bold', padding: '10px 0' }}
+                        onClick={abrirFormularioCrearEvento}
+                      >
+                        <i className="bi bi-plus-lg me-2"></i> Crear Nuevo Evento
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : null}
           </div>

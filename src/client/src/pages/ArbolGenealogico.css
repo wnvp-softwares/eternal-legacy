@@ -2740,3 +2740,360 @@
         right: 3.1rem;
     }
 }
+
+/* =========================================
+   EVENTOS FAMILIARES CON MONGODB
+   ========================================= */
+
+.formulario-evento-familiar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.campo-evento {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.campo-evento label,
+.titulo-seccion-evento {
+    color: var(--texto-secundario);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}
+
+.campo-evento label span {
+    font-weight: 700;
+    opacity: 0.72;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.campo-evento input,
+.campo-evento select,
+.campo-evento textarea {
+    width: 100%;
+    border: 1px solid var(--borde-color);
+    border-radius: 13px;
+    padding: 10px 12px;
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    font-size: 0.86rem;
+    font-weight: 600;
+    transition: all 0.18s ease;
+}
+
+.campo-evento textarea {
+    resize: none;
+    line-height: 1.55;
+}
+
+.campo-evento input:focus,
+.campo-evento select:focus,
+.campo-evento textarea:focus {
+    outline: none;
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 3px rgba(203, 164, 52, 0.16);
+}
+
+.campo-evento input:disabled,
+.campo-evento select:disabled,
+.campo-evento textarea:disabled {
+    opacity: 0.75;
+    cursor: not-allowed;
+}
+
+.grid-evento-doble {
+    display: grid;
+    grid-template-columns: 1fr 0.8fr;
+    gap: 10px;
+}
+
+.check-evento-todo-dia {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--borde-color);
+    border-radius: 14px;
+    background-color: var(--fondo-app);
+    padding: 10px 12px;
+    color: var(--texto-principal);
+    font-size: 0.84rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.check-evento-todo-dia input {
+    accent-color: var(--dorado);
+}
+
+.seccion-form-evento {
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    padding: 14px;
+    background-color: rgba(203, 164, 52, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.titulo-seccion-evento {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--dorado-oscuro);
+}
+
+.acciones-form-evento {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-evento-secundario,
+.btn-evento-principal,
+.btn-evento-peligro,
+.btn-recargar-eventos {
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 800;
+    transition: all 0.18s ease;
+    cursor: pointer;
+}
+
+.btn-evento-secundario {
+    flex: 1;
+    border-radius: 999px;
+    padding: 10px 14px;
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+    border: 1px solid var(--borde-color);
+}
+
+.btn-evento-secundario:hover {
+    color: var(--texto-principal);
+    background-color: var(--hover-menu);
+}
+
+.btn-evento-principal {
+    flex: 1.25;
+    border-radius: 999px;
+    padding: 10px 14px;
+    background-color: var(--dorado);
+    color: #ffffff;
+}
+
+.btn-evento-principal:hover {
+    background-color: var(--dorado-oscuro);
+}
+
+.btn-evento-peligro {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    color: #ef4444;
+    background-color: #fee2e2;
+}
+
+.btn-evento-peligro:hover {
+    background-color: #fecaca;
+}
+
+.btn-evento-secundario:disabled,
+.btn-evento-principal:disabled,
+.btn-evento-peligro:disabled,
+.btn-recargar-eventos:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.btn-recargar-eventos {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+    border: 1px solid var(--borde-color);
+}
+
+.btn-recargar-eventos:hover {
+    color: var(--dorado-oscuro);
+    border-color: rgba(203, 164, 52, 0.45);
+}
+
+.girando {
+    animation: girarEvento 0.8s linear infinite;
+}
+
+@keyframes girarEvento {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.etiqueta-tipo-evento {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 999px;
+    padding: 4px 8px;
+    background-color: rgba(203, 164, 52, 0.10);
+    color: var(--dorado-oscuro);
+    font-size: 0.62rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.evento-descripcion-corta {
+    color: var(--texto-secundario);
+    font-size: 0.74rem;
+    line-height: 1.45;
+    margin: 8px 0 0 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.evento-puede-editar {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 10px;
+    color: var(--dorado-oscuro);
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+.estado-eventos-vacio {
+    border: 1px dashed var(--borde-color);
+    border-radius: 18px;
+    padding: 28px 18px;
+    text-align: center;
+    background-color: var(--fondo-app);
+    color: var(--texto-secundario);
+}
+
+.estado-eventos-vacio i {
+    font-size: 2rem;
+    color: var(--dorado);
+    display: block;
+    margin-bottom: 10px;
+}
+
+.estado-eventos-vacio h6 {
+    color: var(--texto-principal);
+    font-size: 0.92rem;
+    font-weight: 900;
+    margin-bottom: 6px;
+}
+
+.estado-eventos-vacio p {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.alerta-eventos {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.alerta-eventos.error {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+[data-tema="oscuro"] .seccion-form-evento,
+[data-tema="oscuro"] .check-evento-todo-dia,
+[data-tema="oscuro"] .campo-evento input,
+[data-tema="oscuro"] .campo-evento select,
+[data-tema="oscuro"] .campo-evento textarea,
+[data-tema="oscuro"] .estado-eventos-vacio,
+[data-tema="oscuro"] .btn-evento-secundario,
+[data-tema="oscuro"] .btn-recargar-eventos {
+    background-color: rgba(15, 23, 42, 0.45);
+}
+
+@media (max-width: 576px) {
+    .grid-evento-doble {
+        grid-template-columns: 1fr;
+    }
+
+    .acciones-form-evento {
+        flex-wrap: wrap;
+    }
+
+    .btn-evento-secundario,
+    .btn-evento-principal {
+        flex: 1 1 100%;
+    }
+}
+/* =========================================
+   EXPORTACIÓN DEL ÁRBOL
+   ========================================= */
+.contenido-exportable-arbol {
+    display: flex;
+}
+
+.menu-exportar .item-exportar {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-family: inherit;
+}
+
+.menu-exportar .item-exportar:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.menu-exportar .item-exportar:disabled:hover {
+    background-color: transparent;
+    color: var(--texto-principal);
+}
+
+.boton-zoom:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.exportando-icono {
+    animation: girar-exportacion 0.9s linear infinite;
+}
+
+@keyframes girar-exportacion {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.modo-exportacion-arbol {
+    overflow: visible !important;
+    border-radius: 0 !important;
+}
+
+.modo-exportacion-arbol .placeholder-mover-generacion,
+.modo-exportacion-arbol .mensaje-colocacion-flotante,
+.modo-exportacion-arbol .boton-editar-union,
+.modo-exportacion-arbol .menu-tipo-union {
+    display: none !important;
+}
