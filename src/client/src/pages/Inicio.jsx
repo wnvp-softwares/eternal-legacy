@@ -217,41 +217,60 @@ export default function Inicio() {
   const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState({});
 
   // Cargar comentarios
-  const cargarComentarios = async (pubId) => {
+  const obtenerComentariosDesdeBackend = async (pubId) => {
+    if (!token || !pubId) return [];
+
     try {
       const respuesta = await fetch(`${API_BASE_URL}/comentarios/publicacion/${pubId}`, {
+        method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const datos = await respuesta.json();
-      if (respuesta.ok) {
-        setComentariosPorPub(prev => ({ ...prev, [pubId]: datos }));
-        return datos;
+
+      const datos = await respuesta.json().catch(() => []);
+
+      if (!respuesta.ok) {
+        return [];
       }
+
+      return Array.isArray(datos) ? datos : [];
     } catch (err) {
       console.error('Error al cargar comentarios:', err);
+      return [];
     }
-    setComentariosPorPub(prev => ({ ...prev, [pubId]: [] }));
-    return [];
+  };
+
+  const cargarComentarios = async (pubId) => {
+    const comentarios = await obtenerComentariosDesdeBackend(pubId);
+
+    setComentariosPorPub(prev => ({
+      ...prev,
+      [pubId]: comentarios
+    }));
+
+    return comentarios;
   };
 
   const cargarComentariosDePublicaciones = async (listaPublicaciones = []) => {
     if (!token || !Array.isArray(listaPublicaciones) || listaPublicaciones.length === 0) return;
+
     try {
+      const publicacionesConId = listaPublicaciones
+        .map(pub => ({ ...pub, idSeguro: pub?._id || pub?.id }))
+        .filter(pub => pub.idSeguro);
+
+      if (publicacionesConId.length === 0) return;
+
       const entradas = await Promise.all(
-        listaPublicaciones.map(async (pub) => {
-          try {
-            const respuesta = await fetch(`${API_BASE_URL}/comentarios/publicacion/${pub._id}`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!respuesta.ok) return [pub._id, []];
-            const datos = await respuesta.json();
-            return [pub._id, Array.isArray(datos) ? datos : []];
-          } catch (err) {
-            return [pub._id, []];
-          }
+        publicacionesConId.map(async (pub) => {
+          const comentarios = await obtenerComentariosDesdeBackend(pub.idSeguro);
+          return [pub.idSeguro, comentarios];
         })
       );
-      setComentariosPorPub(prev => ({ ...prev, ...Object.fromEntries(entradas) }));
+
+      setComentariosPorPub(prev => ({
+        ...prev,
+        ...Object.fromEntries(entradas)
+      }));
     } catch (err) {
       console.error('Error al precargar comentarios:', err);
     }
@@ -555,20 +574,45 @@ export default function Inicio() {
 
   const enviarComentario = async (pubId) => {
     const texto = nuevoComentarioTexto[pubId];
-    if (!texto || !texto.trim()) return;
+
+    if (!pubId || !texto || !texto.trim()) return;
+
     try {
       const respuesta = await fetch(`${API_BASE_URL}/comentarios/crear`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ publicacionId: pubId, texto: texto })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          publicacionId: pubId,
+          texto: texto.trim()
+        })
       });
-      const datos = await respuesta.json();
-      if (respuesta.ok) {
-        const comentarioRender = { ...datos.comentario, autor: { nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo' } };
-        setComentariosPorPub(prev => ({ ...prev, [pubId]: [...(prev[pubId] || []), comentarioRender] }));
-        setNuevoComentarioTexto(prev => ({ ...prev, [pubId]: '' }));
+
+      const datos = await respuesta.json().catch(() => ({}));
+
+      if (!respuesta.ok) {
+        console.error(datos.mensaje || 'No se pudo crear el comentario.');
+        return;
       }
-    } catch (err) { console.error(err); }
+
+      const comentarioRender = {
+        ...datos.comentario,
+        autor: datos.comentario?.autor || {
+          nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo'
+        }
+      };
+
+      setComentariosPorPub(prev => ({
+        ...prev,
+        [pubId]: [...(prev[pubId] || []), comentarioRender]
+      }));
+
+      setNuevoComentarioTexto(prev => ({ ...prev, [pubId]: '' }));
+    } catch (err) {
+      console.error('Error al enviar comentario:', err);
+    }
   };
 
   useEffect(() => {
@@ -1356,7 +1400,7 @@ export default function Inicio() {
                       )}
                     </div>
                     <div className="d-flex gap-2 pb-2">
-                      <input type="text" className="form-control form-control-sm" placeholder="Escribe un comentario..." style={{ backgroundColor: 'var(--input-bg)', color: 'var(--texto-principal)', borderColor: 'var(--borde-color)' }} value={nuevoComentarioTexto[pub._id] || ''} onChange={(e) => setNuevoComentarioTexto(prev => ({ ...prev, [pub._id]: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Enter') enviarComentario(pub._id); }} />
+                      <input type="text" className="form-control form-control-sm" placeholder="Escribe un comentario..." style={{ backgroundColor: 'var(--input-bg)', color: 'var(--texto-principal)', borderColor: 'var(--borde-color)' }} value={nuevoComentarioTexto[pub._id] || ''} onChange={(e) => setNuevoComentarioTexto(prev => ({ ...prev, [pub._id]: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); enviarComentario(pub._id); } }} />
                       <button className="btn btn-sm text-white px-3" onClick={() => enviarComentario(pub._id)} style={{ backgroundColor: 'var(--dorado)', border: 'none' }}>Enviar</button>
                     </div>
                   </div>

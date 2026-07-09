@@ -1,42 +1,108 @@
+const mongoose = require('mongoose');
 const { Comentario, Publicacion } = require('../../models/index.model');
+
+const esObjectIdValido = (id) => {
+    return Boolean(id) && mongoose.Types.ObjectId.isValid(String(id));
+};
+
+const poblarComentario = async (comentarioId) => {
+    return Comentario.findById(comentarioId)
+        .populate({
+            path: 'autor',
+            select: 'nombreUsuario email imagenPerfil',
+            populate: {
+                path: 'imagenPerfil'
+            }
+        });
+};
 
 const crearComentario = async (req, res) => {
     try {
-        const { publicacionId, texto } = req.body;
+        const { publicacionId, texto } = req.body || {};
 
-        // Verificamos que la publicación exista
+        if (!publicacionId || !esObjectIdValido(publicacionId)) {
+            return res.status(400).json({
+                mensaje: 'El ID de la publicación no es válido.'
+            });
+        }
+
+        if (!texto || texto.trim() === '') {
+            return res.status(400).json({
+                mensaje: 'El comentario no puede estar vacío.'
+            });
+        }
+
         const publicacion = await Publicacion.findById(publicacionId);
+
         if (!publicacion) {
-            return res.status(404).json({ mensaje: 'Publicación no encontrada' });
+            return res.status(404).json({
+                mensaje: 'Publicación no encontrada.'
+            });
         }
 
         const nuevoComentario = new Comentario({
             publicacionPadre: publicacionId,
-            autor: req.usuario.id, // Viene del token
-            texto
+            autor: req.usuario.id || req.usuario._id,
+            texto: texto.trim(),
+            reacciones: 0
         });
 
         await nuevoComentario.save();
 
-        res.status(201).json({ mensaje: 'Comentario agregado', comentario: nuevoComentario });
+        const comentarioCompleto = await poblarComentario(nuevoComentario._id);
+
+        res.status(201).json({
+            mensaje: 'Comentario agregado',
+            comentario: comentarioCompleto || nuevoComentario
+        });
     } catch (error) {
         console.error('❌ Error al crear comentario:', error);
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
+        res.status(500).json({
+            mensaje: 'Error interno del servidor al crear el comentario.'
+        });
     }
 };
 
 const obtenerComentariosPorPublicacion = async (req, res) => {
     try {
         const { publicacionId } = req.params;
-        const comentarios = await Comentario.find({ publicacionPadre: publicacionId })
-            .sort({ createdAt: 1 }) // Orden cronológico
-            .populate('autor', 'nombreUsuario');
+
+        if (!publicacionId || !esObjectIdValido(publicacionId)) {
+            return res.status(400).json({
+                mensaje: 'El ID de la publicación no es válido.'
+            });
+        }
+
+        const publicacion = await Publicacion.findById(publicacionId).select('_id');
+
+        if (!publicacion) {
+            return res.status(404).json({
+                mensaje: 'Publicación no encontrada.'
+            });
+        }
+
+        const comentarios = await Comentario.find({
+            publicacionPadre: publicacionId
+        })
+            .sort({ createdAt: 1 })
+            .populate({
+                path: 'autor',
+                select: 'nombreUsuario email imagenPerfil',
+                populate: {
+                    path: 'imagenPerfil'
+                }
+            });
 
         res.status(200).json(comentarios);
     } catch (error) {
         console.error('❌ Error al obtener comentarios:', error);
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
+        res.status(500).json({
+            mensaje: 'Error interno del servidor al obtener comentarios.'
+        });
     }
 };
 
-module.exports = { crearComentario, obtenerComentariosPorPublicacion };
+module.exports = {
+    crearComentario,
+    obtenerComentariosPorPublicacion
+};
