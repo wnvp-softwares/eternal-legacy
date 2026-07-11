@@ -24,10 +24,15 @@ export default function Perfil() {
   // --- ESTADOS PARA EL MODAL DE EDICIÓN DE PERFIL (ESTILO X) ---
   const [edicionAbierta, setEdicionAbierta] = useState(false);
   const [formEdicion, setFormEdicion] = useState({
+    nombreUsuario: '',
+    email: '',
     biografia: '',
+    fechaNacimiento: '',
+    genero: '',
+    lugarNacimiento: '',
     ubicacionActual: '',
     ocupacionEducacion: '',
-    portada: ''
+    intereses: ''
   });
 
   // --- CONFIGURACIÓN DE DATOS REALES DE SESIÓN Y BACKEND ---
@@ -162,12 +167,26 @@ export default function Perfil() {
   // --- FUNCIONES DEL MODAL DE EDICIÓN ---
   const toggleEdicion = () => {
     if (!edicionAbierta) {
+      const interesesTexto = Array.isArray(perfilBd?.intereses)
+        ? perfilBd.intereses.join(', ')
+        : '';
+
+      const fechaFormateada = perfilBd?.fechaNacimiento
+        ? new Date(perfilBd.fechaNacimiento).toISOString().split('T')[0]
+        : '';
+
       setFormEdicion({
+        nombreUsuario: usuarioLogueado?.nombreUsuario || '',
+        email: usuarioLogueado?.email || '',
         biografia: perfilBd?.biografia || '',
+        fechaNacimiento: fechaFormateada,
+        genero: perfilBd?.genero || '',
+        lugarNacimiento: perfilBd?.lugarNacimiento || '',
         ubicacionActual: perfilBd?.ubicacionActual || '',
-        ocupacionEducacion: perfilBd?.ocupacionEducacion || ''
+        ocupacionEducacion: perfilBd?.ocupacionEducacion || '',
+        intereses: interesesTexto
       });
-      // Inicializamos las vistas previas con lo que ya tenga el usuario en sesión
+
       setVistaPreviaPerfil(usuarioLogueado?.imagenPerfil || '');
       setVistaPreviaPortada(usuarioLogueado?.imagenPortada || '');
       setArchivoPerfil(null);
@@ -180,7 +199,7 @@ export default function Perfil() {
     const archivo = e.target.files[0];
     if (archivo) {
       setArchivoPerfil(archivo);
-      setVistaPreviaPerfil(URL.createObjectURL(archivo)); // Genera preview temporal
+      setVistaPreviaPerfil(URL.createObjectURL(archivo));
     }
   };
 
@@ -188,62 +207,65 @@ export default function Perfil() {
     const archivo = e.target.files[0];
     if (archivo) {
       setArchivoPortada(archivo);
-      setVistaPreviaPortada(URL.createObjectURL(archivo)); // Genera preview temporal
+      setVistaPreviaPortada(URL.createObjectURL(archivo));
     }
   };
 
   const guardarPerfil = async () => {
     try {
-      // 1. Guardar primero los datos de texto (Biografía, ubicación, etc.)
+      const interesesArray = formEdicion.intereses
+        ? formEdicion.intereses.split(',').map(i => i.trim()).filter(i => i !== '')
+        : [];
+
+      const cuerpoEnvio = {
+        ...formEdicion,
+        intereses: interesesArray
+      };
+
       const respuesta = await fetch(`${API_BASE_URL}/perfil/actualizar`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(formEdicion)
+        body: JSON.stringify(cuerpoEnvio)
       });
 
+      const datosBD = await respuesta.json();
+
       if (!respuesta.ok) {
-        alert('Error al guardar los datos de texto del perfil.');
+        alert(datosBD.mensaje || 'Error al guardar los datos del perfil.');
         return;
       }
 
-      const datosBD = await respuesta.json();
-      setPerfilBd(datosBD.perfil || { ...perfilBd, ...formEdicion });
+      setPerfilBd(datosBD.perfil || { ...perfilBd, ...cuerpoEnvio });
 
-      // 2. Función interna para subir imágenes usando la configuración de Multer
+      let usuarioActualizadoLocal = {
+        ...usuarioLogueado,
+        nombreUsuario: datosBD.usuario?.nombreUsuario || usuarioLogueado.nombreUsuario,
+        email: datosBD.usuario?.email || usuarioLogueado.email
+      };
+
       const subirArchivoAlServidor = async (archivo) => {
         const formData = new FormData();
         formData.append('archivo', archivo);
-
         const resUpload = await fetch(`${API_BASE_URL}/uploads/subir`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
+          headers: { 'Authorization': `Bearer ${token}` },
           body: formData
         });
-
         if (!resUpload.ok) throw new Error('Error al subir el archivo multimedia.');
         const dataUpload = await resUpload.json();
         return dataUpload.upload?._id || dataUpload._id;
       };
 
-      // 3. Procesar subidas si hay archivos seleccionados en los inputs
       let imagenPerfilId = null;
       let imagenPortadaId = null;
 
-      if (archivoPerfil) {
-        imagenPerfilId = await subirArchivoAlServidor(archivoPerfil);
-      }
-      if (archivoPortada) {
-        imagenPortadaId = await subirArchivoAlServidor(archivoPortada);
-      }
+      if (archivoPerfil) imagenPerfilId = await subirArchivoAlServidor(archivoPerfil);
+      if (archivoPortada) imagenPortadaId = await subirArchivoAlServidor(archivoPortada);
 
-      // 4. 🔥 CORRECCIÓN: Vinculamos ambas imágenes usando tu ruta unificada del backend
       if (imagenPerfilId || imagenPortadaId) {
-        // Llamamos a tu ruta unificada /actualizar-imagenes que maneja ambos campos
         const resImagenes = await fetch(`${API_BASE_URL}/usuarios/actualizar-imagenes`, {
           method: 'PUT',
           headers: {
@@ -260,7 +282,6 @@ export default function Perfil() {
           const datosImg = await resImagenes.json();
           const usuarioBackend = datosImg.usuario;
 
-          // Construimos las URLs completas basándonos en tu carpeta estática
           const nuevaUrlPerfil = usuarioBackend.imagenPerfil?.urlArchivo
             ? `http://localhost:3000${usuarioBackend.imagenPerfil.urlArchivo}`
             : usuarioLogueado?.imagenPerfil;
@@ -269,26 +290,22 @@ export default function Perfil() {
             ? `http://localhost:3000${usuarioBackend.imagenPortada.urlArchivo}`
             : usuarioLogueado?.imagenPortada;
 
-          // Guardamos AMBOS cambios de manera persistente en la sesión de la interfaz
-          const usuarioActualizado = {
-            ...usuarioLogueado,
+          usuarioActualizadoLocal = {
+            ...usuarioActualizadoLocal,
             imagenPerfil: nuevaUrlPerfil,
             imagenPortada: nuevaUrlPortada
           };
-          localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
         } else {
-          alert('Las imágenes se subieron, pero hubo un problema al vincularlas en tu perfil.');
+          alert('Las imágenes se subieron, pero hubo un problema al vincularlas.');
         }
       }
 
-      // 5. Limpieza de URLs temporales de Vista Previa para liberar memoria RAM
+      localStorage.setItem('usuario', JSON.stringify(usuarioActualizadoLocal));
+
       if (vistaPreviaPerfil && vistaPreviaPerfil.startsWith('blob:')) URL.revokeObjectURL(vistaPreviaPerfil);
       if (vistaPreviaPortada && vistaPreviaPortada.startsWith('blob:')) URL.revokeObjectURL(vistaPreviaPortada);
 
-      // Cerramos el modal de edición
       setEdicionAbierta(false);
-
-      // Recarga limpia para actualizar todos los componentes de la interfaz
       window.location.reload();
 
     } catch (error) {
@@ -300,31 +317,31 @@ export default function Perfil() {
 
   // 1. Dar o quitar reacción (Like)
   const manejarLike = async (postId) => {
-  try {
-    const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/reaccionar`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
+    try {
+      const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/reaccionar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setPublicaciones(prev =>
+          prev.map(post =>
+            post._id === postId
+              ? { ...post, reacciones: data.reacciones }
+              : post
+          )
+        );
+      } else {
+        console.error(data.mensaje || 'Error al gestionar la reacción');
       }
-    });
-
-    const data = await res.json();
-
-    if (res.ok) {
-      setPublicaciones(prev =>
-        prev.map(post =>
-          post._id === postId
-            ? { ...post, reacciones: data.reacciones }
-            : post
-        )
-      );
-    } else {
-      console.error(data.mensaje || 'Error al gestionar la reacción');
+    } catch (error) {
+      console.error('❌ Error al gestionar la reacción:', error);
     }
-  } catch (error) {
-    console.error('❌ Error al gestionar la reacción:', error);
-  }
-};
+  };
 
   // 3. Alternar la caja de comentarios y disparar la carga sincrónica
   const toggleComentarios = (postId) => {
@@ -339,15 +356,15 @@ export default function Perfil() {
   // 1. Función defensiva para comprobar si el usuario logueado dio Like
   // (Evita errores de tipo si Mongoose devuelve un String o un Objeto populado)
   const usuarioHaReaccionado = (post) => {
-  if (!Array.isArray(post.reacciones)) return false;
+    if (!Array.isArray(post.reacciones)) return false;
 
-  const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+    const miId = usuarioLogueado?.id || usuarioLogueado?._id;
 
-  return post.reacciones.some(r => {
-    const idReaccion = typeof r === 'object' && r !== null ? r._id : r;
-    return idReaccion?.toString() === miId?.toString();
-  });
-};
+    return post.reacciones.some(r => {
+      const idReaccion = typeof r === 'object' && r !== null ? r._id : r;
+      return idReaccion?.toString() === miId?.toString();
+    });
+  };
 
   // 4. Enviar un nuevo comentario
   const manejarEnviarComentario = async (postId) => {
@@ -514,6 +531,75 @@ export default function Perfil() {
                   />
                 </div>
 
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Nombre de Usuario</label>
+                  <input
+                    type="text"
+                    className="form-control input-x"
+                    value={formEdicion.nombreUsuario}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, nombreUsuario: e.target.value })}
+                    placeholder="Tu nombre de usuario"
+                  />
+                </div>
+
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Correo Electrónico</label>
+                  <input
+                    type="email"
+                    className="form-control input-x"
+                    value={formEdicion.email}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, email: e.target.value })}
+                    placeholder="tu@correo.com"
+                  />
+                </div>
+
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Fecha de Nacimiento</label>
+                  <input
+                    type="date"
+                    className="form-control input-x"
+                    value={formEdicion.fechaNacimiento}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, fechaNacimiento: e.target.value })}
+                  />
+                </div>
+
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Género</label>
+                  <select
+                    className="form-control input-x"
+                    value={formEdicion.genero}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, genero: e.target.value })}
+                  >
+                    <option value="">Selecciona una opción</option>
+                    <option value="Masculino">Masculino</option>
+                    <option value="Femenino">Femenino</option>
+                    <option value="Otro">Otro</option>
+                    <option value="Prefiero no decirlo">Prefiero no decirlo</option>
+                  </select>
+                </div>
+
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Lugar de Nacimiento</label>
+                  <input
+                    type="text"
+                    className="form-control input-x"
+                    value={formEdicion.lugarNacimiento}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, lugarNacimiento: e.target.value })}
+                    placeholder="Ej. Ciudad de México"
+                  />
+                </div>
+
+                <div className="grupo-input-x">
+                  <label className="label-input-x">Intereses (Separados por comas)</label>
+                  <input
+                    type="text"
+                    className="form-control input-x"
+                    value={formEdicion.intereses}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, intereses: e.target.value })}
+                    placeholder="Ej. Música, Historia, Viajes"
+                  />
+                </div>
+
               </div>
             </div>
 
@@ -551,18 +637,58 @@ export default function Perfil() {
           <div className="datos-extra-perfil">
             {perfilBd?.ubicacionActual && (
               <span>
-                <i className="bi bi-geo-alt"></i> {perfilBd.ubicacionActual}
+                <i className="bi bi-geo-alt-fill"></i> Vive en <strong>{perfilBd.ubicacionActual}</strong>
+              </span>
+            )}
+            {perfilBd?.lugarNacimiento && (
+              <span>
+                <i className="bi bi-house-door-fill"></i> De <strong>{perfilBd.lugarNacimiento}</strong>
               </span>
             )}
             {perfilBd?.ocupacionEducacion && (
               <span>
-                <i className="bi bi-briefcase"></i> {perfilBd.ocupacionEducacion}
+                <i className="bi bi-briefcase-fill"></i> Trabaja/Estudia <strong>{perfilBd.ocupacionEducacion}</strong>
+              </span>
+            )}
+            {perfilBd?.genero && (
+              <span>
+                <i className="bi bi-gender-ambiguous"></i> Género: <strong>{perfilBd.genero}</strong>
+              </span>
+            )}
+            {perfilBd?.fechaNacimiento && (
+              <span>
+                <i className="bi bi-cake2-fill"></i> Cumpleaños: <strong>
+                  {(() => {
+                    const fechaUTC = new Date(perfilBd.fechaNacimiento);
+                    fechaUTC.setMinutes(fechaUTC.getMinutes() + fechaUTC.getTimezoneOffset());
+
+                    return fechaUTC.toLocaleDateString('es-MX', {
+                      day: 'numeric',
+                      month: 'long'
+                    });
+                  })()}
+                </strong>
               </span>
             )}
             <span>
-              <i className="bi bi-calendar3"></i> Unido en {formatearFecha(perfilBd?.createdAt, 'completo')}
+              <i className="bi bi-calendar3"></i> Miembro desde <strong>{formatearFecha(perfilBd?.createdAt, 'completo')}</strong>
             </span>
           </div>
+
+          {Array.isArray(perfilBd?.intereses) && perfilBd.intereses.length > 0 && (
+            <div className="intereses-perfil-contenedor mt-3">
+              <p className="small text-muted mb-2 fw-bold text-uppercase" style={{ fontSize: '0.75rem', letterSpacing: '0.5px' }}>
+                <i className="bi bi-heart-pulse-fill text-danger me-1"></i> Intereses y Pasiones
+              </p>
+              <div className="d-flex flex-wrap gap-2">
+                {perfilBd.intereses.map((interes, index) => (
+                  <span key={index} className="badge bg-light text-dark border py-2 px-3 rounded-pill shadow-xs" style={{ fontSize: '0.85rem', fontWeight: '500' }}>
+                    #{interes}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="contenedor-etiquetas">
             <div className="etiqueta-item">
