@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Perfil.css';
 
 export default function Perfil() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
   const fileInputPerfilRef = useRef(null);
   const fileInputPortadaRef = useRef(null);
 
@@ -35,9 +39,13 @@ export default function Perfil() {
     intereses: ''
   });
 
+  const [usuarioPerfil, setUsuarioPerfil] = useState(null);
+
   // --- CONFIGURACIÓN DE DATOS REALES DE SESIÓN Y BACKEND ---
   const token = localStorage.getItem('token');
   const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+
+  const esMiPerfil = !id || id === usuarioLogueado?.id || id === usuarioLogueado?._id;
 
   const API_BASE_URL = 'http://localhost:3000/api';
 
@@ -115,8 +123,13 @@ export default function Perfil() {
 
     const cargarDatosPerfil = async () => {
       try {
+        // Si hay 'id' cargamos el perfil ajeno, si no, el del usuario logueado ('mi-perfil')
+        const urlPerfilEndpoint = esMiPerfil
+          ? `${API_BASE_URL}/perfil/mi-perfil`
+          : `${API_BASE_URL}/perfil/${id}`;
+
         const [resPerfil, resPublicaciones] = await Promise.all([
-          fetch(`${API_BASE_URL}/perfil/mi-perfil`, {
+          fetch(urlPerfilEndpoint, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -141,13 +154,22 @@ export default function Perfil() {
 
         setPerfilBd(datosPerfil.perfil);
 
+        // Guardamos la información del usuario dueño de este perfil
+        if (esMiPerfil) {
+          setUsuarioPerfil(usuarioLogueado);
+        } else {
+          setUsuarioPerfil(datosPerfil.usuario);
+        }
+
         const listaPosts = Array.isArray(datosPublicaciones)
           ? datosPublicaciones
           : (datosPublicaciones.publicaciones || datosPublicaciones.posts || []);
 
+        // Cambiamos el filtro para que use las publicaciones del dueño del perfil actual
+        const targetId = esMiPerfil ? (usuarioLogueado?.id || usuarioLogueado?._id) : id;
         const misPublicaciones = listaPosts.filter(post => {
           const autorId = post.autor?._id || post.autor;
-          return autorId === usuarioLogueado?.id || autorId === usuarioLogueado?._id;
+          return autorId === targetId;
         });
 
         setPublicaciones(misPublicaciones);
@@ -155,14 +177,14 @@ export default function Perfil() {
         setError('');
       } catch (err) {
         console.error("Error cargando datos del perfil:", err);
-        setError('Error de conexión con el servidor. Verifica que el backend esté corriendo en el puerto 3000.');
+        setError('Error de conexión con el servidor.');
       } finally {
         setCargando(false);
       }
     };
 
     cargarDatosPerfil();
-  }, [token]);
+  }, [token, id]);
 
   // --- FUNCIONES DEL MODAL DE EDICIÓN ---
   const toggleEdicion = () => {
@@ -614,7 +636,7 @@ export default function Perfil() {
       <div className="cabecera-perfil shadow-sm">
         <div className="portada-contenedor">
           <img
-            src={usuarioLogueado?.imagenPortada || "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200"}
+            src={usuarioPerfil?.imagenPortada || "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200"}
             alt="Portada"
             className="portada-perfil"
           />
@@ -622,17 +644,19 @@ export default function Perfil() {
 
         <div className="info-usuario-container">
           <div className="fila-superior-info">
-            <img src={usuarioLogueado?.imagenPerfil || urlAvatar} alt="Perfil" className="foto-perfil-grande" />
+            <img src={usuarioPerfil?.imagenPerfil || urlAvatar} alt="Perfil" className="foto-perfil-grande" />
 
-            {/* BOTÓN PARA ABRIR MODAL */}
-            <button className="boton-editar-perfil" title="Editar Perfil" onClick={toggleEdicion}>
-              <i className="bi bi-pencil"></i>
-            </button>
+            {/* CONDICIONAL: Solo muestra el botón de edición si es MI PERFIL */}
+            {esMiPerfil && (
+              <button className="boton-editar-perfil" title="Editar Perfil" onClick={toggleEdicion}>
+                <i className="bi bi-pencil"></i>
+              </button>
+            )}
           </div>
 
-          <h2 className="fuente-elegante fw-bold nombre-perfil">{usuarioLogueado?.nombreUsuario || 'Usuario'}</h2>
-          <p className="usuario-tag">@{usuarioLogueado?.nombreUsuario?.toLowerCase().replace(/\s+/g, '') || 'sin_usuario'}</p>
-          <p className="bio-perfil">{perfilBd?.biografia || 'Sin biografía aún. ¡Cuéntale a tu familia sobre ti!'}</p>
+          <h2 className="fuente-elegante fw-bold nombre-perfil">{usuarioPerfil?.nombreUsuario || 'Usuario'}</h2>
+          <p className="usuario-tag">@{usuarioPerfil?.nombreUsuario?.toLowerCase().replace(/\s+/g, '') || 'sin_usuario'}</p>
+          <p className="bio-perfil">{perfilBd?.biografia || 'Sin biografía aún.'}</p>
 
           <div className="datos-extra-perfil">
             {perfilBd?.ubicacionActual && (

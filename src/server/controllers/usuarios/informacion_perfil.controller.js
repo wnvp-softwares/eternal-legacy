@@ -201,7 +201,47 @@ const actualizarMiPerfil = async (req, res) => {
     }
 };
 
+const obtenerPerfilPorId = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        let usuario = await Usuario.findById(id)
+            .populate({
+                path: 'informacionPerfil'
+            })
+            .populate({
+                path: 'imagenPerfil',
+                select: 'urlArchivo'
+            })
+            .populate({
+                path: 'imagenPortada',
+                select: 'urlArchivo'
+            });
+
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+        }
+
+        res.status(200).json({
+            mensaje: 'Perfil recuperado con éxito',
+            usuario: {
+                id: usuario._id,
+                nombreUsuario: usuario.nombreUsuario,
+                email: usuario.email,
+                // Formateamos las URLs completas para que el frontend las lea directamente
+                imagenPerfil: usuario.imagenPerfil?.urlArchivo ? `http://localhost:3000${usuario.imagenPerfil.urlArchivo}` : null,
+                imagenPortada: usuario.imagenPortada?.urlArchivo ? `http://localhost:3000${usuario.imagenPortada.urlArchivo}` : null
+            },
+            perfil: usuario.informacionPerfil
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener perfil por ID:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 module.exports = {
     obtenerMiPerfil,
-    actualizarMiPerfil
+    actualizarMiPerfil,
+    obtenerPerfilPorId
 };

@@ -171,7 +171,8 @@
 
 .imagen-post {
     width: 100%;
-    max-height: 600px; /* Límite de altura para monitores */
+    max-height: 600px;
+    /* Límite de altura para monitores */
     border-radius: 12px;
     margin-top: 16px;
     object-fit: cover;
@@ -560,7 +561,8 @@
 /* Tipografía Unificada para el cuerpo del texto */
 .texto-post.historico {
     font-size: 1rem;
-    font-weight: 400; /* Letra NORMAL, sin negritas ni Serif */
+    font-weight: 400;
+    /* Letra NORMAL, sin negritas ni Serif */
     line-height: 1.5;
     color: var(--texto-principal);
     margin-top: 15px;
@@ -581,7 +583,8 @@
 
 .imagen-post-historico {
     width: 100%;
-    max-height: 600px; /* Límite de altura para monitores */
+    max-height: 600px;
+    /* Límite de altura para monitores */
     border-radius: 2px;
     object-fit: cover;
     display: block;
@@ -651,7 +654,8 @@
 
 .imagen-post-moderna {
     width: 100%;
-    max-height: 600px; /* Límite de altura para monitores */
+    max-height: 600px;
+    /* Límite de altura para monitores */
     display: block;
     object-fit: cover;
 }
@@ -678,7 +682,7 @@
 
 .carrusel-dot-moderno.activo {
     background-color: #ffffff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 @media (max-width: 576px) {
@@ -753,8 +757,8 @@
         flex-direction: column;
         gap: 12px;
     }
-    
-    .btn-multimedia-modal, 
+
+    .btn-multimedia-modal,
     .boton-publicar-modal {
         width: 100%;
         justify-content: center;
@@ -1661,7 +1665,7 @@
     color: var(--dorado-oscuro);
 }
 
-.evento-post-render > i {
+.evento-post-render>i {
     font-size: 0.95rem;
     flex-shrink: 0;
 }
@@ -1700,7 +1704,7 @@
 
 [data-tema="oscuro"] .mencion-dorada,
 [data-tema="oscuro"] .chip-publicacion.evento i,
-[data-tema="oscuro"] .evento-post-render > i,
+[data-tema="oscuro"] .evento-post-render>i,
 [data-tema="oscuro"] .evento-sugerido-fecha small {
     color: #fde68a;
 }
@@ -1859,6 +1863,7 @@
 }
 
 @media (max-width: 576px) {
+
     .contenedor-input-superpuesto,
     .contenedor-input-superpuesto .input-publicacion,
     .contenedor-input-superpuesto .input-overlay,
@@ -2180,4 +2185,17 @@
         width: 100%;
         justify-content: center;
     }
+}
+
+/* Estilo para asegurar la interacción de perfiles */
+.perfil-interactivo {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    /* Fuerza a que responda al click */
+}
+
+.perfil-interactivo:hover {
+    text-decoration: underline;
+    /* Feedback visual extra para el texto */
+    opacity: 0.85;
 }

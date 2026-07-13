@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import './Inicio.css';
 
 const obtenerId = (valor) => {
@@ -160,6 +160,7 @@ const normalizarEventoInicio = (evento = {}, arbol = {}) => {
 };
 
 export default function Inicio() {
+  const navigate = useNavigate();
   const { textoBusqueda } = useOutletContext();
 
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -427,7 +428,7 @@ export default function Inicio() {
   // NUEVO: SINCRONIZADOR DE SCROLL PARA LA MAGIA DE TWITTER
   const manejarScrollTextarea = (e) => {
     if (overlayRef.current) {
-        overlayRef.current.scrollTop = e.target.scrollTop;
+      overlayRef.current.scrollTop = e.target.scrollTop;
     }
   };
 
@@ -738,12 +739,12 @@ export default function Inicio() {
       (
         pub.eventoRelacionadoId
           ? {
-              id: pub.eventoRelacionadoId,
-              titulo: pub.eventoTitulo || pub.tituloEvento || pub.eventoRelacionadoTitulo || 'Evento familiar',
-              fechaInicio: pub.eventoFechaInicio || null,
-              tipoEvento: pub.eventoTipo || 'otro',
-              nombreFamilia: pub.eventoNombreFamilia || 'Árbol familiar'
-            }
+            id: pub.eventoRelacionadoId,
+            titulo: pub.eventoTitulo || pub.tituloEvento || pub.eventoRelacionadoTitulo || 'Evento familiar',
+            fechaInicio: pub.eventoFechaInicio || null,
+            tipoEvento: pub.eventoTipo || 'otro',
+            nombreFamilia: pub.eventoNombreFamilia || 'Árbol familiar'
+          }
           : null
       )
     );
@@ -850,6 +851,9 @@ export default function Inicio() {
       ? new Date(pub.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
       : '';
 
+    // CORRECCIÓN 1: Usar tu función helper para extraer el ID correcto
+    const autorId = obtenerId(pub.autor);
+
     return (
       <article key={pub._id || `${pub.contenido}-${fechaFormateada}`} className="album-evento-publicacion">
         <div className="album-evento-publicacion-header">
@@ -857,18 +861,26 @@ export default function Inicio() {
             <img
               src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
               alt={pub.autor?.nombreUsuario || 'Autor'}
-              className="foto-perfil-post"
+              className="foto-perfil-post perfil-interactivo" // CORRECCIÓN 3: Clase CSS en vez de inline
+              onClick={() => autorId && navigate(`/perfil/${autorId}`)} // Prevenir si autorId es null
             />
           ) : (
             <img
               src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`}
               alt="Autor"
-              className="foto-perfil-post"
+              className="foto-perfil-post perfil-interactivo"
+              onClick={() => autorId && navigate(`/perfil/${autorId}`)}
             />
           )}
 
           <div>
-            <strong>{pub.autor?.nombreUsuario || 'Usuario'}</strong>
+            {/* Clic sobre el Nombre del usuario */}
+            <strong
+              className="perfil-interactivo"
+              onClick={() => autorId && navigate(`/perfil/${autorId}`)}
+            >
+              {pub.autor?.nombreUsuario || 'Usuario'}
+            </strong>
             {fechaFormateada && <span>{fechaFormateada}</span>}
           </div>
         </div>
@@ -1144,7 +1156,7 @@ export default function Inicio() {
         <div className="modal-backdrop-custom" onClick={cerrarModalPublicacion}>
           <div className="modal-publicacion" onClick={(e) => e.stopPropagation()}>
             <button className="btn-cerrar-modal" onClick={cerrarModalPublicacion}><i className="bi bi-x"></i></button>
-            
+
             <div className={`modal-cabecera modal-cabecera-unica ${tipoPublicacion}`}>
               <div className="titulo-modal-publicacion">
                 <span className="icono-modal-publicacion"><i className={`bi ${configPublicacionActual.icono}`}></i></span>
@@ -1154,24 +1166,24 @@ export default function Inicio() {
                 </div>
               </div>
             </div>
-            
+
             <div className="modal-cuerpo mt-3">
-              
+
               {/* LA MAGIA SUCEDE AQUÍ: CONTENEDOR SUPERPUESTO */}
               <div className="contenedor-input-superpuesto">
-                  <div className="form-control input-publicacion input-overlay" ref={overlayRef} aria-hidden="true">
-                      {textoPublicacion ? renderTextoConMenciones(textoPublicacion) : ''}
-                  </div>
-                  <textarea
-                    ref={textareaPublicacionRef}
-                    className="form-control input-publicacion textarea-transparente"
-                    rows="3"
-                    placeholder={configPublicacionActual.placeholder}
-                    value={textoPublicacion}
-                    onChange={manejarCambioTextoPublicacion}
-                    onScroll={manejarScrollTextarea}
-                    spellCheck="false"
-                  ></textarea>
+                <div className="form-control input-publicacion input-overlay" ref={overlayRef} aria-hidden="true">
+                  {textoPublicacion ? renderTextoConMenciones(textoPublicacion) : ''}
+                </div>
+                <textarea
+                  ref={textareaPublicacionRef}
+                  className="form-control input-publicacion textarea-transparente"
+                  rows="3"
+                  placeholder={configPublicacionActual.placeholder}
+                  value={textoPublicacion}
+                  onChange={manejarCambioTextoPublicacion}
+                  onScroll={manejarScrollTextarea}
+                  spellCheck="false"
+                ></textarea>
               </div>
 
               {renderChipsHerramientas()}
@@ -1190,7 +1202,7 @@ export default function Inicio() {
 
               {renderPanelHerramienta()}
             </div>
-            
+
             <div className="modal-pie d-flex justify-content-between align-items-center mt-3 pt-2">
               <div className="grupo-herramientas-modal">
                 <input type="file" ref={fileInputRef} onChange={manejarCambioArchivo} accept="image/*,video/*" style={{ display: 'none' }} />
