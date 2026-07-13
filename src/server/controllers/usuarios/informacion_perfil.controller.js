@@ -1,4 +1,4 @@
-const { Usuario, InformacionPerfil } = require('../../models/index.model');
+const { Usuario, InformacionPerfil, Seguidor, Familia } = require('../../models/index.model');
 
 const formatearUsuarioCuenta = (usuario) => ({
     id: usuario._id,
@@ -206,21 +206,26 @@ const obtenerPerfilPorId = async (req, res) => {
         const { id } = req.params;
 
         let usuario = await Usuario.findById(id)
-            .populate({
-                path: 'informacionPerfil'
-            })
-            .populate({
-                path: 'imagenPerfil',
-                select: 'urlArchivo'
-            })
-            .populate({
-                path: 'imagenPortada',
-                select: 'urlArchivo'
-            });
+            .populate({ path: 'informacionPerfil' })
+            .populate({ path: 'imagenPerfil', select: 'urlArchivo' })
+            .populate({ path: 'imagenPortada', select: 'urlArchivo' });
 
         if (!usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
+
+        // 1. Verificar seguimiento mutuo (Amigos)
+        const loSigo = await Seguidor.findOne({ seguidor: req.usuario.id, seguido: id });
+        const meSigue = await Seguidor.findOne({ seguidor: id, seguido: req.usuario.id });
+        const sonAmigos = !!loSigo && !!meSigue;
+
+        // 2. Verificar si ya existe relación o invitación familiar (en cualquier dirección)
+        const relacionFamilia = await Familia.findOne({
+            $or: [
+                { usuarioPrincipal: req.usuario.id, familiar: id },
+                { usuarioPrincipal: id, familiar: req.usuario.id }
+            ]
+        });
 
         res.status(200).json({
             mensaje: 'Perfil recuperado con éxito',
@@ -228,11 +233,14 @@ const obtenerPerfilPorId = async (req, res) => {
                 id: usuario._id,
                 nombreUsuario: usuario.nombreUsuario,
                 email: usuario.email,
-                // Formateamos las URLs completas para que el frontend las lea directamente
                 imagenPerfil: usuario.imagenPerfil?.urlArchivo ? `http://localhost:3000${usuario.imagenPerfil.urlArchivo}` : null,
                 imagenPortada: usuario.imagenPortada?.urlArchivo ? `http://localhost:3000${usuario.imagenPortada.urlArchivo}` : null
             },
-            perfil: usuario.informacionPerfil
+            perfil: usuario.informacionPerfil,
+            siguiendo: !!loSigo,
+            sonAmigos, // 🌟 True si se siguen mutuamente
+            estadoFamilia: relacionFamilia ? relacionFamilia.estado : null, // 🌟 Pendiente, Aceptado, o null
+            esInvitadoPorMi: relacionFamilia ? (relacionFamilia.usuarioPrincipal.toString() === req.usuario.id) : false
         });
     } catch (error) {
         console.error('❌ Error al obtener perfil por ID:', error);

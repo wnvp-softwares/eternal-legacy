@@ -4,7 +4,8 @@ const { verificarToken } = require('../../middlewares/auth.middleware');
 const { 
     enviarInvitacionFamiliar, 
     responderInvitacionFamiliar, 
-    obtenerMisFamiliares 
+    obtenerMisFamiliares,
+    obtenerInvitacionesPendientes
 } = require('../../controllers/usuarios/familia.controller');
 
 // Ruta para enviar la invitación (Antes era /agregar)
@@ -15,5 +16,7 @@ router.put('/responder/:idInvitacion', verificarToken, responderInvitacionFamili
 
 // Ruta para obtener la familia (ya filtrará solo los aceptados)
 router.get('/listar', verificarToken, obtenerMisFamiliares);
+
+router.get('/pendientes', verificarToken, obtenerInvitacionesPendientes);
 
 module.exports = router;

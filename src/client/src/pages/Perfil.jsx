@@ -4,6 +4,16 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Perfil.css';
 
 export default function Perfil() {
+  const [sonAmigos, setSonAmigos] = useState(false);
+  const [estadoFamilia, setEstadoFamilia] = useState(null);
+  const [esInvitadoPorMi, setEsInvitadoPorMi] = useState(false);
+
+  // Estados para controlar la selección del parentesco
+  const [mostrarSelectorFamilia, setMostrarSelectorFamilia] = useState(false);
+  const [parentescoSeleccionado, setParentescoSeleccionado] = useState('');
+
+  const [estaSiguiendo, setEstaSiguiendo] = useState(false);
+
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -159,6 +169,11 @@ export default function Perfil() {
           setUsuarioPerfil(usuarioLogueado);
         } else {
           setUsuarioPerfil(datosPerfil.usuario);
+          setEstaSiguiendo(datosPerfil.siguiendo || false);
+          // 🌟 Nuevos mapeos:
+          setSonAmigos(datosPerfil.sonAmigos || false);
+          setEstadoFamilia(datosPerfil.estadoFamilia || null);
+          setEsInvitadoPorMi(datosPerfil.esInvitadoPorMi || false);
         }
 
         const listaPosts = Array.isArray(datosPublicaciones)
@@ -439,6 +454,68 @@ export default function Perfil() {
       : fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
   };
 
+  const manejarToggleSeguir = async () => {
+    if (!token || !id) return;
+
+    try {
+      if (estaSiguiendo) {
+        // Si ya lo sigue, actúa como "uncheck" (Dejar de seguir)
+        const res = await fetch(`${API_BASE_URL}/seguidores/dejar-de-seguir/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) setEstaSiguiendo(false);
+      } else {
+        // Si no lo sigue, actúa como "check" (Seguir)
+        const res = await fetch(`${API_BASE_URL}/seguidores/seguir`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ seguidoId: id })
+        });
+        if (res.ok) setEstaSiguiendo(true);
+      }
+    } catch (error) {
+      console.error('❌ Error al procesar el seguimiento:', error);
+    }
+  };
+
+  const manejarEnviarInvitacionFamilia = async () => {
+    if (!parentescoSeleccionado) {
+      alert("Por favor, selecciona un tipo de parentesco.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/familia/invitar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          familiarId: id,
+          parentesco: parentescoSeleccionado
+        })
+      });
+
+      const datos = await res.json();
+
+      if (res.ok) {
+        setEstadoFamilia('Pendiente');
+        setEsInvitadoPorMi(true);
+        setMostrarSelectorFamilia(false); // Cerramos el selector
+        alert("¡Invitación familiar enviada con éxito!");
+      } else {
+        alert(datos.mensaje || "Error al enviar la invitación");
+      }
+    } catch (error) {
+      console.error('❌ Error al enviar invitación familiar:', error);
+    }
+  };
+
   const publicacionesFiltradas = publicaciones;
   const publicacionesHistoricas = publicaciones.filter(post => post.tipo === 'historico');
   const fotosGaleria = publicaciones.filter(post => post.multimedia && post.multimedia[0]?.urlArchivo);
@@ -646,13 +723,89 @@ export default function Perfil() {
           <div className="fila-superior-info">
             <img src={usuarioPerfil?.imagenPerfil || urlAvatar} alt="Perfil" className="foto-perfil-grande" />
 
-            {/* CONDICIONAL: Solo muestra el botón de edición si es MI PERFIL */}
-            {esMiPerfil && (
+            {/* CONDICIONAL: Botón de edición si es mi perfil, botón de Seguir/Siguiendo si es ajeno */}
+            {esMiPerfil ? (
               <button className="boton-editar-perfil" title="Editar Perfil" onClick={toggleEdicion}>
                 <i className="bi bi-pencil"></i>
               </button>
+            ) : (
+              <button
+                className={`btn rounded-pill px-4 fw-bold ${estaSiguiendo ? 'btn-outline-secondary' : 'btn-warning'}`}
+                onClick={manejarToggleSeguir}
+                style={{ transition: 'all 0.2s ease' }}
+              >
+                <i className={`bi ${estaSiguiendo ? 'bi-person-check-fill' : 'bi-person-plus-fill'} me-2`}></i>
+                {estaSiguiendo ? 'Siguiendo' : 'Seguir'}
+              </button>
+            )}
+            {/* Si NO es mi perfil y además son AMIGOS (seguidores mutuos), evaluamos el estado familiar */}
+            {!esMiPerfil && sonAmigos && (
+              <div className="ms-2 d-inline-block">
+                {estadoFamilia === null && (
+                  <button
+                    className="btn btn-outline-warning rounded-pill fw-bold"
+                    onClick={() => setMostrarSelectorFamilia(!mostrarSelectorFamilia)}
+                  >
+                    <i className="bi bi-tree-fill me-1"></i> Agregar a familia
+                  </button>
+                )}
+
+                {estadoFamilia === 'Pendiente' && esInvitadoPorMi && (
+                  <button className="btn btn-secondary rounded-pill fw-bold" disabled>
+                    <i className="bi bi-clock-history me-1"></i> Invitación Pendiente
+                  </button>
+                )}
+
+                {estadoFamilia === 'Pendiente' && !esInvitadoPorMi && (
+                  <button className="btn btn-info text-white rounded-pill fw-bold" disabled title="Revisa tus notificaciones o sección de Red para aceptar">
+                    <i className="bi bi-exclamation-circle-fill me-1"></i> Te invitó a su familia
+                  </button>
+                )}
+
+                {estadoFamilia === 'Aceptado' && (
+                  <button className="btn btn-success rounded-pill fw-bold" disabled>
+                    <i className="bi bi-heart-fill me-1"></i> Familiar
+                  </button>
+                )}
+              </div>
             )}
           </div>
+
+          {/* Desplegable interactivo para elegir el parentesco */}
+          {mostrarSelectorFamilia && (
+            <div className="card p-3 mt-2 shadow-sm border-warning" style={{ maxWidth: '350px' }}>
+              <label className="form-label fw-bold text-dark mb-2">¿Qué parentesco tienes con este usuario?</label>
+              <div className="d-flex gap-2">
+                <select
+                  className="form-select form-select-sm"
+                  value={parentescoSeleccionado}
+                  onChange={(e) => setParentescoSeleccionado(e.target.value)}
+                >
+                  <option value="">-- Seleccionar --</option>
+                  <option value="Padre/Madre">Padre / Madre</option>
+                  <option value="Hijo/a">Hijo / a</option>
+                  <option value="Hermano/a">Hermano / a</option>
+                  <option value="Abuelo/a">Abuelo / a</option>
+                  <option value="Tío/a">Tío / a</option>
+                  <option value="Primo/a">Primo / a</option>
+                  <option value="Pareja">Pareja</option>
+                </select>
+
+                <button
+                  className="btn btn-warning btn-sm fw-bold px-3"
+                  onClick={manejarEnviarInvitacionFamilia}
+                >
+                  Enviar
+                </button>
+                <button
+                  className="btn btn-light btn-sm border"
+                  onClick={() => setMostrarSelectorFamilia(false)}
+                >
+                  X
+                </button>
+              </div>
+            </div>
+          )}
 
           <h2 className="fuente-elegante fw-bold nombre-perfil">{usuarioPerfil?.nombreUsuario || 'Usuario'}</h2>
           <p className="usuario-tag">@{usuarioPerfil?.nombreUsuario?.toLowerCase().replace(/\s+/g, '') || 'sin_usuario'}</p>

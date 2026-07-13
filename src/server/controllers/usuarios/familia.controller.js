@@ -57,23 +57,23 @@ const responderInvitacionFamiliar = async (req, res) => {
 const obtenerMisFamiliares = async (req, res) => {
     try {
         // Buscamos donde yo invité O me invitaron, PERO que ya esté aceptado
-        const familiares = await Familia.find({ 
+        const familiares = await Familia.find({
             $or: [
                 { usuarioPrincipal: req.usuario.id },
                 { familiar: req.usuario.id }
             ],
-            estado: 'Aceptado' 
+            estado: 'Aceptado'
         })
-        .populate({
-            path: 'familiar',
-            select: 'nombreUsuario email imagenPerfil',
-            populate: { path: 'imagenPerfil', select: 'urlArchivo' }
-        })
-        .populate({
-            path: 'usuarioPrincipal',
-            select: 'nombreUsuario email imagenPerfil',
-            populate: { path: 'imagenPerfil', select: 'urlArchivo' }
-        });
+            .populate({
+                path: 'familiar',
+                select: 'nombreUsuario email imagenPerfil',
+                populate: { path: 'imagenPerfil', select: 'urlArchivo' }
+            })
+            .populate({
+                path: 'usuarioPrincipal',
+                select: 'nombreUsuario email imagenPerfil',
+                populate: { path: 'imagenPerfil', select: 'urlArchivo' }
+            });
 
         // Formateamos para el frontend
         const lista = familiares.map(f => {
@@ -97,4 +97,42 @@ const obtenerMisFamiliares = async (req, res) => {
     }
 };
 
-module.exports = { enviarInvitacionFamiliar, responderInvitacionFamiliar, obtenerMisFamiliares };
+// 4. OBTENER INVITACIONES RECIBIDAS PENDIENTES
+const obtenerInvitacionesPendientes = async (req, res) => {
+    try {
+        // Buscamos donde yo soy el destinatario y está pendiente
+        const invitaciones = await Familia.find({
+            familiar: req.usuario.id,
+            estado: 'Pendiente'
+        })
+            .populate({
+                path: 'usuarioPrincipal',
+                select: 'nombreUsuario email imagenPerfil',
+                populate: { path: 'imagenPerfil', select: 'urlArchivo' }
+            });
+
+        // Formateamos los datos para consumirlos de forma limpia en React
+        const lista = invitaciones.map(inv => ({
+            idInvitacion: inv._id,
+            idSender: inv.usuarioPrincipal._id,
+            nombre: inv.usuarioPrincipal.nombreUsuario,
+            relacion: inv.parentesco,
+            img: inv.usuarioPrincipal.imagenPerfil?.urlArchivo
+                ? `http://localhost:3000${inv.usuarioPrincipal.imagenPerfil.urlArchivo}`
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(inv.usuarioPrincipal.nombreUsuario)}&background=cbd5e1`
+        }));
+
+        res.status(200).json(lista);
+    } catch (error) {
+        console.error('❌ Error al obtener invitaciones pendientes:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+// 🌟 REPLANTEA EL EXPORTS PARA INCLUIR LA NUEVA FUNCIÓN
+module.exports = {
+    enviarInvitacionFamiliar,
+    responderInvitacionFamiliar,
+    obtenerMisFamiliares,
+    obtenerInvitacionesPendientes // 🌟 Añadida
+};
