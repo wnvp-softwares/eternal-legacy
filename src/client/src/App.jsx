@@ -9,12 +9,35 @@ import Perfil from './pages/Perfil';
 import Configuracion from './pages/Configuracion';
 import Layout from './components/Layout';
 
+const RUTA_INICIAL_APP = '/arbol-genealogico';
+
+function haySesionActiva() {
+  return Boolean(localStorage.getItem('token'));
+}
+
+function RedireccionInicial() {
+  return (
+    <Navigate
+      to={haySesionActiva() ? RUTA_INICIAL_APP : '/login'}
+      replace
+    />
+  );
+}
+
+function RutaLogin() {
+  if (haySesionActiva()) {
+    return <Navigate to={RUTA_INICIAL_APP} replace />;
+  }
+
+  return <Login rutaInicial={RUTA_INICIAL_APP} />;
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<RedireccionInicial />} />
+        <Route path="/login" element={<RutaLogin />} />
 
         {/* Cualquier ruta dentro de Layout tendrá el menú superior y lateral */}
         <Route element={<Layout />}>

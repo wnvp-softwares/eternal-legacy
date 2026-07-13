@@ -116,9 +116,9 @@ const obtenerAmigosDisponiblesParaInvitar = async (req, res) => {
             return res.status(404).json({ mensaje: 'Árbol no encontrado' });
         }
 
-        if (!usuarioPuedeVerArbol(arbol, usuarioId)) {
+        if (!usuarioPuedeEditarArbol(arbol, usuarioId)) {
             return res.status(403).json({
-                mensaje: 'No tienes permiso para ver amigos disponibles para este árbol.'
+                mensaje: 'Solo el creador o un admin pueden ver amigos disponibles para invitar a este árbol.'
             });
         }
 

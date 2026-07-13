@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Login.css';
 
-export default function Login() {
+export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   const [esLogin, setEsLogin] = useState(true);
   const navigate = useNavigate();
 
@@ -112,7 +112,7 @@ export default function Login() {
         localStorage.setItem('token', datos.token);
         localStorage.setItem('usuario', JSON.stringify(datos.usuario));
 
-        navigate('/inicio');
+        navigate(rutaInicial, { replace: true });
       } catch (err) {
         setError(err.message);
         setPaso('formulario');
@@ -194,7 +194,7 @@ export default function Login() {
       localStorage.setItem('token', datos.token);
       localStorage.setItem('usuario', JSON.stringify(datos.usuario));
 
-      navigate('/inicio');
+      navigate(rutaInicial, { replace: true });
     } catch (err) {
       setError(err.message);
       setPaso('verificacion');

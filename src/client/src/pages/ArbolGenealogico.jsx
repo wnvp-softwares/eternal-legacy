@@ -156,6 +156,7 @@ const obtenerValorRamaNodo = (nodo = {}) => {
   ).toLowerCase();
 };
 
+const normalizarTexto = (texto = '') => String(texto || '').trim();
 
 const obtenerIniciales = (nombre = '') => {
   const partes = nombre.trim().split(' ').filter(Boolean);
@@ -1090,6 +1091,41 @@ export default function ArbolGenealogico() {
   const token = localStorage.getItem('token');
   const usuarioActualId = useMemo(() => obtenerUsuarioIdDesdeToken(token), [token]);
 
+  const usuarioSesion = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('usuario')) || {};
+    } catch (error) {
+      return {};
+    }
+  }, []);
+
+  const [mostrarAnimacionConexiones, establecerMostrarAnimacionConexiones] = useState(false);
+  const [procesandoAdminNodoId, establecerProcesandoAdminNodoId] = useState(null);
+
+  const arbolActivoId = obtenerId(arbol);
+
+  const nodoAnimacionConexiones = useMemo(() => {
+    const nodoUsuarioActual = nodos.find(nodo => nodo.esUsuarioActual);
+    if (nodoUsuarioActual) return nodoUsuarioActual;
+
+    const nodoCreador = nodos.find(nodo => nodo.tipo === 'creador');
+    if (nodoCreador) return nodoCreador;
+
+    return nodos[0] || null;
+  }, [nodos]);
+
+  useEffect(() => {
+    if (vistaActual !== 'lienzo' || cargandoArbol || !arbolActivoId) return undefined;
+
+    establecerMostrarAnimacionConexiones(true);
+
+    const temporizador = setTimeout(() => {
+      establecerMostrarAnimacionConexiones(false);
+    }, 2800);
+
+    return () => clearTimeout(temporizador);
+  }, [vistaActual, cargandoArbol, arbolActivoId]);
+
   const apiFetch = async (endpoint, opciones = {}) => {
     const respuesta = await fetch(`${URL_BASE_BACKEND}${endpoint}`, {
       ...opciones,
@@ -1422,7 +1458,70 @@ export default function ArbolGenealogico() {
     if (String(creadorId) === String(usuarioActualId)) return true;
 
     const admins = Array.isArray(arbolSeleccionado.admins) ? arbolSeleccionado.admins : [];
-    return admins.some(admin => String(obtenerId(admin)) === String(usuarioActualId));
+    const miembros = Array.isArray(arbolSeleccionado.miembros) ? arbolSeleccionado.miembros : [];
+
+    const esAdminPorLista = admins.some(admin => String(obtenerId(admin)) === String(usuarioActualId));
+    const esAdminPorMiembro = miembros.some(miembro =>
+      String(obtenerId(miembro.usuario)) === String(usuarioActualId) &&
+      miembro.estado === 'Activo' &&
+      miembro.rol === 'Admin'
+    );
+
+    return esAdminPorLista || esAdminPorMiembro;
+  };
+
+  const usuarioEsCreadorArbolActual = (arbolSeleccionado = arbol) => {
+    if (!arbolSeleccionado || !usuarioActualId) return false;
+    return String(obtenerId(arbolSeleccionado.creador)) === String(usuarioActualId);
+  };
+
+  const obtenerAdminsActuales = (arbolSeleccionado = arbol) => {
+    if (!arbolSeleccionado) return [];
+
+    const creadorId = obtenerId(arbolSeleccionado.creador);
+    const ids = [];
+    const vistos = new Set();
+
+    const agregarId = (valor) => {
+      const id = obtenerId(valor);
+      if (!id) return;
+      if (creadorId && String(id) === String(creadorId)) return;
+      if (vistos.has(String(id))) return;
+
+      vistos.add(String(id));
+      ids.push(String(id));
+    };
+
+    (Array.isArray(arbolSeleccionado.admins) ? arbolSeleccionado.admins : []).forEach(agregarId);
+
+    (Array.isArray(arbolSeleccionado.miembros) ? arbolSeleccionado.miembros : []).forEach((miembro) => {
+      if (miembro.rol === 'Admin' && miembro.estado === 'Activo') {
+        agregarId(miembro.usuario);
+      }
+    });
+
+    return ids;
+  };
+
+  const nodoEsCreadorArbolActual = (nodo, arbolSeleccionado = arbol) => {
+    if (!nodo || !arbolSeleccionado) return false;
+
+    const creadorId = obtenerId(arbolSeleccionado.creador);
+    return nodo.tipo === 'creador' || (nodo.usuarioId && creadorId && String(nodo.usuarioId) === String(creadorId));
+  };
+
+  const nodoEsAdminArbolActual = (nodo, arbolSeleccionado = arbol) => {
+    if (!nodo || !arbolSeleccionado) return false;
+    if (nodoEsCreadorArbolActual(nodo, arbolSeleccionado)) return false;
+
+    return nodo.tipo === 'admin' || obtenerAdminsActuales(arbolSeleccionado).some(adminId => String(adminId) === String(nodo.usuarioId));
+  };
+
+  const puedeGestionarAdminNodo = (nodo) => {
+    if (!usuarioEsCreadorArbolActual()) return false;
+    if (!nodo?.usuarioId) return false;
+    if (nodoEsCreadorArbolActual(nodo)) return false;
+    return true;
   };
 
   const normalizarListaArboles = (lista = [], miArbol = null) => {
@@ -2439,6 +2538,84 @@ export default function ArbolGenealogico() {
       ...prev,
       [campo]: valor
     }));
+  };
+
+  const cambiarRolAdminNodo = async (nodo, hacerAdmin) => {
+    if (!arbol?._id || !nodo?.id || !nodo?.usuarioId) {
+      window.alert('Solo puedes gestionar como admin a personas que tienen cuenta dentro del árbol.');
+      return;
+    }
+
+    if (!usuarioEsCreadorArbolActual()) {
+      window.alert('Solo el creador del árbol puede hacer o quitar admins.');
+      return;
+    }
+
+    if (nodoEsCreadorArbolActual(nodo)) {
+      window.alert('El creador del árbol ya tiene todos los permisos y no cuenta como admin adicional.');
+      return;
+    }
+
+    const nombrePersona = String(nodo.nombre || 'esta persona').replace(' (Yo)', '');
+    const adminsActuales = obtenerAdminsActuales();
+
+    if (hacerAdmin && !nodoEsAdminArbolActual(nodo) && adminsActuales.length >= 5) {
+      window.alert('Este árbol ya tiene el máximo de 5 admins adicionales.');
+      return;
+    }
+
+    const confirmado = window.confirm(
+      hacerAdmin
+        ? `¿Seguro que quieres hacer admin a ${nombrePersona}?
+
+Los admins podrán invitar, mover, relacionar, editar y eliminar conexiones dentro del árbol. No podrán eliminar el árbol ni gestionar otros admins.`
+        : `¿Seguro que quieres quitar a ${nombrePersona} como admin?
+
+La persona seguirá dentro del árbol como miembro normal.`
+    );
+
+    if (!confirmado) return;
+
+    try {
+      establecerProcesandoAdminNodoId(nodo.id);
+
+      const data = await apiFetch(`/api/arboles/${arbol._id}/admins/${hacerAdmin ? 'agregar' : 'quitar'}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          usuarioId: nodo.usuarioId,
+          nodoId: nodo.id
+        })
+      });
+
+      if (data.arbol) {
+        establecerArbol(data.arbol);
+        establecerEsUsuarioAdmin(usuarioPuedeEditarArbolLocal(data.arbol));
+      }
+
+      const nuevoTipo = hacerAdmin ? 'admin' : 'normal';
+
+      establecerNodos(prev => prev.map(item =>
+        String(item.usuarioId) === String(nodo.usuarioId)
+          ? { ...item, tipo: nuevoTipo }
+          : item
+      ));
+
+      establecerNodoSeleccionado(prev => {
+        if (!prev || String(prev.usuarioId) !== String(nodo.usuarioId)) return prev;
+        return {
+          ...prev,
+          tipo: nuevoTipo
+        };
+      });
+
+      establecerMensajeSistema(data.mensaje || (hacerAdmin ? 'Admin agregado correctamente.' : 'Admin removido correctamente.'));
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al cambiar rol admin:', error);
+      window.alert(error.message || 'No se pudo actualizar el rol de admin.');
+    } finally {
+      establecerProcesandoAdminNodoId(null);
+    }
   };
 
   const iniciarCrearPerfilSinCuenta = () => {
@@ -4140,6 +4317,65 @@ export default function ArbolGenealogico() {
     );
   };
 
+  const renderAnimacionConexionesArbol = () => {
+    if (!mostrarAnimacionConexiones) return null;
+
+    const nombreBase = normalizarTexto(
+      nodoAnimacionConexiones?.nombre?.replace(' (Yo)', '') ||
+      usuarioSesion?.nombreUsuario ||
+      'Tu perfil'
+    );
+
+    const fotoPerfilAnimacion = resolverUrlImagen(
+      nodoAnimacionConexiones?.fotoPerfil ||
+      usuarioSesion?.imagenPerfil?.urlArchivo ||
+      usuarioSesion?.imagenPerfil ||
+      null
+    );
+
+    const inicialesAnimacion = nodoAnimacionConexiones?.iniciales || obtenerIniciales(nombreBase);
+
+    return (
+      <div
+        className="overlay-conexiones-arbol"
+        onClick={() => establecerMostrarAnimacionConexiones(false)}
+        role="presentation"
+        aria-hidden="true"
+      >
+        <div className="conexiones-animacion-canvas">
+          <div className="halo-conexion halo-uno"></div>
+          <div className="halo-conexion halo-dos"></div>
+          <div className="halo-conexion halo-tres"></div>
+
+          {Array.from({ length: 8 }).map((_, index) => (
+            <span key={`rama-conexion-${index + 1}`} className={`rama-conexion rama-${index + 1}`}></span>
+          ))}
+
+          {Array.from({ length: 8 }).map((_, index) => (
+            <span key={`punto-conexion-${index + 1}`} className={`punto-conexion punto-${index + 1}`}></span>
+          ))}
+
+          <div className="nodo-central-conexiones">
+            <span className="pulso-nodo-conexion"></span>
+            <div className="avatar-conexion-central">
+              {fotoPerfilAnimacion ? (
+                <img src={fotoPerfilAnimacion} alt={nombreBase} />
+              ) : (
+                <span>{inicialesAnimacion}</span>
+              )}
+            </div>
+            <strong>{nombreBase}</strong>
+          </div>
+
+          <div className="texto-conexiones-arbol">
+            <span>Conectando tu legado</span>
+            <small>Las ramas de tu historia comienzan aquí</small>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderMenuArboles = () => {
     const totalArboles = arbolesDisponibles.length;
     const totalInvitaciones = invitacionesPendientes.length;
@@ -4487,6 +4723,8 @@ export default function ArbolGenealogico() {
       {/* --- ÁREA DE TRABAJO --- */}
       <div className="area-trabajo mt-3">
         <div className="contenedor-lienzo">
+          {renderAnimacionConexionesArbol()}
+
           <div
             ref={lienzoExportableRef}
             className={`lienzo-arbol ${claseLienzo}`}
@@ -4770,6 +5008,55 @@ export default function ArbolGenealogico() {
                           : `Edad: ${nodoSeleccionado.edad} años`}
                       </p>
                     )}
+
+                    {puedeGestionarAdminNodo(nodoSeleccionado) && (() => {
+                      const yaEsAdminNodo = nodoEsAdminArbolActual(nodoSeleccionado);
+                      const adminsActuales = obtenerAdminsActuales();
+                      const limiteAlcanzado = !yaEsAdminNodo && adminsActuales.length >= 5;
+                      const procesandoEsteNodo = procesandoAdminNodoId && String(procesandoAdminNodoId) === String(nodoSeleccionado.id);
+
+                      return (
+                        <div className="bloque-admin-arbol mt-3">
+                          <div className="bloque-admin-arbol-info">
+                            <span className={`estado-admin-arbol ${yaEsAdminNodo ? 'activo' : ''}`}>
+                              <i className={`bi ${yaEsAdminNodo ? 'bi-shield-fill-check' : 'bi-shield'}`}></i>
+                              {yaEsAdminNodo ? 'Admin del árbol' : 'Miembro del árbol'}
+                            </span>
+                            <small>{adminsActuales.length}/5 admins asignados</small>
+                          </div>
+
+                          <button
+                            type="button"
+                            className={`boton-admin-arbol-panel ${yaEsAdminNodo ? 'quitar' : 'agregar'}`}
+                            disabled={procesandoEsteNodo || limiteAlcanzado}
+                            onClick={() => cambiarRolAdminNodo(nodoSeleccionado, !yaEsAdminNodo)}
+                          >
+                            {procesandoEsteNodo ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm"></span>
+                                Actualizando...
+                              </>
+                            ) : yaEsAdminNodo ? (
+                              <>
+                                <i className="bi bi-shield-x"></i>
+                                Quitar admin
+                              </>
+                            ) : (
+                              <>
+                                <i className="bi bi-shield-plus"></i>
+                                Hacer admin
+                              </>
+                            )}
+                          </button>
+
+                          {limiteAlcanzado && (
+                            <small className="aviso-limite-admins">
+                              Ya alcanzaste el límite de 5 admins para este árbol.
+                            </small>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <hr className="my-4 text-muted" style={{ opacity: 0.2 }} />

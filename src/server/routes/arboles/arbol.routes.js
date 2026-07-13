@@ -10,6 +10,9 @@ const {
     obtenerArbolesDondeParticipo,
     actualizarMiArbol,
     eliminarMiArbol,
+    obtenerAdminsArbol,
+    agregarAdminArbol,
+    quitarAdminArbol,
     salirDeArbol
 } = require('../../controllers/arboles/arbol.controller');
 
@@ -27,6 +30,12 @@ router.patch('/mi-arbol', verificarToken, actualizarMiArbol);
 
 // Eliminar definitivamente el árbol que yo creé
 router.delete('/mi-arbol', verificarToken, eliminarMiArbol);
+
+// Gestión de admins adicionales del árbol
+// Importante: estas rutas van antes de /:arbolId para evitar conflictos.
+router.get('/:arbolId/admins', verificarToken, obtenerAdminsArbol);
+router.patch('/:arbolId/admins/agregar', verificarToken, agregarAdminArbol);
+router.patch('/:arbolId/admins/quitar', verificarToken, quitarAdminArbol);
 
 // Salir de un árbol donde fui invitado
 router.patch('/:arbolId/salir', verificarToken, salirDeArbol);

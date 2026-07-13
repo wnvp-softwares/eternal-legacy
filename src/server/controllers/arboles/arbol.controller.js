@@ -1,5 +1,7 @@
 const { Arbol, Nodo, Hilo, Usuario, InvitacionFamiliar } = require('../../models/index.model');
 
+const LIMITE_ADMINS_ARBOL = 5;
+
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
 
@@ -33,14 +35,50 @@ const obtenerIniciales = (nombre = '') => {
     return `${partes[0][0]}${partes[1][0]}`.toUpperCase();
 };
 
+const esCreadorArbol = (arbol, usuarioId) => {
+    if (!arbol || !usuarioId) return false;
+    return sonMismoId(arbol.creador, usuarioId);
+};
+
+const obtenerIdsAdminsExtra = (arbol) => {
+    if (!arbol) return [];
+
+    const creadorId = obtenerIdSeguro(arbol.creador);
+    const idsUnicos = [];
+    const vistos = new Set();
+
+    const agregarId = (valor) => {
+        const id = obtenerIdSeguro(valor);
+        if (!id) return;
+        if (creadorId && id === creadorId) return;
+        if (vistos.has(id)) return;
+
+        vistos.add(id);
+        idsUnicos.push(id);
+    };
+
+    (Array.isArray(arbol.admins) ? arbol.admins : []).forEach(agregarId);
+
+    (Array.isArray(arbol.miembros) ? arbol.miembros : []).forEach((miembro) => {
+        if (miembro.rol === 'Admin' && miembro.estado === 'Activo') {
+            agregarId(miembro.usuario);
+        }
+    });
+
+    return idsUnicos;
+};
+
+const usuarioEsAdminArbol = (arbol, usuarioId) => {
+    if (!arbol || !usuarioId) return false;
+    return obtenerIdsAdminsExtra(arbol).some(adminId => sonMismoId(adminId, usuarioId));
+};
+
 const usuarioPuedeVerArbol = (arbol, usuarioId) => {
     if (!arbol || !usuarioId) return false;
 
-    if (sonMismoId(arbol.creador, usuarioId)) return true;
+    if (esCreadorArbol(arbol, usuarioId)) return true;
 
-    const admins = Array.isArray(arbol.admins) ? arbol.admins : [];
-    const esAdmin = admins.some(adminId => sonMismoId(adminId, usuarioId));
-    if (esAdmin) return true;
+    if (usuarioEsAdminArbol(arbol, usuarioId)) return true;
 
     const miembros = Array.isArray(arbol.miembros) ? arbol.miembros : [];
 
@@ -52,11 +90,123 @@ const usuarioPuedeVerArbol = (arbol, usuarioId) => {
 const usuarioPuedeEditarArbol = (arbol, usuarioId) => {
     if (!arbol || !usuarioId) return false;
 
-    if (sonMismoId(arbol.creador, usuarioId)) return true;
+    if (esCreadorArbol(arbol, usuarioId)) return true;
 
-    const admins = Array.isArray(arbol.admins) ? arbol.admins : [];
+    return usuarioEsAdminArbol(arbol, usuarioId);
+};
 
-    return admins.some(adminId => sonMismoId(adminId, usuarioId));
+const sincronizarAdminsYRoles = async (arbol) => {
+    if (!arbol) return arbol;
+
+    const creadorId = obtenerIdSeguro(arbol.creador);
+    const idsAdmins = obtenerIdsAdminsExtra(arbol).slice(0, LIMITE_ADMINS_ARBOL);
+    const idsAdminsSet = new Set(idsAdmins);
+
+    arbol.admins = idsAdmins;
+
+    const indiceCreador = arbol.miembros.findIndex(miembro => sonMismoId(miembro.usuario, creadorId));
+
+    if (indiceCreador === -1 && creadorId) {
+        arbol.miembros.push({
+            usuario: creadorId,
+            rol: 'Creador',
+            estado: 'Activo'
+        });
+    }
+
+    arbol.miembros.forEach((miembro) => {
+        const miembroId = obtenerIdSeguro(miembro.usuario);
+
+        if (!miembroId) return;
+
+        if (creadorId && miembroId === creadorId) {
+            miembro.rol = 'Creador';
+            miembro.estado = 'Activo';
+            return;
+        }
+
+        if (idsAdminsSet.has(miembroId)) {
+            miembro.rol = 'Admin';
+        } else if (miembro.rol === 'Admin') {
+            miembro.rol = 'Miembro';
+        }
+    });
+
+    await Nodo.updateMany(
+        {
+            arbol: arbol._id,
+            usuario: { $nin: [creadorId, ...idsAdmins] },
+            tipo: 'admin'
+        },
+        { $set: { tipo: 'normal' } }
+    );
+
+    await Nodo.updateMany(
+        {
+            arbol: arbol._id,
+            usuario: { $in: idsAdmins }
+        },
+        { $set: { tipo: 'admin' } }
+    );
+
+    await Nodo.updateMany(
+        {
+            arbol: arbol._id,
+            usuario: creadorId
+        },
+        { $set: { tipo: 'creador' } }
+    );
+
+    return arbol;
+};
+
+const obtenerUsuarioObjetivoAdmin = async ({ arbol, usuarioId, nodoId }) => {
+    let usuarioObjetivoId = usuarioId || null;
+    let nodoObjetivo = null;
+
+    if (!usuarioObjetivoId && nodoId) {
+        nodoObjetivo = await Nodo.findOne({
+            _id: nodoId,
+            arbol: arbol._id,
+            visible: true
+        });
+
+        usuarioObjetivoId = obtenerIdSeguro(nodoObjetivo?.usuario);
+    }
+
+    if (!usuarioObjetivoId) {
+        return {
+            error: {
+                status: 400,
+                mensaje: 'Selecciona una persona con cuenta para gestionar sus permisos de admin.'
+            }
+        };
+    }
+
+    const usuario = await Usuario.findById(usuarioObjetivoId).select('nombreUsuario imagenPerfil');
+
+    if (!usuario) {
+        return {
+            error: {
+                status: 404,
+                mensaje: 'Usuario no encontrado.'
+            }
+        };
+    }
+
+    if (!nodoObjetivo) {
+        nodoObjetivo = await Nodo.findOne({
+            arbol: arbol._id,
+            usuario: usuario._id,
+            visible: true
+        });
+    }
+
+    return {
+        usuario,
+        usuarioObjetivoId: obtenerIdSeguro(usuario._id),
+        nodoObjetivo
+    };
 };
 
 const popularArbol = async (arbol) => {
@@ -128,7 +278,8 @@ const crearMiArbol = async (req, res) => {
             creador: usuarioId,
             nombreFamilia: nombreFamilia.trim(),
             descripcion,
-            privacidad
+            privacidad,
+            admins: []
         });
 
         await nuevoArbol.save();
@@ -159,6 +310,8 @@ const crearMiArbol = async (req, res) => {
             });
         }
 
+        await sincronizarAdminsYRoles(nuevoArbol);
+        await nuevoArbol.save();
         await popularArbol(nuevoArbol);
 
         res.status(201).json({
@@ -192,6 +345,8 @@ const obtenerMiArbol = async (req, res) => {
             });
         }
 
+        await sincronizarAdminsYRoles(arbol);
+        await arbol.save();
         await popularArbol(arbol);
 
         res.status(200).json({
@@ -223,6 +378,8 @@ const obtenerArbolPorId = async (req, res) => {
             });
         }
 
+        await sincronizarAdminsYRoles(arbol);
+        await arbol.save();
         await popularArbol(arbol);
 
         res.status(200).json({
@@ -255,6 +412,14 @@ const obtenerArbolesDondeParticipo = async (req, res) => {
         })
             .populate({
                 path: 'creador',
+                select: 'nombreUsuario imagenPerfil',
+                populate: {
+                    path: 'imagenPerfil',
+                    select: 'urlArchivo'
+                }
+            })
+            .populate({
+                path: 'admins',
                 select: 'nombreUsuario imagenPerfil',
                 populate: {
                     path: 'imagenPerfil',
@@ -309,6 +474,7 @@ const actualizarMiArbol = async (req, res) => {
         if (descripcion !== undefined) arbol.descripcion = descripcion;
         if (privacidad !== undefined) arbol.privacidad = privacidad;
 
+        await sincronizarAdminsYRoles(arbol);
         await arbol.save();
         await popularArbol(arbol);
 
@@ -354,6 +520,167 @@ const eliminarMiArbol = async (req, res) => {
     }
 };
 
+const obtenerAdminsArbol = async (req, res) => {
+    try {
+        const { arbolId } = req.params;
+
+        const arbol = await Arbol.findOne({ _id: arbolId, activo: true });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
+        }
+
+        if (!usuarioPuedeVerArbol(arbol, req.usuario.id)) {
+            return res.status(403).json({ mensaje: 'No tienes permiso para ver los admins de este árbol.' });
+        }
+
+        await sincronizarAdminsYRoles(arbol);
+        await arbol.save();
+        await popularArbol(arbol);
+
+        const admins = Array.isArray(arbol.admins) ? arbol.admins : [];
+
+        res.status(200).json({
+            mensaje: 'Admins recuperados correctamente.',
+            limite: LIMITE_ADMINS_ARBOL,
+            total: admins.length,
+            restantes: Math.max(LIMITE_ADMINS_ARBOL - admins.length, 0),
+            admins,
+            arbol
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener admins del árbol:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const agregarAdminArbol = async (req, res) => {
+    try {
+        const { arbolId } = req.params;
+        const { usuarioId, nodoId } = req.body || {};
+        const solicitanteId = req.usuario.id;
+
+        const arbol = await Arbol.findOne({ _id: arbolId, activo: true });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
+        }
+
+        if (!esCreadorArbol(arbol, solicitanteId)) {
+            return res.status(403).json({ mensaje: 'Solo el creador del árbol puede asignar administradores.' });
+        }
+
+        await sincronizarAdminsYRoles(arbol);
+
+        const resultado = await obtenerUsuarioObjetivoAdmin({ arbol, usuarioId, nodoId });
+
+        if (resultado.error) {
+            return res.status(resultado.error.status).json({ mensaje: resultado.error.mensaje });
+        }
+
+        const usuarioObjetivoId = resultado.usuarioObjetivoId;
+
+        if (esCreadorArbol(arbol, usuarioObjetivoId)) {
+            return res.status(400).json({ mensaje: 'El creador del árbol ya tiene permisos completos y no cuenta como admin adicional.' });
+        }
+
+        const miembro = arbol.miembros.find(item =>
+            sonMismoId(item.usuario, usuarioObjetivoId) && item.estado === 'Activo'
+        );
+
+        if (!miembro) {
+            return res.status(400).json({ mensaje: 'Solo puedes hacer admin a un miembro activo del árbol.' });
+        }
+
+        const adminsActuales = obtenerIdsAdminsExtra(arbol);
+
+        if (adminsActuales.some(adminId => sonMismoId(adminId, usuarioObjetivoId))) {
+            return res.status(400).json({ mensaje: 'Esta persona ya es admin del árbol.' });
+        }
+
+        if (adminsActuales.length >= LIMITE_ADMINS_ARBOL) {
+            return res.status(400).json({ mensaje: `Este árbol ya tiene el máximo de ${LIMITE_ADMINS_ARBOL} admins.` });
+        }
+
+        arbol.admins = [...adminsActuales, usuarioObjetivoId];
+        miembro.rol = 'Admin';
+
+        await sincronizarAdminsYRoles(arbol);
+        await arbol.save();
+        await popularArbol(arbol);
+
+        res.status(200).json({
+            mensaje: `${resultado.usuario.nombreUsuario || 'La persona'} ahora es admin del árbol.`,
+            limite: LIMITE_ADMINS_ARBOL,
+            totalAdmins: arbol.admins.length,
+            arbol
+        });
+    } catch (error) {
+        console.error('❌ Error al agregar admin del árbol:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const quitarAdminArbol = async (req, res) => {
+    try {
+        const { arbolId } = req.params;
+        const { usuarioId, nodoId } = req.body || {};
+        const solicitanteId = req.usuario.id;
+
+        const arbol = await Arbol.findOne({ _id: arbolId, activo: true });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
+        }
+
+        if (!esCreadorArbol(arbol, solicitanteId)) {
+            return res.status(403).json({ mensaje: 'Solo el creador del árbol puede quitar administradores.' });
+        }
+
+        await sincronizarAdminsYRoles(arbol);
+
+        const resultado = await obtenerUsuarioObjetivoAdmin({ arbol, usuarioId, nodoId });
+
+        if (resultado.error) {
+            return res.status(resultado.error.status).json({ mensaje: resultado.error.mensaje });
+        }
+
+        const usuarioObjetivoId = resultado.usuarioObjetivoId;
+
+        if (esCreadorArbol(arbol, usuarioObjetivoId)) {
+            return res.status(400).json({ mensaje: 'No puedes quitar permisos al creador del árbol.' });
+        }
+
+        const adminsActuales = obtenerIdsAdminsExtra(arbol);
+        const eraAdmin = adminsActuales.some(adminId => sonMismoId(adminId, usuarioObjetivoId));
+
+        if (!eraAdmin) {
+            return res.status(400).json({ mensaje: 'Esta persona no es admin del árbol.' });
+        }
+
+        arbol.admins = adminsActuales.filter(adminId => !sonMismoId(adminId, usuarioObjetivoId));
+
+        const miembro = arbol.miembros.find(item => sonMismoId(item.usuario, usuarioObjetivoId));
+        if (miembro && miembro.rol === 'Admin') {
+            miembro.rol = 'Miembro';
+        }
+
+        await sincronizarAdminsYRoles(arbol);
+        await arbol.save();
+        await popularArbol(arbol);
+
+        res.status(200).json({
+            mensaje: `${resultado.usuario.nombreUsuario || 'La persona'} dejó de ser admin del árbol.`,
+            limite: LIMITE_ADMINS_ARBOL,
+            totalAdmins: arbol.admins.length,
+            arbol
+        });
+    } catch (error) {
+        console.error('❌ Error al quitar admin del árbol:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 const salirDeArbol = async (req, res) => {
     try {
         const usuarioId = req.usuario.id;
@@ -368,7 +695,7 @@ const salirDeArbol = async (req, res) => {
             return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
         }
 
-        if (sonMismoId(arbol.creador, usuarioId)) {
+        if (esCreadorArbol(arbol, usuarioId)) {
             return res.status(400).json({
                 mensaje: 'No puedes salir de tu propio árbol. Puedes eliminarlo si ya no lo necesitas.'
             });
@@ -388,7 +715,7 @@ const salirDeArbol = async (req, res) => {
             !sonMismoId(miembro.usuario, usuarioId)
         );
 
-        arbol.admins = arbol.admins.filter(adminId =>
+        arbol.admins = obtenerIdsAdminsExtra(arbol).filter(adminId =>
             !sonMismoId(adminId, usuarioId)
         );
 
@@ -428,6 +755,7 @@ const salirDeArbol = async (req, res) => {
             }
         );
 
+        await sincronizarAdminsYRoles(arbol);
         await arbol.save();
 
         res.status(200).json({
@@ -450,8 +778,13 @@ module.exports = {
     obtenerArbolesDondeParticipo,
     actualizarMiArbol,
     eliminarMiArbol,
+    obtenerAdminsArbol,
+    agregarAdminArbol,
+    quitarAdminArbol,
     salirDeArbol,
     desactivarMiArbol,
+    esCreadorArbol,
+    usuarioEsAdminArbol,
     usuarioPuedeVerArbol,
     usuarioPuedeEditarArbol
 };

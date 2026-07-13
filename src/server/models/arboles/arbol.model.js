@@ -1,5 +1,15 @@
 const mongoose = require('mongoose');
 
+const LIMITE_ADMINS_ARBOL = 5;
+
+const obtenerIdSeguro = (valor) => {
+    if (!valor) return null;
+    if (typeof valor === 'string') return valor;
+    if (valor._id) return String(valor._id);
+    if (valor.id) return String(valor.id);
+    return String(valor);
+};
+
 const arbolSchema = new mongoose.Schema({
     creador: {
         type: mongoose.Schema.Types.ObjectId,
@@ -26,6 +36,7 @@ const arbolSchema = new mongoose.Schema({
         default: 'Privado'
     },
 
+    // Admins adicionales del árbol. El creador NO cuenta dentro de este arreglo.
     admins: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Usuario'
@@ -62,32 +73,65 @@ const arbolSchema = new mongoose.Schema({
 // Un usuario solo puede crear un árbol.
 arbolSchema.index({ creador: 1 }, { unique: true });
 
-// Asegura que el creador siempre quede como admin y miembro del árbol.
+// Mantiene roles consistentes:
+// - El creador siempre aparece como miembro activo con rol Creador.
+// - El creador nunca ocupa espacio dentro de admins.
+// - admins solo guarda admins extra, únicos y máximo 5.
 arbolSchema.pre('validate', function () {
     if (!this.creador) return;
 
-    const creadorId = String(this.creador);
+    const creadorId = obtenerIdSeguro(this.creador);
 
-    const yaEsAdmin = this.admins.some(adminId => String(adminId) === creadorId);
+    const adminsUnicos = [];
+    const idsAdmins = new Set();
 
-    if (!yaEsAdmin) {
-        this.admins.push(this.creador);
+    (this.admins || []).forEach((adminId) => {
+        const id = obtenerIdSeguro(adminId);
+        if (!id) return;
+        if (creadorId && id === creadorId) return;
+        if (idsAdmins.has(id)) return;
+
+        idsAdmins.add(id);
+        adminsUnicos.push(adminId);
+    });
+
+    this.admins = adminsUnicos;
+
+    if (this.admins.length > LIMITE_ADMINS_ARBOL) {
+        this.invalidate('admins', `Un árbol solo puede tener hasta ${LIMITE_ADMINS_ARBOL} administradores adicionales.`);
     }
 
-    const indiceMiembro = this.miembros.findIndex(
-        miembro => String(miembro.usuario) === creadorId
+    const indiceCreador = this.miembros.findIndex(
+        miembro => obtenerIdSeguro(miembro.usuario) === creadorId
     );
 
-    if (indiceMiembro === -1) {
+    if (indiceCreador === -1) {
         this.miembros.push({
             usuario: this.creador,
             rol: 'Creador',
             estado: 'Activo'
         });
     } else {
-        this.miembros[indiceMiembro].rol = 'Creador';
-        this.miembros[indiceMiembro].estado = 'Activo';
+        this.miembros[indiceCreador].rol = 'Creador';
+        this.miembros[indiceCreador].estado = 'Activo';
     }
+
+    this.miembros.forEach((miembro) => {
+        const miembroId = obtenerIdSeguro(miembro.usuario);
+
+        if (!miembroId) return;
+        if (miembroId === creadorId) {
+            miembro.rol = 'Creador';
+            miembro.estado = 'Activo';
+            return;
+        }
+
+        if (idsAdmins.has(miembroId)) {
+            miembro.rol = 'Admin';
+        } else if (miembro.rol === 'Admin') {
+            miembro.rol = 'Miembro';
+        }
+    });
 });
 
 module.exports = mongoose.model('Arbol', arbolSchema);
