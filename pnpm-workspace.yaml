@@ -1,2 +1,4 @@
+packages:
+  - "src/client"
 allowBuilds:
   core-js: true
