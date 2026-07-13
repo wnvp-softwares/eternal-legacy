@@ -7,7 +7,7 @@ import Red from './pages/Red';
 import Notificaciones from './pages/Notificaciones';
 import Perfil from './pages/Perfil';
 import Configuracion from './pages/Configuracion';
-import Layout from './components/Layout'; 
+import Layout from './components/Layout';
 
 function App() {
   return (
@@ -15,7 +15,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
-        
+
         {/* Cualquier ruta dentro de Layout tendrá el menú superior y lateral */}
         <Route element={<Layout />}>
           <Route path="/inicio" element={<Inicio />} />
@@ -23,9 +23,14 @@ function App() {
           <Route path="/mensajes" element={<Mensajes />} />
           <Route path="/red" element={<Red />} />
           <Route path="/notificaciones" element={<Notificaciones />} />
+
+          {/* Perfil propio */}
           <Route path="/perfil" element={<Perfil />} />
+
+          {/* Perfil de otro usuario */}
+          <Route path="/perfil/:id" element={<Perfil />} />
+
           <Route path="/configuracion" element={<Configuracion />} />
-          {/* El día de mañana, solo agregarás: <Route path="/arbol-genealogico" element={<Arbol />} /> */}
         </Route>
       </Routes>
     </BrowserRouter>

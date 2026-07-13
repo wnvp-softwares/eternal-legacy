@@ -652,6 +652,80 @@ export default function Inicio() {
   const configPublicacionActual = TIPOS_PUBLICACION_CONFIG[tipoPublicacion] || TIPOS_PUBLICACION_CONFIG.historico;
   const esArchivoImagen = archivoAdjunto?.type?.startsWith('image/');
 
+  const obtenerIdPersonaPerfil = (persona = {}) => {
+    if (!persona) return null;
+
+    if (typeof persona === 'string') return persona;
+
+    return (
+      obtenerId(persona) ||
+      obtenerId(persona.usuario) ||
+      obtenerId(persona.id) ||
+      obtenerId(persona.autor) ||
+      persona.usuarioId ||
+      persona.autorId ||
+      null
+    );
+  };
+
+  const irAPerfil = (persona) => {
+    const personaId = obtenerIdPersonaPerfil(persona);
+
+    if (!personaId) {
+      console.warn('No se encontró ID para abrir el perfil:', persona);
+      return;
+    }
+
+    const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+
+    if (miId && String(personaId) === String(miId)) {
+      navigate('/perfil');
+      return;
+    }
+
+    navigate(`/perfil/${personaId}`);
+  };
+
+  const normalizarHandleMencion = (valor = '') => {
+    return String(valor || '')
+      .replace(/^@/, '')
+      .replace(/\s+/g, '_')
+      .trim()
+      .toLowerCase();
+  };
+
+  const obtenerNombreMencion = (persona = {}) => {
+    return normalizarTexto(
+      persona.nombre ||
+      persona.nombreUsuario ||
+      persona.nombreCompleto ||
+      persona.usuario?.nombreUsuario ||
+      persona.usuario?.nombre ||
+      persona.id?.nombreUsuario ||
+      ''
+    );
+  };
+
+  const buscarPersonaPorMencion = (textoMencion = '', menciones = []) => {
+    if (!Array.isArray(menciones) || menciones.length === 0) return null;
+
+    const mencionNormalizada = normalizarHandleMencion(textoMencion);
+
+    return menciones.find((persona) => {
+      const posiblesNombres = [
+        persona.nombre,
+        persona.nombreUsuario,
+        persona.nombreCompleto,
+        persona.usuario?.nombreUsuario,
+        persona.usuario?.nombre,
+        persona.id?.nombreUsuario
+      ].filter(Boolean);
+
+      return posiblesNombres.some(nombre => normalizarHandleMencion(nombre) === mencionNormalizada);
+    }) || null;
+  };
+
+
   const normalizarEventoParaPublicacion = (evento = {}) => {
     if (!evento) return null;
 
@@ -862,14 +936,14 @@ export default function Inicio() {
               src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
               alt={pub.autor?.nombreUsuario || 'Autor'}
               className="foto-perfil-post perfil-interactivo" // CORRECCIÓN 3: Clase CSS en vez de inline
-              onClick={() => autorId && navigate(`/perfil/${autorId}`)} // Prevenir si autorId es null
+              onClick={() => autorId && irAPerfil(pub.autor)}
             />
           ) : (
             <img
               src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`}
               alt="Autor"
               className="foto-perfil-post perfil-interactivo"
-              onClick={() => autorId && navigate(`/perfil/${autorId}`)}
+              onClick={() => autorId && irAPerfil(pub.autor)}
             />
           )}
 
@@ -877,7 +951,7 @@ export default function Inicio() {
             {/* Clic sobre el Nombre del usuario */}
             <strong
               className="perfil-interactivo"
-              onClick={() => autorId && navigate(`/perfil/${autorId}`)}
+              onClick={() => autorId && irAPerfil(pub.autor)}
             >
               {pub.autor?.nombreUsuario || 'Usuario'}
             </strong>
@@ -887,7 +961,7 @@ export default function Inicio() {
 
         {pub.contenido && (
           <p className="album-evento-publicacion-texto">
-            {renderTextoConMenciones(pub.contenido)}
+            {renderTextoConMenciones(pub.contenido, pub.menciones)}
           </p>
         )}
 
@@ -904,12 +978,34 @@ export default function Inicio() {
     );
   };
 
-  const renderTextoConMenciones = (texto = '') => {
+  const renderTextoConMenciones = (texto = '', menciones = []) => {
     const partes = String(texto || '').split(/(@[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]+)/g);
+
     return partes.map((parte, index) => {
       if (parte.startsWith('@')) {
-        return <span key={`mencion-${index}`} className="mencion-dorada">{parte}</span>;
+        const personaMencionada = buscarPersonaPorMencion(parte, menciones);
+        const puedeAbrirPerfil = Boolean(obtenerIdPersonaPerfil(personaMencionada));
+
+        return (
+          <span
+            key={`mencion-${index}`}
+            className={`mencion-dorada ${puedeAbrirPerfil ? 'mencion-clickeable' : ''}`}
+            role={puedeAbrirPerfil ? 'button' : undefined}
+            tabIndex={puedeAbrirPerfil ? 0 : undefined}
+            onClick={puedeAbrirPerfil ? () => irAPerfil(personaMencionada) : undefined}
+            onKeyDown={puedeAbrirPerfil ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                irAPerfil(personaMencionada);
+              }
+            } : undefined}
+            title={puedeAbrirPerfil ? 'Ver perfil' : undefined}
+          >
+            {parte}
+          </span>
+        );
       }
+
       return <React.Fragment key={`texto-${index}`}>{parte}</React.Fragment>;
     });
   };
@@ -1260,16 +1356,34 @@ export default function Inicio() {
             <div className="tarjeta shadow-sm mb-4 p-3">
               <h3 className="titulo-widget mb-3" style={{ fontSize: '1rem' }}>Personas encontradas</h3>
               <div className="d-flex flex-wrap gap-3">
-                {resultadosPersonas.map(persona => (
-                  <div key={persona.id || persona._id} className="d-flex align-items-center gap-3 p-2 rounded-3 hover-widget" style={{ minWidth: '200px' }}>
-                    <img src={persona.img || `https://ui-avatars.com/api/?name=${persona.nombreUsuario}`} alt={persona.nombreUsuario} className="foto-perfil-chica" />
-                    <div>
-                      <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.9rem' }}>
-                        {persona.nombreUsuario || persona.nombre || (persona.id && persona.id.nombreUsuario) || 'Usuario'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                {resultadosPersonas.map(persona => {
+                  const personaId = obtenerIdPersonaPerfil(persona);
+                  const nombrePersona = persona.nombreUsuario || persona.nombre || (persona.id && persona.id.nombreUsuario) || 'Usuario';
+                  const imagenPersona = persona.img || persona.imagenPerfil || persona.usuario?.imagenPerfil || persona.id?.imagenPerfil || null;
+                  const srcImagenPersona = typeof imagenPersona === 'string'
+                    ? imagenPersona
+                    : imagenPersona?.urlArchivo
+                      ? `http://localhost:3000${imagenPersona.urlArchivo}`
+                      : `https://ui-avatars.com/api/?name=${encodeURIComponent(nombrePersona)}`;
+
+                  return (
+                    <button
+                      key={personaId || nombrePersona}
+                      type="button"
+                      className="resultado-persona-card d-flex align-items-center gap-3 p-2 rounded-3 hover-widget"
+                      style={{ minWidth: '200px' }}
+                      onClick={() => irAPerfil(persona)}
+                    >
+                      <img src={srcImagenPersona} alt={nombrePersona} className="foto-perfil-chica" />
+                      <div className="text-start">
+                        <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.9rem' }}>
+                          {nombrePersona}
+                        </p>
+                        <small className="texto-secundario">Ver perfil</small>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1287,6 +1401,7 @@ export default function Inicio() {
             const ubicacionPost = normalizarTexto(pub.ubicacionTexto || pub.ubicacion?.texto || pub.ubicacion?.direccion || '');
             const etiquetasMultimediaPost = Array.isArray(pub.etiquetasMultimedia) ? pub.etiquetasMultimedia : [];
             const eventoRelacionadoPost = obtenerEventoRelacionadoDePublicacion(pub);
+            const autorId = obtenerIdPersonaPerfil(pub.autor);
 
             return (
               <div key={pub._id} className="tarjeta shadow-sm mb-4">
@@ -1296,14 +1411,54 @@ export default function Inicio() {
                     <div className="d-flex justify-content-between align-items-start mb-2">
                       <div className="d-flex gap-3 align-items-center">
                         {pub.autor?.imagenPerfil?.urlArchivo ? (
-                          <img src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`} alt={pub.autor?.nombreUsuario} className="rounded-circle me-2 object-fit-cover" style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }} />
+                          <img
+                            src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
+                            alt={pub.autor?.nombreUsuario}
+                            className="rounded-circle me-2 object-fit-cover perfil-interactivo"
+                            style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
+                            onClick={() => autorId && irAPerfil(pub.autor)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if ((e.key === 'Enter' || e.key === ' ') && autorId) {
+                                e.preventDefault();
+                                irAPerfil(pub.autor);
+                              }
+                            }}
+                          />
                         ) : (
-                          <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-post" />
+                          <img
+                            src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`}
+                            alt="Autor"
+                            className="foto-perfil-post perfil-interactivo"
+                            onClick={() => autorId && irAPerfil(pub.autor)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if ((e.key === 'Enter' || e.key === ' ') && autorId) {
+                                e.preventDefault();
+                                irAPerfil(pub.autor);
+                              }
+                            }}
+                          />
                         )}
                         <div>
                           <div className="etiqueta-tipo-publicacion"><span>RECUERDO HISTÓRICO</span></div>
                           <div className="d-flex align-items-baseline gap-2 mt-1">
-                            <p className="nombre-autor fs-5 mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</p>
+                            <p
+                              className={`nombre-autor fs-5 mb-0 ${autorId ? 'perfil-interactivo' : ''}`}
+                              onClick={() => autorId && irAPerfil(pub.autor)}
+                              role={autorId ? 'button' : undefined}
+                              tabIndex={autorId ? 0 : undefined}
+                              onKeyDown={(e) => {
+                                if ((e.key === 'Enter' || e.key === ' ') && autorId) {
+                                  e.preventDefault();
+                                  irAPerfil(pub.autor);
+                                }
+                              }}
+                            >
+                              {pub.autor?.nombreUsuario || 'Usuario'}
+                            </p>
                             <span className="info-autor mb-0">{fechaFormateada}</span>
                           </div>
                           <div className="etiqueta-historica-inferior">
@@ -1317,7 +1472,7 @@ export default function Inicio() {
                       <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
                     </div>
 
-                    <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido)}</p>
+                    <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
 
                     {tieneMultimedia && (
                       <div className="contenedor-polaroid">
@@ -1344,14 +1499,54 @@ export default function Inicio() {
                     <div className="d-flex justify-content-between align-items-start mb-2">
                       <div className="d-flex gap-3 align-items-center">
                         {pub.autor?.imagenPerfil?.urlArchivo ? (
-                          <img src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`} alt={pub.autor?.nombreUsuario} className="rounded-circle me-2 object-fit-cover" style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }} />
+                          <img
+                            src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
+                            alt={pub.autor?.nombreUsuario}
+                            className="rounded-circle me-2 object-fit-cover perfil-interactivo"
+                            style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
+                            onClick={() => autorId && irAPerfil(pub.autor)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if ((e.key === 'Enter' || e.key === ' ') && autorId) {
+                                e.preventDefault();
+                                irAPerfil(pub.autor);
+                              }
+                            }}
+                          />
                         ) : (
-                          <img src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`} alt="Autor" className="foto-perfil-post" />
+                          <img
+                            src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`}
+                            alt="Autor"
+                            className="foto-perfil-post perfil-interactivo"
+                            onClick={() => autorId && irAPerfil(pub.autor)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if ((e.key === 'Enter' || e.key === ' ') && autorId) {
+                                e.preventDefault();
+                                irAPerfil(pub.autor);
+                              }
+                            }}
+                          />
                         )}
                         <div>
                           <div className="etiqueta-tipo-publicacion"><span>MOMENTO FAMILIAR</span></div>
                           <div className="d-flex align-items-baseline gap-2 mt-1">
-                            <p className="nombre-autor fs-5 mb-0">{pub.autor?.nombreUsuario || 'Usuario'}</p>
+                            <p
+                              className={`nombre-autor fs-5 mb-0 ${autorId ? 'perfil-interactivo' : ''}`}
+                              onClick={() => autorId && irAPerfil(pub.autor)}
+                              role={autorId ? 'button' : undefined}
+                              tabIndex={autorId ? 0 : undefined}
+                              onKeyDown={(e) => {
+                                if ((e.key === 'Enter' || e.key === ' ') && autorId) {
+                                  e.preventDefault();
+                                  irAPerfil(pub.autor);
+                                }
+                              }}
+                            >
+                              {pub.autor?.nombreUsuario || 'Usuario'}
+                            </p>
                             <span className="info-autor mb-0">{fechaFormateada}</span>
                           </div>
                           <div className="etiqueta-contexto-familiar">
@@ -1364,7 +1559,7 @@ export default function Inicio() {
                       <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
                     </div>
 
-                    <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido)}</p>
+                    <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
 
                     {tieneMultimedia && (
                       <div className="contenedor-moderno">

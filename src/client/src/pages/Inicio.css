@@ -2199,3 +2199,66 @@
     /* Feedback visual extra para el texto */
     opacity: 0.85;
 }
+
+/* =========================================
+   PERFILES CLICKEABLES DESDE INICIO
+   ========================================= */
+.perfil-interactivo {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transition: color 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+}
+
+.perfil-interactivo:hover {
+    color: var(--dorado-oscuro) !important;
+    text-decoration: underline;
+    opacity: 0.9;
+}
+
+.perfil-interactivo:focus-visible {
+    outline: 2px solid rgba(203, 161, 53, 0.45);
+    outline-offset: 3px;
+    border-radius: 8px;
+}
+
+.resultado-persona-card {
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    text-align: left;
+}
+
+.resultado-persona-card:hover {
+    border-color: rgba(203, 161, 53, 0.45);
+    background-color: #fef8eb;
+    transform: translateY(-1px);
+}
+
+.resultado-persona-card:focus-visible {
+    outline: 2px solid rgba(203, 161, 53, 0.45);
+    outline-offset: 2px;
+}
+
+.mencion-clickeable {
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.mencion-clickeable:hover {
+    text-decoration: underline;
+    color: var(--dorado-oscuro);
+}
+
+[data-tema="oscuro"] .resultado-persona-card:hover {
+    background-color: rgba(203, 161, 53, 0.10);
+    border-color: rgba(203, 161, 53, 0.35);
+}
+
+@media (max-width: 576px) {
+    .resultado-persona-card {
+        width: 100%;
+        min-width: 0 !important;
+    }
+}
