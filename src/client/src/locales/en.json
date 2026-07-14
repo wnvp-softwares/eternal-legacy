@@ -1,0 +1,14 @@
+{
+    "menu_cuenta": "Account",
+    "menu_privacidad": "Privacy",
+    "menu_notificaciones": "Notifications",
+    "menu_seguridad": "Security",
+    "menu_idioma": "Language & Region",
+    "menu_apariencia": "Appearance",
+    "titulo_idioma": "Language and Region",
+    "label_idioma": "Interface Language",
+    "label_zona": "Time Zone",
+    "label_formato": "Date Format",
+    "btn_guardar": "Save Changes",
+    "btn_guardando": "Saving..."
+}

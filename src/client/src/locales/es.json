@@ -1,0 +1,14 @@
+{
+    "menu_cuenta": "Cuenta",
+    "menu_privacidad": "Privacidad",
+    "menu_notificaciones": "Notificaciones",
+    "menu_seguridad": "Seguridad",
+    "menu_idioma": "Idioma y Región",
+    "menu_apariencia": "Apariencia",
+    "titulo_idioma": "Idioma y Región",
+    "label_idioma": "Idioma de la Interfaz",
+    "label_zona": "Zona Horaria",
+    "label_formato": "Formato de Fecha",
+    "btn_guardar": "Guardar Cambios",
+    "btn_guardando": "Guardando..."
+}

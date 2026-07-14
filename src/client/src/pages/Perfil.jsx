@@ -631,38 +631,6 @@ export default function Perfil() {
                 </div>
 
                 <div className="grupo-input-x">
-                  <label className="label-input-x">Nombre de Usuario</label>
-                  <input
-                    type="text"
-                    className="form-control input-x"
-                    value={formEdicion.nombreUsuario}
-                    onChange={(e) => setFormEdicion({ ...formEdicion, nombreUsuario: e.target.value })}
-                    placeholder="Tu nombre de usuario"
-                  />
-                </div>
-
-                <div className="grupo-input-x">
-                  <label className="label-input-x">Correo Electrónico</label>
-                  <input
-                    type="email"
-                    className="form-control input-x"
-                    value={formEdicion.email}
-                    onChange={(e) => setFormEdicion({ ...formEdicion, email: e.target.value })}
-                    placeholder="tu@correo.com"
-                  />
-                </div>
-
-                <div className="grupo-input-x">
-                  <label className="label-input-x">Fecha de Nacimiento</label>
-                  <input
-                    type="date"
-                    className="form-control input-x"
-                    value={formEdicion.fechaNacimiento}
-                    onChange={(e) => setFormEdicion({ ...formEdicion, fechaNacimiento: e.target.value })}
-                  />
-                </div>
-
-                <div className="grupo-input-x">
                   <label className="label-input-x">Género</label>
                   <select
                     className="form-control input-x"
@@ -1037,7 +1005,7 @@ export default function Perfil() {
           </div>
         )}
 
-        {/* PESTAÑA 2: LÍNEA DE TIEMPO (REAL) */}
+        {/* PESTAÑA 2: LÍNEA DE TIEMPO (MODIFICADO AQUÍ) */}
         {tabActiva === 'timeline' && (
           <div className="col-12">
             <div className="timeline-contenedor">
@@ -1049,16 +1017,28 @@ export default function Perfil() {
                       <span>{post.anio || new Date(post.createdAt).getFullYear()}</span>
                     </div>
                     <div className="tarjeta shadow-sm pb-3 px-3 px-sm-4 mb-0">
-                      <p className="texto-post mb-2 fw-bold">{post.titulo || 'Hito Familiar'}</p>
-                      <p className="texto-post historico text-muted small">{post.texto || post.contenido}</p>
-                      {post.multimedia && post.multimedia.length > 0 && (
-                        <img
-                          src={`http://localhost:3000${post.multimedia[0]?.urlArchivo}`}
-                          alt="Timeline"
-                          className="img-fluid rounded mt-2"
-                          style={{ maxHeight: '150px', objectFit: 'cover' }}
-                        />
-                      )}
+                      {/* Flexbox responsivo: fila en pantallas sm en adelante, columna en móviles pequeños */}
+                      <div className="d-flex flex-column flex-sm-row align-items-sm-start justify-content-between gap-3">
+
+                        {/* Bloque de Texto (ocupa el máximo espacio disponible a la izquierda) */}
+                        <div className="flex-grow-1">
+                          <p className="texto-post mb-2 fw-bold">{post.titulo || 'Hito Familiar'}</p>
+                          <p className="texto-post historico text-muted small mb-0">{post.texto || post.contenido}</p>
+                        </div>
+
+                        {/* Bloque de Imagen (se renderiza a la derecha si existe) */}
+                        {post.multimedia && post.multimedia.length > 0 && (
+                          <div style={{ minWidth: '120px', maxWidth: '180px', width: '100%' }} className="align-self-center align-self-sm-start">
+                            <img
+                              src={`http://localhost:3000${post.multimedia[0]?.urlArchivo}`}
+                              alt="Timeline"
+                              className="img-fluid rounded"
+                              style={{ maxHeight: '120px', width: '100%', objectFit: 'cover' }}
+                            />
+                          </div>
+                        )}
+
+                      </div>
                     </div>
                   </div>
                 ))

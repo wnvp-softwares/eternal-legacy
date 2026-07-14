@@ -32,8 +32,8 @@ const arbolSchema = new mongoose.Schema({
 
     privacidad: {
         type: String,
-        enum: ['Publico', 'Privado', 'Familia'],
-        default: 'Privado'
+        enum: ['Publico', 'Privado', 'Familia', 'Conexiones'], // 👈 Añadimos 'Conexiones' al enum
+        default: 'Familia' // Puedes cambiar el default si lo deseas
     },
 
     // Admins adicionales del árbol. El creador NO cuenta dentro de este arreglo.

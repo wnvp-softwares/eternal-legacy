@@ -310,10 +310,104 @@ const actualizarImagenesPerfil = async (req, res) => {
     }
 };
 
+// Agrega estas funciones al final de tu archivo usuario.controller.js
+
+const actualizarContrasena = async (req, res) => {
+    try {
+        const { contrasenaActual, nuevaContrasena } = req.body;
+
+        if (!contrasenaActual || !nuevaContrasena) {
+            return res.status(400).json({ mensaje: 'Todos los campos son obligatorios.' });
+        }
+
+        const usuario = await Usuario.findById(req.usuario.id);
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        }
+
+        // Verificar si la contraseña actual proporcionada es la correcta
+        const contrasenaValida = await bcrypt.compare(contrasenaActual, usuario.contrasena);
+        if (!contrasenaValida) {
+            return res.status(400).json({ mensaje: 'La contraseña actual es incorrecta.' });
+        }
+
+        if (nuevaContrasena.length < 6) {
+            return res.status(400).json({ mensaje: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+        }
+
+        // Encriptar la nueva contraseña
+        const salt = await bcrypt.genSalt(10);
+        usuario.contrasena = await bcrypt.hash(nuevaContrasena, salt);
+        await usuario.save();
+
+        res.status(200).json({ mensaje: 'Contraseña actualizada con éxito.' });
+    } catch (error) {
+        console.error('❌ Error en actualizarContrasena:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor.' });
+    }
+};
+
+const toggle2FA = async (req, res) => {
+    try {
+        const usuario = await Usuario.findById(req.usuario.id);
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        }
+
+        // Alternamos el estado booleano
+        usuario.twoFactorEnabled = !usuario.twoFactorEnabled;
+        await usuario.save();
+
+        res.status(200).json({
+            mensaje: `Autenticación de dos pasos ${usuario.twoFactorEnabled ? 'activada' : 'desactivada'} con éxito.`,
+            twoFactorEnabled: usuario.twoFactorEnabled
+        });
+    } catch (error) {
+        console.error('❌ Error en toggle2FA:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor.' });
+    }
+};
+
+// server/controllers/usuarios/usuario.controller.js
+
+const actualizarPreferencias = async (req, res) => {
+    try {
+        const { idioma, zonaHoraria, formatoFecha } = req.body;
+
+        const usuario = await Usuario.findById(req.usuario.id);
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        }
+
+        // Actualizamos los campos si vienen en el body
+        if (idioma) usuario.idioma = idioma;
+        if (zonaHoraria) usuario.zonaHoraria = zonaHoraria;
+        if (formatoFecha) usuario.formatoFecha = formatoFecha;
+
+        await usuario.save();
+
+        res.status(200).json({
+            mensaje: 'Preferencias de idioma y región actualizadas correctamente.',
+            preferencias: {
+                idioma: usuario.idioma,
+                zonaHoraria: usuario.zonaHoraria,
+                formatoFecha: usuario.formatoFecha
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error en actualizarPreferencias:', error);
+        res.status(500).json({ mensaje: 'Error interno del servidor.' });
+    }
+};
+
+// Recuerda exportarlos al final del archivo junto con los demás:
 module.exports = {
     crearUsuario,
     loginUsuario,
     actualizarFotoPerfil,
     actualizarImagenesPerfil,
-    verificarCodigo
+    verificarCodigo,
+    actualizarContrasena, // 👈 Exportado
+    toggle2FA,             // 👈 Exportado
+    actualizarPreferencias
 };

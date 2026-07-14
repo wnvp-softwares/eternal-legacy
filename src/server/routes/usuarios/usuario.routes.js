@@ -7,7 +7,10 @@ const {
     loginUsuario, 
     actualizarFotoPerfil, 
     actualizarImagenesPerfil,
-    verificarCodigo
+    verificarCodigo,
+    actualizarContrasena, // 👈 Importar
+    toggle2FA,             // 👈 Importar
+    actualizarPreferencias
 } = require('../../controllers/usuarios/usuario.controller');
 
 const { verificarToken } = require('../../middlewares/auth.middleware');
@@ -27,5 +30,9 @@ router.get('/zona-vip', verificarToken, (req, res) => {
         tuIdEs: req.usuario.id
     });
 });
+
+router.put('/actualizar-contrasena', verificarToken, actualizarContrasena);
+router.patch('/toggle-2fa', verificarToken, toggle2FA);
+router.put('/actualizar-preferencias', verificarToken, actualizarPreferencias);
 
 module.exports = router;

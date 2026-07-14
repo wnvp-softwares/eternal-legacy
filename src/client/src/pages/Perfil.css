@@ -729,3 +729,7 @@
     .galeria-overlay { gap: 10px; }
     .galeria-estilos-texto { font-size: 0.95rem; gap: 4px; }
 }
+
+.texto-post {
+    white-space: pre-line;
+}

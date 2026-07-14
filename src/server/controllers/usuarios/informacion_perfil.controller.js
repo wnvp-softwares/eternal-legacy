@@ -5,7 +5,8 @@ const formatearUsuarioCuenta = (usuario) => ({
     nombreUsuario: usuario.nombreUsuario,
     email: usuario.email,
     imagenPerfil: usuario.imagenPerfil || null,
-    informacionPerfil: usuario.informacionPerfil || null
+    informacionPerfil: usuario.informacionPerfil || null,
+    twoFactorEnabled: usuario.twoFactorEnabled // 👈 AGREGA ESTA LÍNEA MÁGICA
 });
 
 const crearPerfilSiNoExiste = async (usuario) => {

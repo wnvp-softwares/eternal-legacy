@@ -23,6 +23,10 @@ const usuarioSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    twoFactorEnabled: { // 👈 Nuevo campo para el estado del 2FA
+        type: Boolean,
+        default: false
+    },
     // ---------------------------------------
     imagenPerfil: {
         type: mongoose.Schema.Types.ObjectId,
@@ -39,6 +43,18 @@ const usuarioSchema = new mongoose.Schema({
     arbolPertenencia: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Arbol'
+    },
+    idioma: {
+        type: String,
+        default: 'es-MX'
+    },
+    zonaHoraria: {
+        type: String,
+        default: 'America/Mexico_City'
+    },
+    formatoFecha: {
+        type: String,
+        default: 'DD/MM/AAAA'
     }
 }, { timestamps: true });
 
