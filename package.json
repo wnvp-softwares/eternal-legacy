@@ -1,6 +1,6 @@
 {
-  "name": "eternal-legacy",
-  "version": "1.0.0",
+  "name": "Legacy",
+  "version": "1.0.0-beta.1",
   "description": "Proyecto \"Eternal Legacy\" (nombre provisional) del cliente: Marco Antonio Gallegos Mora",
   "main": "index.js",
   "scripts": {
