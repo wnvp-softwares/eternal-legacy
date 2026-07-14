@@ -8,6 +8,7 @@ import './ArbolGenealogico.css';
 // CONFIGURACIÓN
 // ==========================================
 const URL_BASE_BACKEND = 'http://localhost:3000';
+const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
 
 const resolverUrlImagen = (url) => {
   if (!url) return null;
@@ -1115,8 +1116,16 @@ export default function ArbolGenealogico() {
   }, [nodos]);
 
   useEffect(() => {
-    if (vistaActual !== 'lienzo' || cargandoArbol || !arbolActivoId) return undefined;
+    if (vistaActual !== 'menu' || cargandoArbol) return undefined;
 
+    const animacionYaMostrada = sessionStorage.getItem(CLAVE_ANIMACION_CONEXIONES_ARBOL) === 'true';
+
+    if (animacionYaMostrada) {
+      establecerMostrarAnimacionConexiones(false);
+      return undefined;
+    }
+
+    sessionStorage.setItem(CLAVE_ANIMACION_CONEXIONES_ARBOL, 'true');
     establecerMostrarAnimacionConexiones(true);
 
     const temporizador = setTimeout(() => {
@@ -1124,7 +1133,7 @@ export default function ArbolGenealogico() {
     }, 2800);
 
     return () => clearTimeout(temporizador);
-  }, [vistaActual, cargandoArbol, arbolActivoId]);
+  }, [vistaActual, cargandoArbol]);
 
   const apiFetch = async (endpoint, opciones = {}) => {
     const respuesta = await fetch(`${URL_BASE_BACKEND}${endpoint}`, {
@@ -4382,6 +4391,8 @@ La persona seguirá dentro del árbol como miembro normal.`
 
     return (
       <div className="contenedor-arbol menu-arboles-wrapper">
+        {renderAnimacionConexionesArbol()}
+
         {mensajeSistema && (
           <div className="mensaje-colocacion-flotante" style={{ backgroundColor: 'var(--dorado)' }}>
             <span>{mensajeSistema}</span>
@@ -4723,8 +4734,6 @@ La persona seguirá dentro del árbol como miembro normal.`
       {/* --- ÁREA DE TRABAJO --- */}
       <div className="area-trabajo mt-3">
         <div className="contenedor-lienzo">
-          {renderAnimacionConexionesArbol()}
-
           <div
             ref={lienzoExportableRef}
             className={`lienzo-arbol ${claseLienzo}`}

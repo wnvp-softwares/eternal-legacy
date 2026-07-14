@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Login.css';
 
+const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
+
 export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   const [esLogin, setEsLogin] = useState(true);
   const navigate = useNavigate();
@@ -52,6 +54,10 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
     return `${min}:${seg < 10 ? '0' : ''}${seg}`;
   };
   // ----------------------------------------------
+
+  const prepararAnimacionEntradaArbol = () => {
+    sessionStorage.removeItem(CLAVE_ANIMACION_CONEXIONES_ARBOL);
+  };
 
   const manejarCambio = (e) => {
     setFormulario({
@@ -112,6 +118,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         localStorage.setItem('token', datos.token);
         localStorage.setItem('usuario', JSON.stringify(datos.usuario));
 
+        prepararAnimacionEntradaArbol();
         navigate(rutaInicial, { replace: true });
       } catch (err) {
         setError(err.message);
@@ -194,6 +201,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
       localStorage.setItem('token', datos.token);
       localStorage.setItem('usuario', JSON.stringify(datos.usuario));
 
+      prepararAnimacionEntradaArbol();
       navigate(rutaInicial, { replace: true });
     } catch (err) {
       setError(err.message);
