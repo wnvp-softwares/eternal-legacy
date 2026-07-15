@@ -3,6 +3,86 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const enviarCodigoVerificacion = require('../../middlewares/mailer');
 
+const DURACION_CODIGO_2FA_MS = 5 * 60 * 1000;
+const DURACION_TOKEN_2FA = '10m';
+
+const generarCodigoSeisDigitos = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const crearTokenSesion = (usuarioId) => {
+    return jwt.sign(
+        { id: usuarioId },
+        process.env.JWT_SECRET,
+        { expiresIn: '30d' }
+    );
+};
+
+const crearTokenTemporal2FA = (usuarioId) => {
+    return jwt.sign(
+        {
+            id: usuarioId,
+            tipo: 'login_2fa'
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: DURACION_TOKEN_2FA }
+    );
+};
+
+const obtenerUrlArchivo = (archivo) => {
+    return archivo?.urlArchivo ? `http://localhost:3000${archivo.urlArchivo}` : null;
+};
+
+const formatearUsuarioSesion = (usuario) => ({
+    id: usuario._id,
+    nombreUsuario: usuario.nombreUsuario,
+    email: usuario.email,
+    imagenPerfil: obtenerUrlArchivo(usuario.imagenPerfil),
+    imagenPortada: obtenerUrlArchivo(usuario.imagenPortada),
+    informacionPerfil: usuario.informacionPerfil,
+    twoFactorEnabled: Boolean(usuario.twoFactorEnabled)
+});
+
+const crearPerfilSiNoExiste = async (usuario) => {
+    if (usuario.informacionPerfil) return usuario.informacionPerfil;
+
+    const nuevoPerfil = await InformacionPerfil.create({
+        biografia: '¡Hola! Soy nuevo en Eternal Legacy.',
+        fechaNacimiento: null,
+        genero: '',
+        lugarNacimiento: '',
+        ubicacionActual: '',
+        ocupacionEducacion: '',
+        intereses: []
+    });
+
+    usuario.informacionPerfil = nuevoPerfil._id;
+    await usuario.save();
+
+    return nuevoPerfil._id;
+};
+
+const enviarCodigo2FA = async (usuario) => {
+    const codigo = generarCodigoSeisDigitos();
+
+    usuario.twoFactorCode = codigo;
+    usuario.twoFactorCodeExpires = new Date(Date.now() + DURACION_CODIGO_2FA_MS);
+    await usuario.save();
+
+    const enviado = await enviarCodigoVerificacion(usuario.email, codigo, {
+        asunto: 'Código de seguridad para iniciar sesión en Legacy',
+        titulo: 'Verificación en dos pasos',
+        descripcion: 'Detectamos un intento de inicio de sesión en tu cuenta. Para continuar, confirma tu identidad con este código.',
+        accion: 'Tu código de seguridad es:'
+    });
+
+    if (!enviado) {
+        throw new Error('No se pudo enviar el código de seguridad. Intenta de nuevo.');
+    }
+
+    return codigo;
+};
+
 // 1. REGISTRO DE USUARIO (SIGNUP)
 const crearUsuario = async (req, res) => {
     try {
@@ -42,7 +122,7 @@ const crearUsuario = async (req, res) => {
             });
         }
 
-        const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+        const codigo = generarCodigoSeisDigitos();
 
         const salt = await bcrypt.genSalt(10);
         const contrasenaEncriptada = await bcrypt.hash(password, salt);
@@ -68,7 +148,12 @@ const crearUsuario = async (req, res) => {
 
         await nuevoUsuario.save();
 
-        await enviarCodigoVerificacion(emailLimpio, codigo);
+        await enviarCodigoVerificacion(emailLimpio, codigo, {
+            asunto: 'Código de Verificación para Registro',
+            titulo: 'Confirma tu cuenta en Legacy',
+            descripcion: 'Gracias por registrarte. Usa este código para verificar tu cuenta.',
+            accion: 'Tu código de verificación es:'
+        });
 
         res.status(201).json({
             mensaje: 'Usuario creado con éxito. Revisa tu correo para el código de confirmación.',
@@ -89,7 +174,7 @@ const crearUsuario = async (req, res) => {
     }
 };
 
-// 2. VERIFICACIÓN DEL CÓDIGO POR EMAIL
+// 2. VERIFICACIÓN DEL CÓDIGO POR EMAIL PARA REGISTRO
 const verificarCodigo = async (req, res) => {
     try {
         const { email, codigo } = req.body;
@@ -102,7 +187,10 @@ const verificarCodigo = async (req, res) => {
 
         const emailLimpio = email.trim().toLowerCase();
 
-        const usuario = await Usuario.findOne({ email: emailLimpio });
+        const usuario = await Usuario.findOne({ email: emailLimpio })
+            .populate('imagenPerfil')
+            .populate('imagenPortada')
+            .populate('informacionPerfil');
 
         if (!usuario) {
             return res.status(404).json({
@@ -118,21 +206,19 @@ const verificarCodigo = async (req, res) => {
 
         usuario.isVerified = true;
         usuario.verificationCode = undefined;
+        await crearPerfilSiNoExiste(usuario);
         await usuario.save();
 
-        const token = jwt.sign(
-            { id: usuario._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '30d' }
-        );
+        const usuarioActualizado = await Usuario.findById(usuario._id)
+            .populate('imagenPerfil')
+            .populate('imagenPortada')
+            .populate('informacionPerfil');
+
+        const token = crearTokenSesion(usuario._id);
 
         res.status(200).json({
             mensaje: 'Cuenta verificada correctamente.',
-            usuario: {
-                id: usuario._id,
-                nombreUsuario: usuario.nombreUsuario,
-                email: usuario.email
-            },
+            usuario: formatearUsuarioSesion(usuarioActualizado),
             token
         });
     } catch (error) {
@@ -143,7 +229,7 @@ const verificarCodigo = async (req, res) => {
     }
 };
 
-// 3. LOGIN TRADICIONAL
+// 3. LOGIN CON SOPORTE 2FA
 const loginUsuario = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -181,51 +267,128 @@ const loginUsuario = async (req, res) => {
             });
         }
 
-        if (!usuario.informacionPerfil) {
-            const nuevoPerfil = await InformacionPerfil.create({
-                biografia: '¡Hola! Soy nuevo en Eternal Legacy.',
-                fechaNacimiento: null,
-                genero: '',
-                lugarNacimiento: '',
-                ubicacionActual: '',
-                ocupacionEducacion: '',
-                intereses: []
-            });
+        await crearPerfilSiNoExiste(usuario);
 
-            usuario.informacionPerfil = nuevoPerfil._id;
-            await usuario.save();
+        if (usuario.twoFactorEnabled) {
+            await enviarCodigo2FA(usuario);
+
+            const twoFactorLoginToken = crearTokenTemporal2FA(usuario._id);
+
+            return res.status(200).json({
+                mensaje: 'Te enviamos un código de seguridad a tu correo.',
+                requiere2FA: true,
+                email: usuario.email,
+                twoFactorLoginToken
+            });
         }
 
-        const token = jwt.sign(
-            { id: usuario._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '30d' }
-        );
+        const usuarioActualizado = await Usuario.findById(usuario._id)
+            .populate('imagenPerfil')
+            .populate('imagenPortada')
+            .populate('informacionPerfil');
 
-        const urlPerfil = usuario.imagenPerfil?.urlArchivo
-            ? `http://localhost:3000${usuario.imagenPerfil.urlArchivo}`
-            : null;
-
-        const urlPortada = usuario.imagenPortada?.urlArchivo
-            ? `http://localhost:3000${usuario.imagenPortada.urlArchivo}`
-            : null;
+        const token = crearTokenSesion(usuario._id);
 
         res.status(200).json({
             mensaje: 'Inicio de sesión exitoso.',
-            usuario: {
-                id: usuario._id,
-                nombreUsuario: usuario.nombreUsuario,
-                email: usuario.email,
-                imagenPerfil: urlPerfil,
-                imagenPortada: urlPortada,
-                informacionPerfil: usuario.informacionPerfil
-            },
+            usuario: formatearUsuarioSesion(usuarioActualizado),
             token
         });
     } catch (error) {
         console.error('❌ Error en loginUsuario:', error);
         res.status(500).json({
-            mensaje: 'Error interno en el login.'
+            mensaje: error.message || 'Error interno en el login.'
+        });
+    }
+};
+
+// 4. VERIFICAR CÓDIGO 2FA AL INICIAR SESIÓN
+const verificarCodigo2FALogin = async (req, res) => {
+    try {
+        const { twoFactorLoginToken, codigo } = req.body;
+
+        if (!twoFactorLoginToken || !codigo) {
+            return res.status(400).json({
+                mensaje: 'Token temporal y código son obligatorios.'
+            });
+        }
+
+        let payload;
+
+        try {
+            payload = jwt.verify(twoFactorLoginToken, process.env.JWT_SECRET);
+        } catch (error) {
+            return res.status(401).json({
+                mensaje: 'La verificación expiró. Vuelve a iniciar sesión.'
+            });
+        }
+
+        if (payload.tipo !== 'login_2fa' || !payload.id) {
+            return res.status(401).json({
+                mensaje: 'Verificación inválida. Vuelve a iniciar sesión.'
+            });
+        }
+
+        const usuario = await Usuario.findById(payload.id)
+            .populate('imagenPerfil')
+            .populate('imagenPortada')
+            .populate('informacionPerfil');
+
+        if (!usuario) {
+            return res.status(404).json({
+                mensaje: 'Usuario no encontrado.'
+            });
+        }
+
+        if (!usuario.twoFactorEnabled) {
+            return res.status(400).json({
+                mensaje: 'La autenticación en dos pasos no está activa para esta cuenta.'
+            });
+        }
+
+        if (!usuario.twoFactorCode || !usuario.twoFactorCodeExpires) {
+            return res.status(400).json({
+                mensaje: 'No hay un código activo. Vuelve a iniciar sesión.'
+            });
+        }
+
+        if (usuario.twoFactorCodeExpires < new Date()) {
+            usuario.twoFactorCode = null;
+            usuario.twoFactorCodeExpires = null;
+            await usuario.save();
+
+            return res.status(400).json({
+                mensaje: 'El código expiró. Vuelve a iniciar sesión.'
+            });
+        }
+
+        if (String(usuario.twoFactorCode) !== String(codigo)) {
+            return res.status(400).json({
+                mensaje: 'El código ingresado es incorrecto.'
+            });
+        }
+
+        usuario.twoFactorCode = null;
+        usuario.twoFactorCodeExpires = null;
+        await crearPerfilSiNoExiste(usuario);
+        await usuario.save();
+
+        const usuarioActualizado = await Usuario.findById(usuario._id)
+            .populate('imagenPerfil')
+            .populate('imagenPortada')
+            .populate('informacionPerfil');
+
+        const token = crearTokenSesion(usuario._id);
+
+        res.status(200).json({
+            mensaje: 'Verificación completada. Inicio de sesión exitoso.',
+            usuario: formatearUsuarioSesion(usuarioActualizado),
+            token
+        });
+    } catch (error) {
+        console.error('❌ Error en verificarCodigo2FALogin:', error);
+        res.status(500).json({
+            mensaje: 'Error interno al verificar el código de seguridad.'
         });
     }
 };
@@ -310,8 +473,6 @@ const actualizarImagenesPerfil = async (req, res) => {
     }
 };
 
-// Agrega estas funciones al final de tu archivo usuario.controller.js
-
 const actualizarContrasena = async (req, res) => {
     try {
         const { contrasenaActual, nuevaContrasena } = req.body;
@@ -325,7 +486,6 @@ const actualizarContrasena = async (req, res) => {
             return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
         }
 
-        // Verificar si la contraseña actual proporcionada es la correcta
         const contrasenaValida = await bcrypt.compare(contrasenaActual, usuario.contrasena);
         if (!contrasenaValida) {
             return res.status(400).json({ mensaje: 'La contraseña actual es incorrecta.' });
@@ -335,7 +495,6 @@ const actualizarContrasena = async (req, res) => {
             return res.status(400).json({ mensaje: 'La nueva contraseña debe tener al menos 6 caracteres.' });
         }
 
-        // Encriptar la nueva contraseña
         const salt = await bcrypt.genSalt(10);
         usuario.contrasena = await bcrypt.hash(nuevaContrasena, salt);
         await usuario.save();
@@ -354,8 +513,13 @@ const toggle2FA = async (req, res) => {
             return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
         }
 
-        // Alternamos el estado booleano
         usuario.twoFactorEnabled = !usuario.twoFactorEnabled;
+
+        if (!usuario.twoFactorEnabled) {
+            usuario.twoFactorCode = null;
+            usuario.twoFactorCodeExpires = null;
+        }
+
         await usuario.save();
 
         res.status(200).json({
@@ -368,8 +532,6 @@ const toggle2FA = async (req, res) => {
     }
 };
 
-// server/controllers/usuarios/usuario.controller.js
-
 const actualizarPreferencias = async (req, res) => {
     try {
         const { idioma, zonaHoraria, formatoFecha } = req.body;
@@ -379,7 +541,6 @@ const actualizarPreferencias = async (req, res) => {
             return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
         }
 
-        // Actualizamos los campos si vienen en el body
         if (idioma) usuario.idioma = idioma;
         if (zonaHoraria) usuario.zonaHoraria = zonaHoraria;
         if (formatoFecha) usuario.formatoFecha = formatoFecha;
@@ -400,14 +561,14 @@ const actualizarPreferencias = async (req, res) => {
     }
 };
 
-// Recuerda exportarlos al final del archivo junto con los demás:
 module.exports = {
     crearUsuario,
     loginUsuario,
+    verificarCodigo2FALogin,
     actualizarFotoPerfil,
     actualizarImagenesPerfil,
     verificarCodigo,
-    actualizarContrasena, // 👈 Exportado
-    toggle2FA,             // 👈 Exportado
+    actualizarContrasena,
+    toggle2FA,
     actualizarPreferencias
 };

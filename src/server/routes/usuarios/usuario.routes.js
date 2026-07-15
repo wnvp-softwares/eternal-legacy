@@ -1,26 +1,27 @@
 const express = require('express');
 const router = express.Router();
 
-// 1. Asegúrate de incluir verificarCodigo en la desestructuración
-const { 
-    crearUsuario, 
-    loginUsuario, 
-    actualizarFotoPerfil, 
+const {
+    crearUsuario,
+    loginUsuario,
+    actualizarFotoPerfil,
     actualizarImagenesPerfil,
     verificarCodigo,
-    actualizarContrasena, // 👈 Importar
-    toggle2FA,             // 👈 Importar
+    verificarCodigo2FALogin,
+    actualizarContrasena,
+    toggle2FA,
     actualizarPreferencias
 } = require('../../controllers/usuarios/usuario.controller');
 
 const { verificarToken } = require('../../middlewares/auth.middleware');
 
-// Rutas Públicas
+// Rutas públicas
 router.post('/registro', crearUsuario);
 router.post('/login', loginUsuario);
-router.post('/verificar-codigo', verificarCodigo); // Ahora sí funcionará
+router.post('/verificar-codigo', verificarCodigo);
+router.post('/verificar-2fa-login', verificarCodigo2FALogin);
 
-// Rutas Protegidas (Requieren Token)
+// Rutas protegidas
 router.put('/foto-perfil', verificarToken, actualizarFotoPerfil);
 router.put('/actualizar-imagenes', verificarToken, actualizarImagenesPerfil);
 

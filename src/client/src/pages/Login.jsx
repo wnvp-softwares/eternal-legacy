@@ -24,6 +24,8 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   const [aceptoPrivacidad, setAceptoPrivacidad] = useState(false);
 
   const [codigo, setCodigo] = useState(['', '', '', '', '', '']);
+  const [tipoVerificacion, setTipoVerificacion] = useState('registro');
+  const [twoFactorLoginToken, setTwoFactorLoginToken] = useState('');
   const [error, setError] = useState('');
 
   // --- NUEVO: ESTADO Y EFECTO DEL TEMPORIZADOR ---
@@ -114,6 +116,19 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
           throw new Error(datos.mensaje || 'Error al iniciar sesión.');
         }
 
+        if (datos.requiere2FA) {
+          setTipoVerificacion('2fa_login');
+          setTwoFactorLoginToken(datos.twoFactorLoginToken || '');
+          setCodigo(['', '', '', '', '', '']);
+          setTiempoRestante(300);
+          setPaso('verificacion');
+          return;
+        }
+
+        if (!datos.token || !datos.usuario) {
+          throw new Error('Respuesta de login incompleta. Intenta nuevamente.');
+        }
+
         // Guardamos el token y los datos esenciales del usuario en el navegador
         localStorage.setItem('token', datos.token);
         localStorage.setItem('usuario', JSON.stringify(datos.usuario));
@@ -155,6 +170,9 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         }
 
         // Si todo sale bien, pasamos a la pantalla del código de 6 dígitos
+        setTipoVerificacion('registro');
+        setTwoFactorLoginToken('');
+        setCodigo(['', '', '', '', '', '']);
         setPaso('verificacion');
         setTiempoRestante(300); // Reiniciamos el temporizador a 5 minutos exactos
       } catch (err) {
@@ -182,13 +200,25 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
     setPaso('espera_verificacion');
 
     try {
-      const respuesta = await fetch('http://localhost:3000/api/usuarios/verificar-codigo', {
+      const esVerificacion2FA = tipoVerificacion === '2fa_login';
+      const endpoint = esVerificacion2FA
+        ? 'http://localhost:3000/api/usuarios/verificar-2fa-login'
+        : 'http://localhost:3000/api/usuarios/verificar-codigo';
+
+      const body = esVerificacion2FA
+        ? {
+            twoFactorLoginToken,
+            codigo: codigoCompleto
+          }
+        : {
+            email: formulario.email,
+            codigo: codigoCompleto
+          };
+
+      const respuesta = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formulario.email,
-          codigo: codigoCompleto
-        })
+        body: JSON.stringify(body)
       });
 
       const datos = await respuesta.json();
@@ -197,7 +227,11 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         throw new Error(datos.mensaje || 'Error de verificación.');
       }
 
-      // Guardamos la sesión iniciada de manera automática gracias al token agregado
+      if (!datos.token || !datos.usuario) {
+        throw new Error('No se pudo completar el inicio de sesión. Intenta nuevamente.');
+      }
+
+      // Guardamos la sesión iniciada después de validar el código
       localStorage.setItem('token', datos.token);
       localStorage.setItem('usuario', JSON.stringify(datos.usuario));
 
@@ -210,6 +244,18 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   };
 
 
+  const tituloVerificacion = tipoVerificacion === '2fa_login'
+    ? 'Verifica tu inicio de sesión'
+    : 'Revisa tu correo';
+
+  const descripcionVerificacion = tipoVerificacion === '2fa_login'
+    ? 'Te enviamos un código de seguridad a'
+    : 'Hemos enviado un código de 6 dígitos a';
+
+  const textoBotonVerificacion = tipoVerificacion === '2fa_login'
+    ? 'Verificar e iniciar sesión'
+    : 'Verificar y continuar';
+
   // --- RENDERIZADO CONDICIONAL DE LA COLUMNA DERECHA ---
   let contenidoDerecha;
 
@@ -220,7 +266,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
           <span className="visually-hidden">Cargando...</span>
         </div>
         <h3 className="fuente-elegante fw-bold" style={{ color: '#0D1B2A' }}>
-          {paso === 'espera_correo' ? 'Enviando código de seguridad...' : 'Verificando cuenta...'}
+          {paso === 'espera_correo' ? 'Enviando código de seguridad...' : tipoVerificacion === '2fa_login' ? 'Verificando acceso...' : 'Verificando cuenta...'}
         </h3>
         <p className="text-muted small">Por favor, no cierres esta ventana.</p>
       </div>
@@ -231,9 +277,9 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
       <div className="animacion-formulario">
         <div className="text-center mb-4">
           <i className="bi bi-envelope-check mb-3 d-block" style={{ fontSize: '4rem', color: '#d9b34c' }}></i>
-          <h2 className="fuente-elegante fw-bold fs-2 mb-2" style={{ color: '#0D1B2A' }}>Revisa tu correo</h2>
+          <h2 className="fuente-elegante fw-bold fs-2 mb-2" style={{ color: '#0D1B2A' }}>{tituloVerificacion}</h2>
           <p className="text-muted small">
-            Hemos enviado un código de 6 dígitos a <br />
+            {descripcionVerificacion} <br />
             <strong className="text-dark">{formulario.email}</strong>
           </p>
         </div>
@@ -263,7 +309,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
           </div>
 
           <button type="submit" className="boton-oscuro w-100 d-flex justify-content-center align-items-center gap-2 mt-4" disabled={tiempoRestante === 0}>
-            Verificar y continuar <i className="bi bi-check-circle"></i>
+            {textoBotonVerificacion} <i className="bi bi-check-circle"></i>
           </button>
         </form>
 

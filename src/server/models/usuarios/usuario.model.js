@@ -15,7 +15,8 @@ const usuarioSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    // --- CAMPOS NUEVOS PARA VERIFICACIÓN ---
+
+    // Verificación inicial de cuenta por correo
     verificationCode: {
         type: String
     },
@@ -23,11 +24,21 @@ const usuarioSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    twoFactorEnabled: { // 👈 Nuevo campo para el estado del 2FA
+
+    // Autenticación en dos pasos por correo
+    twoFactorEnabled: {
         type: Boolean,
         default: false
     },
-    // ---------------------------------------
+    twoFactorCode: {
+        type: String,
+        default: null
+    },
+    twoFactorCodeExpires: {
+        type: Date,
+        default: null
+    },
+
     imagenPerfil: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Upload'
