@@ -4,26 +4,32 @@
 
 /* Contenedor especial para anular el padding del Layout y pegarlo a los bordes */
 .contenedor-mensajes {
-    margin: -1rem; /* Anula el p-3 del Layout en celulares */
-    height: calc(100vh - 70px - 80px); /* Resta el navbar superior y el menú inferior móvil */
+    margin: -1rem;
+    /* Anula el p-3 del Layout en celulares */
+    height: calc(100vh - 70px - 80px);
+    /* Resta el navbar superior y el menú inferior móvil */
 }
 
 @media (min-width: 768px) {
     .contenedor-mensajes {
-        margin: -1.5rem; /* Anula el p-md-4 del Layout en tablets/PC */
+        margin: -1.5rem;
+        /* Anula el p-md-4 del Layout en tablets/PC */
     }
 }
 
 @media (min-width: 1200px) {
     .contenedor-mensajes {
-        height: calc(100vh - 70px); /* En PC ya no hay menú inferior, llega hasta abajo */
+        height: calc(100vh - 70px);
+        /* En PC ya no hay menú inferior, llega hasta abajo */
     }
 }
 
 .tarjeta-mensajes {
     background-color: var(--fondo-tarjeta);
-    border: none; /* Quitamos bordes para que se funda con el sidebar y navbar */
-    border-radius: 0; /* Sin esquinas redondeadas */
+    border: none;
+    /* Quitamos bordes para que se funda con el sidebar y navbar */
+    border-radius: 0;
+    /* Sin esquinas redondeadas */
     height: 100%;
     display: flex;
     overflow: hidden;
@@ -87,6 +93,7 @@
 .historial-mensajes::-webkit-scrollbar {
     width: 6px;
 }
+
 .lista-contactos::-webkit-scrollbar-thumb,
 .historial-mensajes::-webkit-scrollbar-thumb {
     background-color: var(--borde-color);
@@ -102,7 +109,8 @@
     border-bottom: 1px solid var(--fondo-app);
 }
 
-.item-chat:hover, .item-chat.activo {
+.item-chat:hover,
+.item-chat.activo {
     background-color: var(--hover-menu);
 }
 
@@ -301,7 +309,7 @@
 }
 
 .burbuja.enviado {
-    background-color: #0D1B2A; 
+    background-color: #0D1B2A;
     color: white;
     border-bottom-right-radius: 4px;
 }
@@ -359,4 +367,55 @@
         width: 100%;
         min-width: 100%;
     }
+}
+
+/* Banner de Cifrado E2E Minimizable */
+.banner-e2e {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-bottom: 1px solid rgba(16, 185, 129, 0.2);
+    color: #065f46;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.825rem;
+    transition: all 0.3s ease;
+}
+
+.banner-e2e.minimizado {
+    padding: 4px 16px;
+    background-color: rgba(16, 185, 129, 0.05);
+}
+
+.contenido-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.icono-e2e {
+    font-size: 1.1rem;
+    color: #10b981;
+}
+
+.texto-corto-e2e {
+    font-weight: 600;
+    color: #059669;
+}
+
+.boton-toggle-banner {
+    background: transparent;
+    border: none;
+    color: #059669;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+}
+
+.boton-toggle-banner:hover {
+    background-color: rgba(16, 185, 129, 0.15);
 }

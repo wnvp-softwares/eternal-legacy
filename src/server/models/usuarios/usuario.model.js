@@ -66,6 +66,10 @@ const usuarioSchema = new mongoose.Schema({
     formatoFecha: {
         type: String,
         default: 'DD/MM/AAAA'
+    },
+    publicKey: {
+        type: String,
+        default: null
     }
 }, { timestamps: true });
 

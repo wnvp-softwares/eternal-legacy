@@ -1,273 +1,259 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { usePreferencias } from '../context/PreferenciasContext';
+import { obtenerOGenerarLlavesE2E, encriptarMensaje, desencriptarMensaje } from '../utils/e2eCrypto';
+import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Mensajes.css';
 
-const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
+const API_BASE_URL = API_BASE_URL_CONFIG;
 
-const MESES_CORTOS_SOCIAL = [
-  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-  'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
-];
-
-const obtenerPartesFechaEnZona = (fecha, preferencias = {}) => {
-  const date = fecha instanceof Date ? fecha : new Date(fecha);
-
-  if (Number.isNaN(date.getTime())) return null;
-
-  const zonaHoraria = preferencias.zonaHoraria || 'America/Mexico_City';
-
-  try {
-    const partes = new Intl.DateTimeFormat('en-US', {
-      timeZone: zonaHoraria,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      hourCycle: 'h23'
-    }).formatToParts(date).reduce((acc, parte) => {
-      if (parte.type !== 'literal') acc[parte.type] = parte.value;
-      return acc;
-    }, {});
-
-    const horaNumerica = Number(partes.hour || 0);
-
-    return {
-      year: Number(partes.year),
-      month: Number(partes.month),
-      day: Number(partes.day),
-      hour: horaNumerica === 24 ? 0 : horaNumerica,
-      minute: String(partes.minute || '00').padStart(2, '0')
-    };
-  } catch (error) {
-    return {
-      year: date.getFullYear(),
-      month: date.getMonth() + 1,
-      day: date.getDate(),
-      hour: date.getHours(),
-      minute: String(date.getMinutes()).padStart(2, '0')
-    };
-  }
+// Helper defensivo para extraer IDs (mismo patrón que en Inicio.jsx)
+const obtenerId = (valor) => {
+  if (!valor) return null;
+  if (typeof valor === 'string') return valor;
+  return valor._id || valor.id || null;
 };
-
-const obtenerInicioDiaEnZona = (fecha, preferencias = {}) => {
-  const partes = obtenerPartesFechaEnZona(fecha, preferencias);
-
-  if (!partes) return null;
-
-  return Date.UTC(partes.year, partes.month - 1, partes.day);
-};
-
-const formatearHoraSocial = (hour = 0, minute = '00') => {
-  const hora = Number(hour || 0);
-  const hora12 = hora % 12 || 12;
-  const periodo = hora >= 12 ? 'PM' : 'AM';
-
-  return `${hora12}:${String(minute || '00').padStart(2, '0')} ${periodo}`;
-};
-
-const formatearFechaAbsolutaSocial = (fecha, ahora, preferencias = {}) => {
-  const partesFecha = obtenerPartesFechaEnZona(fecha, preferencias);
-  const partesAhora = obtenerPartesFechaEnZona(ahora, preferencias);
-
-  if (!partesFecha) return '';
-
-  const mes = MESES_CORTOS_SOCIAL[partesFecha.month - 1] || '';
-  const incluirAnio = partesAhora ? partesFecha.year !== partesAhora.year : false;
-  const hora = formatearHoraSocial(partesFecha.hour, partesFecha.minute);
-
-  return `${partesFecha.day} ${mes}${incluirAnio ? ` ${partesFecha.year}` : ''} · ${hora}`.trim();
-};
-
-const formatearFechaSocial = (fechaISO, preferencias = {}) => {
-  if (!fechaISO) return '';
-
-  const fecha = fechaISO instanceof Date ? fechaISO : new Date(fechaISO);
-
-  if (Number.isNaN(fecha.getTime())) return '';
-
-  const ahora = new Date(preferencias.ahoraMs || Date.now());
-  const diferenciaSegundos = Math.max(0, Math.floor((ahora.getTime() - fecha.getTime()) / 1000));
-  const inicioHoy = obtenerInicioDiaEnZona(ahora, preferencias);
-  const inicioFecha = obtenerInicioDiaEnZona(fecha, preferencias);
-  const diferenciaDias = inicioHoy !== null && inicioFecha !== null
-    ? Math.max(0, Math.floor((inicioHoy - inicioFecha) / MILISEGUNDOS_POR_DIA))
-    : Math.max(0, Math.floor(diferenciaSegundos / 86400));
-
-  if (diferenciaDias === 0) {
-    if (diferenciaSegundos < 60) return 'Hace unos segundos';
-
-    const minutos = Math.floor(diferenciaSegundos / 60);
-
-    if (minutos < 60) {
-      return minutos === 1 ? 'Hace 1 minuto' : `Hace ${minutos} minutos`;
-    }
-
-    const horas = Math.floor(minutos / 60);
-    return horas === 1 ? 'Hace una hora' : `Hace ${horas} horas`;
-  }
-
-  if (diferenciaDias <= 7) {
-    return diferenciaDias === 1 ? 'Hace 1 día' : `Hace ${diferenciaDias} días`;
-  }
-
-  return formatearFechaAbsolutaSocial(fecha, ahora, preferencias);
-};
-
-const formatearSeparadorFecha = (fechaISO, preferencias = {}) => {
-  if (!fechaISO) return 'Hoy';
-
-  const fecha = new Date(fechaISO);
-  const ahora = new Date(preferencias.ahoraMs || Date.now());
-
-  if (Number.isNaN(fecha.getTime())) return 'Hoy';
-
-  const inicioHoy = obtenerInicioDiaEnZona(ahora, preferencias);
-  const inicioFecha = obtenerInicioDiaEnZona(fecha, preferencias);
-  const diferenciaDias = inicioHoy !== null && inicioFecha !== null
-    ? Math.max(0, Math.floor((inicioHoy - inicioFecha) / MILISEGUNDOS_POR_DIA))
-    : 0;
-
-  if (diferenciaDias === 0) return 'Hoy';
-  if (diferenciaDias === 1) return 'Ayer';
-
-  const partes = obtenerPartesFechaEnZona(fecha, preferencias);
-  if (!partes) return 'Fecha';
-
-  const mes = MESES_CORTOS_SOCIAL[partes.month - 1] || '';
-  const partesAhora = obtenerPartesFechaEnZona(ahora, preferencias);
-  const incluirAnio = partesAhora ? partes.year !== partesAhora.year : false;
-
-  return `${partes.day} ${mes}${incluirAnio ? ` ${partes.year}` : ''}`.trim();
-};
-
-const crearFechaRelativaISO = ({ dias = 0, horas = 0, minutos = 0 } = {}) => {
-  return new Date(Date.now() - (
-    dias * MILISEGUNDOS_POR_DIA +
-    horas * 60 * 60 * 1000 +
-    minutos * 60 * 1000
-  )).toISOString();
-};
-
-// --- DATOS DE PRUEBA ---
-const contactosMock = [
-  {
-    id: 1,
-    nombre: 'Arthur Morales',
-    avatar: 'https://ui-avatars.com/api/?name=Arthur+Morales&background=e2e8f0&color=475569',
-    ultimoMensaje: 'Sí, estaban en el ático! Te veo mañana.',
-    ultimoMensajeFecha: crearFechaRelativaISO({ minutos: 35 }),
-    noLeidos: 2,
-    online: true
-  },
-  {
-    id: 2,
-    nombre: 'David Morales',
-    avatar: 'https://ui-avatars.com/api/?name=David+Morales&background=bae6fd&color=0c4a6e',
-    ultimoMensaje: 'Envíame las fotos cuando puedas por favor.',
-    ultimoMensajeFecha: crearFechaRelativaISO({ dias: 1, horas: 2 }),
-    noLeidos: 0,
-    online: false
-  },
-  {
-    id: 3,
-    nombre: 'Maria Garcia',
-    avatar: 'https://ui-avatars.com/api/?name=Maria+Garcia&background=fef08a&color=713f12',
-    ultimoMensaje: 'Yo también te quiero, cariño.',
-    ultimoMensajeFecha: crearFechaRelativaISO({ dias: 5, horas: 4 }),
-    noLeidos: 0,
-    online: false
-  }
-];
-
-const mensajesArthur = [
-  {
-    id: 1,
-    tipo: 'recibido',
-    texto: '¿Me puedes ayudar con el árbol mañana? Encontré unos documentos viejos que deberíamos escanear.',
-    createdAt: crearFechaRelativaISO({ horas: 2, minutos: 20 })
-  },
-  {
-    id: 2,
-    tipo: 'enviado',
-    texto: '¡Claro que sí! Pasaré por tu casa alrededor de las 2 PM. ¿Encontraste las fotos de los 70s?',
-    createdAt: crearFechaRelativaISO({ horas: 1, minutos: 45 })
-  },
-  {
-    id: 3,
-    tipo: 'recibido',
-    texto: 'Sí, estaban en el ático! Te veo mañana.',
-    createdAt: crearFechaRelativaISO({ minutos: 35 })
-  }
-];
 
 export default function Mensajes() {
   const { idioma, zonaHoraria } = usePreferencias();
-  const [marcaTiempoActual, setMarcaTiempoActual] = useState(Date.now());
-  const [chatSeleccionado, setChatSeleccionado] = useState(contactosMock[0]); 
+  const [contactos, setContactos] = useState([]);
+  const [busquedaPersona, setBusquedaPersona] = useState('');
+  const [chatSeleccionado, setChatSeleccionado] = useState(null);
+  const [mensajes, setMensajes] = useState([]);
   const [mensajeTexto, setMensajeTexto] = useState('');
+  const [bannerMinimizado, setBannerMinimizado] = useState(false);
+  const [cargandoMensajes, setCargandoMensajes] = useState(false);
+  const [miPublicKey, setMiPublicKey] = useState(null);
+  
+  const finMensajesRef = useRef(null);
+  const token = localStorage.getItem('token');
 
+  // 1. Inicializar Claves E2E
   useEffect(() => {
-    const intervalo = setInterval(() => setMarcaTiempoActual(Date.now()), 60 * 1000);
-    return () => clearInterval(intervalo);
-  }, []);
+    const inicializarE2E = async () => {
+      try {
+        const { publicKeyJWK } = await obtenerOGenerarLlavesE2E();
+        setMiPublicKey(publicKeyJWK);
 
-  const preferenciasRegion = {
-    idioma: idioma || 'es-MX',
-    zonaHoraria: zonaHoraria || 'America/Mexico_City',
-    ahoraMs: marcaTiempoActual
+        if (token) {
+          await fetch(`${API_BASE_URL}/usuarios/clave-publica`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ publicKey: publicKeyJWK })
+          });
+        }
+      } catch (err) {
+        console.error('Error al inicializar cifrado E2E:', err);
+      }
+    };
+
+    inicializarE2E();
+  }, [token]);
+
+  // 2. Cargar lista de contactos permitidos (Mapeo Defensivo)
+  useEffect(() => {
+    const cargarContactos = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/mensajeria/contactos`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Normalización: Extrae el arreglo sin importar cómo lo devuelva el backend
+          const listaContactos = Array.isArray(data)
+            ? data
+            : (data.contactos || data.contactosPermitidos || data.personas || data.contactosDirectos || []);
+
+          setContactos(listaContactos);
+        }
+      } catch (error) {
+        console.error('Error al cargar contactos:', error);
+      }
+    };
+
+    if (token) cargarContactos();
+  }, [token]);
+
+  // 3. Cargar y Descifrar Mensajes del Chat Seleccionado
+  const cargarMensajesConversacion = async (contactoId) => {
+    if (!contactoId || !token) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/mensajeria/conversacion/${contactoId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const datosCifrados = await res.json();
+        const miUsuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+        const miId = miUsuario.id || miUsuario._id;
+
+        const listaMensajes = Array.isArray(datosCifrados) 
+          ? datosCifrados 
+          : (datosCifrados.mensajes || []);
+
+        const mensajesDescifrados = await Promise.all(
+          listaMensajes.map(async (msg) => {
+            const esCreador = String(msg.creador || msg.emisor) === String(miId);
+            const textoPlano = await desencriptarMensaje(msg, esCreador);
+
+            return {
+              id: obtenerId(msg) || Math.random().toString(),
+              tipo: esCreador ? 'enviado' : 'recibido',
+              texto: textoPlano,
+              createdAt: msg.createdAt
+            };
+          })
+        );
+
+        setMensajes(mensajesDescifrados);
+      }
+    } catch (error) {
+      console.error('Error al cargar conversación:', error);
+    }
   };
 
+  useEffect(() => {
+    const contactoId = obtenerId(chatSeleccionado);
+    if (!contactoId) return;
+
+    setCargandoMensajes(true);
+    cargarMensajesConversacion(contactoId).finally(() => setCargandoMensajes(false));
+
+    const intervalo = setInterval(() => {
+      cargarMensajesConversacion(contactoId);
+    }, 3000);
+
+    return () => clearInterval(intervalo);
+  }, [chatSeleccionado, token]);
+
+  useEffect(() => {
+    finMensajesRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [mensajes]);
+
+  // 4. Enviar Mensaje Cifrado
+  const manejarEnviarMensaje = async () => {
+    const contactoId = obtenerId(chatSeleccionado);
+    if (!mensajeTexto.trim() || !contactoId || !miPublicKey) return;
+
+    if (!chatSeleccionado.publicKey) {
+      alert('El usuario seleccionado aún no ha configurado su clave pública de cifrado E2E.');
+      return;
+    }
+
+    try {
+      const textoAEnviar = mensajeTexto.trim();
+      setMensajeTexto('');
+
+      const datosCifrados = await encriptarMensaje(
+        textoAEnviar,
+        chatSeleccionado.publicKey,
+        miPublicKey
+      );
+
+      const res = await fetch(`${API_BASE_URL}/mensajeria/enviar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          receptorId: contactoId,
+          ...datosCifrados
+        })
+      });
+
+      if (res.ok) {
+        cargarMensajesConversacion(contactoId);
+      } else {
+        const errorData = await res.json();
+        alert(errorData.mensaje || 'Error al enviar mensaje');
+      }
+    } catch (error) {
+      console.error('Error al cifrar y enviar mensaje:', error);
+    }
+  };
+
+  // Filtrar personas por término de búsqueda (Manejo seguro)
+  const contactosFiltrados = (Array.isArray(contactos) ? contactos : []).filter((contacto) => {
+    const nombre = contacto.nombreUsuario || contacto.nombre || '';
+    return nombre.toLowerCase().includes(busquedaPersona.toLowerCase());
+  });
+
   return (
-    // ¡AQUÍ ESTÁ EL CAMBIO! Quitamos max-w-custom y agregamos contenedor-mensajes
     <div className="contenedor-mensajes">
-      
       <div className="tarjeta-mensajes">
         
-        {/* --- COLUMNA IZQUIERDA: LISTA DE CHATS --- */}
+        {/* --- COLUMNA IZQUIERDA: LISTA DE CONTACTOS PERMITIDOS --- */}
         <div className={`columna-lista-chats ${chatSeleccionado ? 'd-none d-lg-flex' : 'd-flex'}`}>
-          
           <div className="cabecera-lista">
             <h2 className="fuente-elegante fw-bold titulo-mensajes fs-3">Mensajes</h2>
+            
             <div className="buscador-chats">
               <i className="bi bi-search"></i>
-              <input type="text" className="input-buscar-chat" placeholder="Buscar conversaciones..." />
+              <input 
+                type="text" 
+                className="input-buscar-chat" 
+                placeholder="Buscar amigo o familia..." 
+                value={busquedaPersona}
+                onChange={(e) => setBusquedaPersona(e.target.value)}
+              />
             </div>
           </div>
 
           <div className="lista-contactos">
-            {contactosMock.map((contacto) => (
-              <div 
-                key={contacto.id} 
-                className={`item-chat ${chatSeleccionado?.id === contacto.id ? 'activo' : ''}`}
-                onClick={() => setChatSeleccionado(contacto)}
-              >
-                <div className="avatar-chat">
-                  <img src={contacto.avatar} alt={contacto.nombre} className="foto-avatar" />
-                  {contacto.online && <div className="estado-online"></div>}
-                </div>
-                <div className="info-chat">
-                  <div className="nombre-tiempo">
-                    <h6 className="nombre-chat">{contacto.nombre}</h6>
-                    <span className="tiempo-chat">{formatearFechaSocial(contacto.ultimoMensajeFecha, preferenciasRegion)}</span>
-                  </div>
-                  <div className="mensaje-previo">
-                    <p className="texto-previo">{contacto.ultimoMensaje}</p>
-                    {contacto.noLeidos > 0 && (
-                      <span className="badge-no-leidos">{contacto.noLeidos}</span>
-                    )}
-                  </div>
-                </div>
+            {contactosFiltrados.length === 0 ? (
+              <div className="p-3 text-center text-muted">
+                <small>
+                  {busquedaPersona 
+                    ? 'No se encontraron personas con ese nombre.' 
+                    : 'No tienes conexiones de amigos o familia disponibles para chatear.'}
+                </small>
               </div>
-            ))}
+            ) : (
+              contactosFiltrados.map((contacto) => {
+                const idContacto = obtenerId(contacto);
+                const nombreContacto = contacto.nombreUsuario || contacto.nombre || 'Usuario';
+                const urlImagen = contacto.imagenPerfil?.urlArchivo 
+                  ? resolverUrlBackend(contacto.imagenPerfil.urlArchivo)
+                  : `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreContacto)}`;
+
+                return (
+                  <div 
+                    key={idContacto || nombreContacto} 
+                    className={`item-chat ${obtenerId(chatSeleccionado) === idContacto ? 'activo' : ''}`}
+                    onClick={() => setChatSeleccionado(contacto)}
+                  >
+                    <div className="avatar-chat">
+                      <img 
+                        src={urlImagen} 
+                        alt={nombreContacto} 
+                        className="foto-avatar" 
+                      />
+                    </div>
+                    <div className="info-chat">
+                      <div className="nombre-tiempo">
+                        <h6 className="nombre-chat">{nombreContacto}</h6>
+                      </div>
+                      <div className="mensaje-previo">
+                        <p className="texto-previo text-success">
+                          <i className="bi bi-shield-lock-fill me-1"></i>Conexión Cifrada
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
         {/* --- COLUMNA DERECHA: CHAT ACTIVO --- */}
         <div className={`columna-chat-activo ${!chatSeleccionado ? 'd-none d-lg-flex' : 'd-flex'}`}>
-          
           {chatSeleccionado ? (
             <>
               {/* Cabecera del Chat */}
@@ -276,59 +262,79 @@ export default function Mensajes() {
                   <button className="boton-atras-movil d-lg-none" onClick={() => setChatSeleccionado(null)}>
                     <i className="bi bi-arrow-left"></i>
                   </button>
-                  
-                  <img src={chatSeleccionado.avatar} alt={chatSeleccionado.nombre} className="foto-avatar" style={{width: '42px', height: '42px'}}/>
+                  <img 
+                    src={chatSeleccionado.imagenPerfil?.urlArchivo 
+                      ? resolverUrlBackend(chatSeleccionado.imagenPerfil.urlArchivo)
+                      : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatSeleccionado.nombreUsuario || 'Usuario')}`} 
+                    alt={chatSeleccionado.nombreUsuario} 
+                    className="foto-avatar" 
+                    style={{width: '42px', height: '42px'}}
+                  />
                   <div className="detalles-cabecera">
-                    <h5>{chatSeleccionado.nombre}</h5>
-                    {chatSeleccionado.online && <p>En línea</p>}
+                    <h5>{chatSeleccionado.nombreUsuario || chatSeleccionado.nombre}</h5>
+                    <p className="text-muted mb-0">Contacto verificado</p>
                   </div>
-                </div>
-                <div className="acciones-cabecera d-none d-sm-block">
-                  <i className="bi bi-telephone"></i>
-                  <i className="bi bi-camera-video"></i>
-                  <i className="bi bi-three-dots-vertical"></i>
                 </div>
               </div>
 
-              {/* Historial de Mensajes */}
+              {/* Banner Cifrado E2E */}
+              <div className={`banner-e2e ${bannerMinimizado ? 'minimizado' : ''}`}>
+                <div className="contenido-banner">
+                  <i className="bi bi-shield-lock-fill icono-e2e"></i>
+                  {!bannerMinimizado ? (
+                    <span>
+                      Los mensajes entre tú y <strong>{chatSeleccionado.nombreUsuario || chatSeleccionado.nombre}</strong> están cifrados de <strong>Extremo a Extremo (E2E)</strong>.
+                    </span>
+                  ) : (
+                    <span className="texto-corto-e2e">Cifrado Extremo a Extremo activo</span>
+                  )}
+                </div>
+                <button 
+                  className="boton-toggle-banner" 
+                  onClick={() => setBannerMinimizado(!bannerMinimizado)}
+                >
+                  <i className={`bi bi-chevron-${bannerMinimizado ? 'down' : 'up'}`}></i>
+                </button>
+              </div>
+
+              {/* Historial de Mensajes Descifrados */}
               <div className="historial-mensajes">
-                <div className="separador-fecha">
-                  <span>{formatearSeparadorFecha(chatSeleccionado?.ultimoMensajeFecha, preferenciasRegion)}</span>
-                </div>
-
-                {mensajesArthur.map((msg) => (
-                  <div key={msg.id} className={`fila-mensaje ${msg.tipo}`}>
-                    {msg.tipo === 'recibido' && (
-                      <img src={chatSeleccionado.avatar} alt="Avatar" className="foto-mensaje" />
-                    )}
-                    <div className={`burbuja ${msg.tipo}`}>
-                      {msg.texto}
-                      <small className="d-block mt-1 opacity-75">
-                        {formatearFechaSocial(msg.createdAt, preferenciasRegion)}
-                      </small>
-                    </div>
+                {cargandoMensajes ? (
+                  <div className="text-center my-auto text-muted">Cargando mensajes cifrados...</div>
+                ) : mensajes.length === 0 ? (
+                  <div className="text-center my-auto text-muted">
+                    Inicia la conversación. Los mensajes que envíes serán cifrados.
                   </div>
-                ))}
+                ) : (
+                  mensajes.map((msg) => (
+                    <div key={msg.id} className={`fila-mensaje ${msg.tipo}`}>
+                      <div className={`burbuja ${msg.tipo}`}>
+                        {msg.texto}
+                        <small className="d-block mt-1 opacity-75 text-end" style={{fontSize: '0.7rem'}}>
+                          {msg.createdAt && !isNaN(new Date(msg.createdAt)) 
+                            ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                            : ''}
+                        </small>
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={finMensajesRef} />
               </div>
 
-              {/* Área de escribir mensaje */}
+              {/* Área de Entrada */}
               <div className="area-escribir">
-                <i className="bi bi-paperclip fs-4 text-secondary d-none d-sm-block" style={{cursor: 'pointer'}}></i>
-                <i className="bi bi-emoji-smile fs-4 text-secondary d-none d-sm-block" style={{cursor: 'pointer'}}></i>
                 <input 
                   type="text" 
                   className="input-mensaje" 
-                  placeholder="Escribe un mensaje..." 
+                  placeholder="Escribe un mensaje cifrado..." 
                   value={mensajeTexto}
                   onChange={(e) => setMensajeTexto(e.target.value)}
                   onKeyDown={(e) => {
-                    if(e.key === 'Enter' && mensajeTexto.trim() !== '') {
-                      console.log('Enviando:', mensajeTexto);
-                      setMensajeTexto('');
-                    }
+                    if (e.key === 'Enter') manejarEnviarMensaje();
                   }}
                 />
-                <button className="boton-enviar" onClick={() => setMensajeTexto('')}>
+                <button className="boton-enviar" onClick={manejarEnviarMensaje}>
                   <i className="bi bi-send-fill"></i>
                 </button>
               </div>
@@ -337,10 +343,9 @@ export default function Mensajes() {
             <div className="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
               <i className="bi bi-chat-dots" style={{ fontSize: '4rem', color: 'var(--borde-color)'}}></i>
               <h4 className="mt-3 fuente-elegante">Tus Mensajes</h4>
-              <p>Selecciona una conversación para empezar a chatear.</p>
+              <p>Selecciona una persona para iniciar una conversación segura.</p>
             </div>
           )}
-
         </div>
 
       </div>

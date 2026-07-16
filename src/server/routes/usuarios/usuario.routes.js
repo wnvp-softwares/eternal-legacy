@@ -10,7 +10,9 @@ const {
     verificarCodigo2FALogin,
     actualizarContrasena,
     toggle2FA,
-    actualizarPreferencias
+    actualizarPreferencias,
+    actualizarClavePublica,
+    obtenerClavePublicaUsuario
 } = require('../../controllers/usuarios/usuario.controller');
 
 const { verificarToken } = require('../../middlewares/auth.middleware');
@@ -35,5 +37,8 @@ router.get('/zona-vip', verificarToken, (req, res) => {
 router.put('/actualizar-contrasena', verificarToken, actualizarContrasena);
 router.patch('/toggle-2fa', verificarToken, toggle2FA);
 router.put('/actualizar-preferencias', verificarToken, actualizarPreferencias);
+
+router.put('/clave-publica', verificarToken, actualizarClavePublica);
+router.get('/clave-publica/:id', verificarToken, obtenerClavePublicaUsuario);
 
 module.exports = router;

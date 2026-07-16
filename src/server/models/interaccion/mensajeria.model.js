@@ -11,7 +11,19 @@ const mensajeriaSchema = new mongoose.Schema({
         ref: 'Usuario',
         required: true
     },
-    contenido: {
+    contenidoCifrado: {
+        type: String,
+        required: true
+    },
+    iv: {
+        type: String,
+        required: true
+    },
+    claveCifradaReceptor: {
+        type: String,
+        required: true
+    },
+    claveCifradaCreador: {
         type: String,
         required: true
     },

@@ -600,6 +600,26 @@ const actualizarPreferencias = async (req, res) => {
     }
 };
 
+const actualizarClavePublica = async (req, res) => {
+    try {
+        const { publicKey } = req.body;
+        await Usuario.findByIdAndUpdate(req.usuario.id, { publicKey });
+        res.status(200).json({ mensaje: 'Clave pública actualizada correctamente.' });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al guardar la clave pública.' });
+    }
+};
+
+const obtenerClavePublicaUsuario = async (req, res) => {
+    try {
+        const usuario = await Usuario.findById(req.params.id).select('publicKey');
+        if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+        res.status(200).json({ publicKey: usuario.publicKey });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener la clave pública.' });
+    }
+};
+
 module.exports = {
     crearUsuario,
     loginUsuario,
@@ -609,5 +629,7 @@ module.exports = {
     verificarCodigo,
     actualizarContrasena,
     toggle2FA,
-    actualizarPreferencias
+    actualizarPreferencias,
+    actualizarClavePublica,
+    obtenerClavePublicaUsuario
 };
