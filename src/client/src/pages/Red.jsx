@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Red.css';
+import { BACKEND_BASE_URL } from '../config/env';
 
 export default function Red() {
   const [familiares, setFamiliares] = useState([]);
@@ -19,7 +20,7 @@ export default function Red() {
   const [error, setError] = useState('');
 
   const token = localStorage.getItem('token');
-  const URL_BASE_BACKEND = 'http://localhost:3000';
+  const URL_BASE_BACKEND = BACKEND_BASE_URL;
 
   // 🌟 FUNCIÓN CENTRALIZADA PARA CARGAR FAMILIA
   const cargarDatosFamilia = async () => {

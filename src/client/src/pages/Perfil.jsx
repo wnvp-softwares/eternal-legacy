@@ -1,7 +1,204 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { usePreferencias } from '../context/PreferenciasContext';
+import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Perfil.css';
+
+const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
+
+const MESES_CORTOS_SOCIAL = [
+  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+  'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+];
+
+const obtenerPartesFechaEnZona = (fecha, preferencias = {}) => {
+  const date = fecha instanceof Date ? fecha : new Date(fecha);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  const zonaHoraria = preferencias.zonaHoraria || 'America/Mexico_City';
+
+  try {
+    const partes = new Intl.DateTimeFormat('en-US', {
+      timeZone: zonaHoraria,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      hourCycle: 'h23'
+    }).formatToParts(date).reduce((acc, parte) => {
+      if (parte.type !== 'literal') acc[parte.type] = parte.value;
+      return acc;
+    }, {});
+
+    const horaNumerica = Number(partes.hour || 0);
+
+    return {
+      year: Number(partes.year),
+      month: Number(partes.month),
+      day: Number(partes.day),
+      hour: horaNumerica === 24 ? 0 : horaNumerica,
+      minute: String(partes.minute || '00').padStart(2, '0')
+    };
+  } catch (error) {
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+      hour: date.getHours(),
+      minute: String(date.getMinutes()).padStart(2, '0')
+    };
+  }
+};
+
+const obtenerInicioDiaEnZona = (fecha, preferencias = {}) => {
+  const partes = obtenerPartesFechaEnZona(fecha, preferencias);
+
+  if (!partes) return null;
+
+  return Date.UTC(partes.year, partes.month - 1, partes.day);
+};
+
+const formatearHoraSocial = (hour = 0, minute = '00') => {
+  const hora = Number(hour || 0);
+  const hora12 = hora % 12 || 12;
+  const periodo = hora >= 12 ? 'PM' : 'AM';
+
+  return `${hora12}:${String(minute || '00').padStart(2, '0')} ${periodo}`;
+};
+
+const formatearFechaAbsolutaSocial = (fecha, ahora, preferencias = {}) => {
+  const partesFecha = obtenerPartesFechaEnZona(fecha, preferencias);
+  const partesAhora = obtenerPartesFechaEnZona(ahora, preferencias);
+
+  if (!partesFecha) return '';
+
+  const mes = MESES_CORTOS_SOCIAL[partesFecha.month - 1] || '';
+  const incluirAnio = partesAhora ? partesFecha.year !== partesAhora.year : false;
+  const hora = formatearHoraSocial(partesFecha.hour, partesFecha.minute);
+
+  return `${partesFecha.day} ${mes}${incluirAnio ? ` ${partesFecha.year}` : ''} · ${hora}`.trim();
+};
+
+const formatearFechaSocial = (fechaISO, preferencias = {}) => {
+  if (!fechaISO) return '';
+
+  const fecha = fechaISO instanceof Date ? fechaISO : new Date(fechaISO);
+
+  if (Number.isNaN(fecha.getTime())) return '';
+
+  const ahora = new Date(preferencias.ahoraMs || Date.now());
+  const diferenciaSegundos = Math.max(0, Math.floor((ahora.getTime() - fecha.getTime()) / 1000));
+  const inicioHoy = obtenerInicioDiaEnZona(ahora, preferencias);
+  const inicioFecha = obtenerInicioDiaEnZona(fecha, preferencias);
+  const diferenciaDias = inicioHoy !== null && inicioFecha !== null
+    ? Math.max(0, Math.floor((inicioHoy - inicioFecha) / MILISEGUNDOS_POR_DIA))
+    : Math.max(0, Math.floor(diferenciaSegundos / 86400));
+
+  if (diferenciaDias === 0) {
+    if (diferenciaSegundos < 60) return 'Hace unos segundos';
+
+    const minutos = Math.floor(diferenciaSegundos / 60);
+
+    if (minutos < 60) {
+      return minutos === 1 ? 'Hace 1 minuto' : `Hace ${minutos} minutos`;
+    }
+
+    const horas = Math.floor(minutos / 60);
+    return horas === 1 ? 'Hace una hora' : `Hace ${horas} horas`;
+  }
+
+  if (diferenciaDias <= 7) {
+    return diferenciaDias === 1 ? 'Hace 1 día' : `Hace ${diferenciaDias} días`;
+  }
+
+  return formatearFechaAbsolutaSocial(fecha, ahora, preferencias);
+};
+
+const formatearSeparadorFecha = (fechaISO, preferencias = {}) => {
+  if (!fechaISO) return 'Hoy';
+
+  const fecha = new Date(fechaISO);
+  const ahora = new Date(preferencias.ahoraMs || Date.now());
+
+  if (Number.isNaN(fecha.getTime())) return 'Hoy';
+
+  const inicioHoy = obtenerInicioDiaEnZona(ahora, preferencias);
+  const inicioFecha = obtenerInicioDiaEnZona(fecha, preferencias);
+  const diferenciaDias = inicioHoy !== null && inicioFecha !== null
+    ? Math.max(0, Math.floor((inicioHoy - inicioFecha) / MILISEGUNDOS_POR_DIA))
+    : 0;
+
+  if (diferenciaDias === 0) return 'Hoy';
+  if (diferenciaDias === 1) return 'Ayer';
+
+  const partes = obtenerPartesFechaEnZona(fecha, preferencias);
+  if (!partes) return 'Fecha';
+
+  const mes = MESES_CORTOS_SOCIAL[partes.month - 1] || '';
+  const partesAhora = obtenerPartesFechaEnZona(ahora, preferencias);
+  const incluirAnio = partesAhora ? partes.year !== partesAhora.year : false;
+
+  return `${partes.day} ${mes}${incluirAnio ? ` ${partes.year}` : ''}`.trim();
+};
+
+const crearFechaRelativaISO = ({ dias = 0, horas = 0, minutos = 0 } = {}) => {
+  return new Date(Date.now() - (
+    dias * MILISEGUNDOS_POR_DIA +
+    horas * 60 * 60 * 1000 +
+    minutos * 60 * 1000
+  )).toISOString();
+};
+
+const extraerPartesFechaSoloDia = (fecha) => {
+  if (!fecha) return null;
+
+  if (typeof fecha === 'string') {
+    const coincidencia = fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+    if (coincidencia) {
+      return {
+        year: Number(coincidencia[1]),
+        month: Number(coincidencia[2]),
+        day: Number(coincidencia[3])
+      };
+    }
+  }
+
+  const date = new Date(fecha);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate()
+  };
+};
+
+const formatearFechaSoloDia = (fecha, preferencias = {}, opciones = {}) => {
+  const partes = extraerPartesFechaSoloDia(fecha);
+
+  if (!partes) return '';
+
+  const date = new Date(partes.year, partes.month - 1, partes.day, 12, 0, 0);
+
+  return new Intl.DateTimeFormat(preferencias.idioma || 'es-MX', opciones).format(date);
+};
+
+const formatearFechaFormalEnZona = (fecha, preferencias = {}, opciones = {}) => {
+  const date = new Date(fecha);
+
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat(preferencias.idioma || 'es-MX', {
+    timeZone: preferencias.zonaHoraria || 'America/Mexico_City',
+    ...opciones
+  }).format(date);
+};
 
 export default function Perfil() {
   const [sonAmigos, setSonAmigos] = useState(false);
@@ -16,6 +213,19 @@ export default function Perfil() {
 
   const { id } = useParams();
   const navigate = useNavigate();
+  const { idioma, zonaHoraria } = usePreferencias();
+  const [marcaTiempoActual, setMarcaTiempoActual] = useState(Date.now());
+
+  useEffect(() => {
+    const intervalo = setInterval(() => setMarcaTiempoActual(Date.now()), 60 * 1000);
+    return () => clearInterval(intervalo);
+  }, []);
+
+  const preferenciasRegion = {
+    idioma: idioma || 'es-MX',
+    zonaHoraria: zonaHoraria || 'America/Mexico_City',
+    ahoraMs: marcaTiempoActual
+  };
 
   const fileInputPerfilRef = useRef(null);
   const fileInputPortadaRef = useRef(null);
@@ -57,7 +267,7 @@ export default function Perfil() {
 
   const esMiPerfil = !id || id === usuarioLogueado?.id || id === usuarioLogueado?._id;
 
-  const API_BASE_URL = 'http://localhost:3000/api';
+  const API_BASE_URL = API_BASE_URL_CONFIG;
 
   const [perfilBd, setPerfilBd] = useState(null);
   const [publicaciones, setPublicaciones] = useState([]);
@@ -320,11 +530,11 @@ export default function Perfil() {
           const usuarioBackend = datosImg.usuario;
 
           const nuevaUrlPerfil = usuarioBackend.imagenPerfil?.urlArchivo
-            ? `http://localhost:3000${usuarioBackend.imagenPerfil.urlArchivo}`
+            ? resolverUrlBackend(usuarioBackend.imagenPerfil.urlArchivo)
             : usuarioLogueado?.imagenPerfil;
 
           const nuevaUrlPortada = usuarioBackend.imagenPortada?.urlArchivo
-            ? `http://localhost:3000${usuarioBackend.imagenPortada.urlArchivo}`
+            ? resolverUrlBackend(usuarioBackend.imagenPortada.urlArchivo)
             : usuarioLogueado?.imagenPortada;
 
           usuarioActualizadoLocal = {
@@ -446,12 +656,36 @@ export default function Perfil() {
     setEtiquetaSeleccionada(etiquetaSeleccionada === id ? null : id);
   };
 
-  const formatearFecha = (fechaString, formato = 'corta') => {
-    if (!fechaString) return 'Reciente';
-    const fecha = new Date(fechaString);
-    return formato === 'completo'
-      ? fecha.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
-      : fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+  const formatearFecha = (fechaString, formato = 'social') => {
+    if (!fechaString) return formato === 'completo' ? 'Fecha pendiente' : 'Reciente';
+
+    if (formato === 'social') {
+      return formatearFechaSocial(fechaString, preferenciasRegion);
+    }
+
+    if (formato === 'completo') {
+      return formatearFechaFormalEnZona(fechaString, preferenciasRegion, {
+        month: 'long',
+        year: 'numeric'
+      });
+    }
+
+    return formatearFechaFormalEnZona(fechaString, preferenciasRegion, {
+      day: 'numeric',
+      month: 'short'
+    });
+  };
+
+  const formatearCumpleanos = (fechaNacimiento) => {
+    return formatearFechaSoloDia(fechaNacimiento, preferenciasRegion, {
+      day: 'numeric',
+      month: 'long'
+    });
+  };
+
+  const obtenerAnioPublicacion = (fechaISO) => {
+    const partes = obtenerPartesFechaEnZona(fechaISO, preferenciasRegion);
+    return partes?.year || new Date(fechaISO).getFullYear();
   };
 
   const manejarToggleSeguir = async () => {
@@ -803,15 +1037,7 @@ export default function Perfil() {
             {perfilBd?.fechaNacimiento && (
               <span>
                 <i className="bi bi-cake2-fill"></i> Cumpleaños: <strong>
-                  {(() => {
-                    const fechaUTC = new Date(perfilBd.fechaNacimiento);
-                    fechaUTC.setMinutes(fechaUTC.getMinutes() + fechaUTC.getTimezoneOffset());
-
-                    return fechaUTC.toLocaleDateString('es-MX', {
-                      day: 'numeric',
-                      month: 'long'
-                    });
-                  })()}
+                  {formatearCumpleanos(perfilBd.fechaNacimiento)}
                 </strong>
               </span>
             )}
@@ -880,7 +1106,7 @@ export default function Perfil() {
                     <div className="d-flex justify-content-between align-items-start mb-2">
                       <div className="d-flex gap-3 align-items-center">
                         <img
-                          src={post.autor?.imagenPerfil?.urlArchivo ? `http://localhost:3000${post.autor.imagenPerfil.urlArchivo}` : urlAvatar}
+                          src={post.autor?.imagenPerfil?.urlArchivo ? resolverUrlBackend(post.autor.imagenPerfil.urlArchivo) : urlAvatar}
                           alt="Avatar"
                           className="foto-perfil-post"
                           style={{ objectFit: 'cover' }} // Evita que la foto se deforme si no es perfectamente cuadrada
@@ -909,7 +1135,7 @@ export default function Perfil() {
                       <div className={esHistorico ? "contenedor-polaroid" : "contenedor-moderno"}>
                         <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
                           <img
-                            src={`http://localhost:3000${post.multimedia[0]?.urlArchivo}`}
+                            src={resolverUrlBackend(post.multimedia[0]?.urlArchivo)}
                             alt="Archivo adjunto"
                             className={esHistorico ? "imagen-post-historico" : "imagen-post-moderna"}
                             style={{
@@ -956,7 +1182,7 @@ export default function Perfil() {
                             comentariosPorPub[post._id].map((com) => (
                               <div key={com._id} className="d-flex align-items-start mb-2 bg-white p-2 rounded shadow-sm">
                                 <img
-                                  src={com.autor?.imagenPerfil?.urlArchivo ? `http://localhost:3000${com.autor.imagenPerfil.urlArchivo}` : urlAvatar}
+                                  src={com.autor?.imagenPerfil?.urlArchivo ? resolverUrlBackend(com.autor.imagenPerfil.urlArchivo) : urlAvatar}
                                   alt="Avatar comentario"
                                   className="rounded-circle me-2 object-fit-cover"
                                   style={{ width: '30px', height: '30px', border: '1px solid #dee2e6' }}
@@ -1014,7 +1240,7 @@ export default function Perfil() {
                 publicacionesHistoricas.map((post) => (
                   <div key={post._id} className="timeline-item">
                     <div className="timeline-nodo">
-                      <span>{post.anio || new Date(post.createdAt).getFullYear()}</span>
+                      <span>{post.anio || obtenerAnioPublicacion(post.createdAt)}</span>
                     </div>
                     <div className="tarjeta shadow-sm pb-3 px-3 px-sm-4 mb-0">
                       {/* Flexbox responsivo: fila en pantallas sm en adelante, columna en móviles pequeños */}
@@ -1030,7 +1256,7 @@ export default function Perfil() {
                         {post.multimedia && post.multimedia.length > 0 && (
                           <div style={{ minWidth: '120px', maxWidth: '180px', width: '100%' }} className="align-self-center align-self-sm-start">
                             <img
-                              src={`http://localhost:3000${post.multimedia[0]?.urlArchivo}`}
+                              src={resolverUrlBackend(post.multimedia[0]?.urlArchivo)}
                               alt="Timeline"
                               className="img-fluid rounded"
                               style={{ maxHeight: '120px', width: '100%', objectFit: 'cover' }}
@@ -1062,7 +1288,7 @@ export default function Perfil() {
                   {fotosGaleria.map((post) => (
                     <div key={post._id} className="galeria-item">
                       <img
-                        src={`http://localhost:3000${post.multimedia[0]?.urlArchivo}`}
+                        src={resolverUrlBackend(post.multimedia[0]?.urlArchivo)}
                         alt="Galería"
                         className="galeria-img"
                       />

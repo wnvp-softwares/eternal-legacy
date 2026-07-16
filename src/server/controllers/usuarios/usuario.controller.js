@@ -6,6 +6,20 @@ const enviarCodigoVerificacion = require('../../middlewares/mailer');
 const DURACION_CODIGO_2FA_MS = 5 * 60 * 1000;
 const DURACION_TOKEN_2FA = '10m';
 
+const IDIOMAS_PERMITIDOS = ['es-MX', 'es-ES', 'en-US'];
+const FORMATOS_FECHA_PERMITIDOS = ['DD/MM/AAAA', 'MM/DD/AAAA', 'AAAA-MM-DD'];
+
+const esZonaHorariaValida = (zonaHoraria) => {
+    if (!zonaHoraria || typeof zonaHoraria !== 'string') return false;
+
+    try {
+        new Intl.DateTimeFormat('es-MX', { timeZone: zonaHoraria }).format(new Date());
+        return true;
+    } catch (error) {
+        return false;
+    }
+};
+
 const generarCodigoSeisDigitos = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -40,7 +54,10 @@ const formatearUsuarioSesion = (usuario) => ({
     imagenPerfil: obtenerUrlArchivo(usuario.imagenPerfil),
     imagenPortada: obtenerUrlArchivo(usuario.imagenPortada),
     informacionPerfil: usuario.informacionPerfil,
-    twoFactorEnabled: Boolean(usuario.twoFactorEnabled)
+    twoFactorEnabled: Boolean(usuario.twoFactorEnabled),
+    idioma: usuario.idioma || 'es-MX',
+    zonaHoraria: usuario.zonaHoraria || 'America/Mexico_City',
+    formatoFecha: usuario.formatoFecha || 'DD/MM/AAAA'
 });
 
 const crearPerfilSiNoExiste = async (usuario) => {
@@ -536,14 +553,35 @@ const actualizarPreferencias = async (req, res) => {
     try {
         const { idioma, zonaHoraria, formatoFecha } = req.body;
 
-        const usuario = await Usuario.findById(req.usuario.id);
+        const usuario = await Usuario.findById(req.usuario.id)
+            .populate('imagenPerfil')
+            .populate('imagenPortada')
+            .populate('informacionPerfil');
+
         if (!usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
         }
 
-        if (idioma) usuario.idioma = idioma;
-        if (zonaHoraria) usuario.zonaHoraria = zonaHoraria;
-        if (formatoFecha) usuario.formatoFecha = formatoFecha;
+        if (idioma !== undefined) {
+            if (!IDIOMAS_PERMITIDOS.includes(idioma)) {
+                return res.status(400).json({ mensaje: 'El idioma seleccionado no es válido.' });
+            }
+            usuario.idioma = idioma;
+        }
+
+        if (zonaHoraria !== undefined) {
+            if (!esZonaHorariaValida(zonaHoraria)) {
+                return res.status(400).json({ mensaje: 'La zona horaria seleccionada no es válida.' });
+            }
+            usuario.zonaHoraria = zonaHoraria;
+        }
+
+        if (formatoFecha !== undefined) {
+            if (!FORMATOS_FECHA_PERMITIDOS.includes(formatoFecha)) {
+                return res.status(400).json({ mensaje: 'El formato de fecha seleccionado no es válido.' });
+            }
+            usuario.formatoFecha = formatoFecha;
+        }
 
         await usuario.save();
 
@@ -553,7 +591,8 @@ const actualizarPreferencias = async (req, res) => {
                 idioma: usuario.idioma,
                 zonaHoraria: usuario.zonaHoraria,
                 formatoFecha: usuario.formatoFecha
-            }
+            },
+            usuario: formatearUsuarioSesion(usuario)
         });
     } catch (error) {
         console.error('❌ Error en actualizarPreferencias:', error);

@@ -2,38 +2,51 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next'; 
 import { usePreferencias } from '../context/PreferenciasContext'; 
+import { BACKEND_BASE_URL } from '../config/env'; 
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Configuracion.css';
 
-const URL_BASE_BACKEND = 'http://localhost:3000';
+const URL_BASE_BACKEND = BACKEND_BASE_URL;
 
-// Genera dinámicamente TODAS las zonas horarias del mundo con su desfase GMT actual
-const listaZonasHorarias = (() => {
+const ZONAS_HORARIAS_RESPALDO = [
+  { valor: 'America/Mexico_City', etiqueta: '(GMT-06:00) America/Mexico_City' },
+  { valor: 'America/Bogota', etiqueta: '(GMT-05:00) America/Bogota' },
+  { valor: 'America/Argentina/Buenos_Aires', etiqueta: '(GMT-03:00) America/Argentina/Buenos_Aires' },
+  { valor: 'Europe/Madrid', etiqueta: '(GMT+01:00) Europe/Madrid' }
+];
+
+const obtenerEtiquetaZonaHoraria = (tz, idioma = 'es-MX') => {
   try {
-    const tzs = Intl.supportedValuesOf('timeZone');
-    return tzs.map(tz => {
-      try {
-        const formatter = new Intl.DateTimeFormat('es-MX', {
-          timeZone: tz,
-          timeZoneName: 'longOffset'
-        });
-        const parts = formatter.formatToParts(new Date());
-        const offsetPart = parts.find(p => p.type === 'timeZoneName');
-        const offset = offsetPart ? offsetPart.value : 'GMT';
-        return { valor: tz, etiqueta: `(${offset}) ${tz.replace('_', ' ')}` };
-      } catch {
-        return { valor: tz, etiqueta: tz };
-      }
-    }).sort((a, b) => a.etiqueta.localeCompare(b.etiqueta));
-  } catch (e) {
-    return [
-      { valor: 'America/Mexico_City', etiqueta: '(GMT-06:00) America/Mexico_City' },
-      { valor: 'America/Bogota', etiqueta: '(GMT-05:00) America/Bogota' },
-      { valor: 'America/Argentina/Buenos_Aires', etiqueta: '(GMT-03:00) America/Argentina/Buenos_Aires' },
-      { valor: 'Europe/Madrid', etiqueta: '(GMT+01:00) Europe/Madrid' }
-    ];
+    const formatter = new Intl.DateTimeFormat(idioma, {
+      timeZone: tz,
+      timeZoneName: 'longOffset'
+    });
+
+    const parts = formatter.formatToParts(new Date());
+    const offsetPart = parts.find(p => p.type === 'timeZoneName');
+    const offset = offsetPart ? offsetPart.value : 'GMT';
+
+    return `(${offset}) ${tz.replace(/_/g, ' ')}`;
+  } catch {
+    return tz;
   }
-})();
+};
+
+// API nativa del navegador para obtener todas las zonas horarias disponibles.
+const obtenerZonasHorariasDesdeAPINativa = (idioma = 'es-MX') => {
+  try {
+    if (!Intl.supportedValuesOf) return ZONAS_HORARIAS_RESPALDO;
+
+    return Intl.supportedValuesOf('timeZone')
+      .map(tz => ({
+        valor: tz,
+        etiqueta: obtenerEtiquetaZonaHoraria(tz, idioma)
+      }))
+      .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta));
+  } catch (error) {
+    return ZONAS_HORARIAS_RESPALDO;
+  }
+};
 
 const formatearFechaParaInput = (fecha) => {
   if (!fecha) return '';
@@ -45,9 +58,10 @@ const formatearFechaParaInput = (fecha) => {
 export default function Configuracion() {
   const { t } = useTranslation(); 
   const {
-    idioma,
+    idioma, setIdioma,
     zonaHoraria, setZonaHoraria,
-    formatoFecha, setFormatoFecha
+    formatoFecha, setFormatoFecha,
+    actualizarPreferenciasGlobales
   } = usePreferencias(); 
 
   const [seccionActiva, setSeccionActiva] = useState('cuenta');
@@ -88,6 +102,9 @@ export default function Configuracion() {
   const [guardandoRegion, setGuardandoRegion] = useState(false);
   const [mensajeRegion, setMensajeRegion] = useState('');
   const [errorRegion, setErrorRegion] = useState('');
+  const [zonasHorariasDisponibles, setZonasHorariasDisponibles] = useState(ZONAS_HORARIAS_RESPALDO);
+  const [cargandoZonasHorarias, setCargandoZonasHorarias] = useState(false);
+  const [errorZonasHorarias, setErrorZonasHorarias] = useState('');
 
   // Estados de Apariencia
   const [tema, setTema] = useState(() => localStorage.getItem('tema') || 'claro');
@@ -95,6 +112,9 @@ export default function Configuracion() {
   const [mensajeApariencia, setMensajeApariencia] = useState('');
 
   const token = localStorage.getItem('token');
+  const zonasParaSelector = zonasHorariasDisponibles.length > 0
+    ? zonasHorariasDisponibles
+    : ZONAS_HORARIAS_RESPALDO;
 
   const apiFetch = async (endpoint, opciones = {}) => {
     const respuesta = await fetch(`${URL_BASE_BACKEND}${endpoint}`, {
@@ -125,8 +145,6 @@ export default function Configuracion() {
       setErrorCuenta('');
 
       const data = await apiFetch('/api/perfil/mi-perfil');
-      console.log("[DEBUG] Datos recibidos en mi-perfil:", data); // Te ayuda a inspeccionar la estructura real en la consola
-      
       const usuario = data.usuario || {};
       const perfil = data.perfil || {};
 
@@ -147,8 +165,11 @@ export default function Configuracion() {
 
       setTwoFactorEnabled(!!estado2FA);
 
-      if (usuario.zonaHoraria) setZonaHoraria(usuario.zonaHoraria);
-      if (usuario.formatoFecha) setFormatoFecha(usuario.formatoFecha);
+      actualizarPreferenciasGlobales({
+        idioma: usuario.idioma || idioma,
+        zonaHoraria: usuario.zonaHoraria || zonaHoraria,
+        formatoFecha: usuario.formatoFecha || formatoFecha
+      });
 
     } catch (error) {
       console.error('Error al cargar configuración de cuenta:', error);
@@ -178,6 +199,23 @@ export default function Configuracion() {
       console.error('Error al verificar el estado de 2FA:', error);
     } finally {
       setCargando2FAEstado(false);
+    }
+  };
+
+
+
+  const cargarZonasHorarias = () => {
+    try {
+      setCargandoZonasHorarias(true);
+      setErrorZonasHorarias('');
+
+      const zonas = obtenerZonasHorariasDesdeAPINativa(idioma);
+      setZonasHorariasDisponibles(zonas.length > 0 ? zonas : ZONAS_HORARIAS_RESPALDO);
+    } catch (error) {
+      setErrorZonasHorarias('No se pudieron cargar todas las zonas horarias. Se usará una lista básica.');
+      setZonasHorariasDisponibles(ZONAS_HORARIAS_RESPALDO);
+    } finally {
+      setCargandoZonasHorarias(false);
     }
   };
 
@@ -307,12 +345,19 @@ export default function Configuracion() {
       setErrorRegion('');
       setMensajeRegion('');
 
-      await apiFetch('/api/usuarios/actualizar-preferencias', {
+      const data = await apiFetch('/api/usuarios/actualizar-preferencias', {
         method: 'PUT',
         body: JSON.stringify({ idioma, zonaHoraria, formatoFecha })
       });
 
-      setMensajeRegion('Preferencias regionales guardadas correctamente.');
+      const preferenciasGuardadas = data.preferencias || {
+        idioma,
+        zonaHoraria,
+        formatoFecha
+      };
+
+      actualizarPreferenciasGlobales(preferenciasGuardadas);
+      setMensajeRegion(data.mensaje || 'Preferencias regionales guardadas correctamente.');
     } catch (error) {
       setErrorRegion(error.message || 'No se pudieron salvar los cambios.');
     } finally {
@@ -350,6 +395,7 @@ export default function Configuracion() {
   useEffect(() => {
     cargarDatosCuenta();
     cargarDatosPrivacidad();
+    cargarZonasHorarias();
     
     const temaGuardado = localStorage.getItem('tema') || 'claro';
     if (temaGuardado === 'oscuro' || (temaGuardado === 'automatico' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -357,6 +403,10 @@ export default function Configuracion() {
       document.body.classList.add('dark-mode');
     }
   }, []);
+
+  useEffect(() => {
+    cargarZonasHorarias();
+  }, [idioma]);
 
   // Hook encargado de refrescar el estado real cada vez que el usuario navega a la sección 'seguridad'
   useEffect(() => {
@@ -559,33 +609,44 @@ export default function Configuracion() {
       case 'idioma':
         return (
           <>
-            <h3 className="fuente-elegante titulo-panel fs-4">Región y Formatos</h3>
+            <h3 className="fuente-elegante titulo-panel fs-4">{t('titulo_idioma')}</h3>
             {mensajeRegion && <div className="alerta-configuracion exito"><i className="bi bi-check-circle-fill"></i><span>{mensajeRegion}</span></div>}
             {errorRegion && <div className="alerta-configuracion error"><i className="bi bi-exclamation-triangle-fill"></i><span>{errorRegion}</span></div>}
+            {errorZonasHorarias && <div className="alerta-configuracion error"><i className="bi bi-exclamation-triangle-fill"></i><span>{errorZonasHorarias}</span></div>}
 
             <form onSubmit={guardarRegionYFormatos}>
-              {/* RESTAURADO: Selector de idioma deshabilitado en su lugar original */}
-              <div className="grupo-form opacity-50">
-                <label className="label-form">Idioma de la Aplicación (Deshabilitado)</label>
-                <select className="input-config" value={idioma || 'es'} disabled>
-                  <option value="es">Español</option>
-                  <option value="en">English (Próximamente)</option>
+              <div className="grupo-form">
+                <label className="label-form">{t('label_idioma')}</label>
+                <select className="input-config" value={idioma} onChange={(e) => setIdioma(e.target.value)}>
+                  <option value="es-MX">Español (México)</option>
+                  <option value="es-ES">Español (España)</option>
+                  <option value="en-US">English (US)</option>
                 </select>
-                <small className="ayuda-configuracion">El soporte multi-idioma está planeado para futuras versiones.</small>
+                <small className="ayuda-configuracion">El cambio de idioma se aplica de inmediato en los textos preparados para traducción.</small>
               </div>
 
               <div className="grupo-form">
-                <label className="label-form">Zona Horaria Preferida</label>
-                <select className="input-config" value={zonaHoraria} onChange={(e) => setZonaHoraria(e.target.value)}>
-                  {listaZonasHorarias.map((zona) => (
+                <label className="label-form">{t('label_zona')}</label>
+                <select
+                  className="input-config"
+                  value={zonaHoraria}
+                  onChange={(e) => setZonaHoraria(e.target.value)}
+                  disabled={cargandoZonasHorarias}
+                >
+                  {zonasParaSelector.map((zona) => (
                     <option key={zona.valor} value={zona.valor}>
                       {zona.etiqueta}
                     </option>
                   ))}
                 </select>
+                <small className="ayuda-configuracion">
+                  {cargandoZonasHorarias
+                    ? 'Cargando zonas horarias disponibles...'
+                    : 'La lista se genera con la API nativa del navegador y se guarda como preferencia de tu cuenta.'}
+                </small>
               </div>
               <div className="grupo-form">
-                <label className="label-form">Formato de Fecha</label>
+                <label className="label-form">{t('label_formato')}</label>
                 <select className="input-config" value={formatoFecha} onChange={(e) => setFormatoFecha(e.target.value)}>
                   <option value="DD/MM/AAAA">DD/MM/AAAA</option>
                   <option value="MM/DD/AAAA">MM/DD/AAAA</option>
@@ -593,8 +654,8 @@ export default function Configuracion() {
                 </select>
               </div>
               <div className="d-flex justify-content-end mt-4">
-                <button className="boton-guardar" type="submit" disabled={guardandoRegion}>
-                  {guardandoRegion ? 'Guardando...' : 'Guardar Preferencias'}
+                <button className="boton-guardar" type="submit" disabled={guardandoRegion || cargandoZonasHorarias}>
+                  {guardandoRegion ? t('btn_guardando') : t('btn_guardar')}
                 </button>
               </div>
             </form>
@@ -699,12 +760,12 @@ export default function Configuracion() {
     <div className="container-fluid max-w-custom p-0">
       <div className="layout-configuracion">
         <aside className="menu-configuracion">
-          <button className={`item-configuracion ${seccionActiva === 'cuenta' ? 'activo' : ''}`} onClick={() => setSeccionActiva('cuenta')}><i className="bi bi-person"></i> Cuenta</button>
-          <button className={`item-configuracion ${seccionActiva === 'privacidad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('privacidad')}><i className="bi bi-shield-lock"></i> Privacidad</button>
-          <button className={`item-configuracion ${seccionActiva === 'notificaciones' ? 'activo' : ''}`} onClick={() => setSeccionActiva('notificaciones')}><i className="bi bi-bell"></i> Notificaciones</button>
-          <button className={`item-configuracion ${seccionActiva === 'seguridad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('seguridad')}><i className="bi bi-key"></i> Seguridad</button>
-          <button className={`item-configuracion ${seccionActiva === 'idioma' ? 'activo' : ''}`} onClick={() => setSeccionActiva('idioma')}><i className="bi bi-globe"></i> Región y Formatos</button>
-          <button className={`item-configuracion ${seccionActiva === 'apariencia' ? 'activo' : ''}`} onClick={() => setSeccionActiva('apariencia')}><i className="bi bi-palette"></i> Apariencia</button>
+          <button className={`item-configuracion ${seccionActiva === 'cuenta' ? 'activo' : ''}`} onClick={() => setSeccionActiva('cuenta')}><i className="bi bi-person"></i> {t('menu_cuenta')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'privacidad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('privacidad')}><i className="bi bi-shield-lock"></i> {t('menu_privacidad')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'notificaciones' ? 'activo' : ''}`} onClick={() => setSeccionActiva('notificaciones')}><i className="bi bi-bell"></i> {t('menu_notificaciones')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'seguridad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('seguridad')}><i className="bi bi-key"></i> {t('menu_seguridad')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'idioma' ? 'activo' : ''}`} onClick={() => setSeccionActiva('idioma')}><i className="bi bi-globe"></i> {t('menu_idioma')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'apariencia' ? 'activo' : ''}`} onClick={() => setSeccionActiva('apariencia')}><i className="bi bi-palette"></i> {t('menu_apariencia')}</button>
         </aside>
         <main className="panel-configuracion">{renderContenido()}</main>
       </div>

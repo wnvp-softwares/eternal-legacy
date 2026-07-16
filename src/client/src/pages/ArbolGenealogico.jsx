@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { usePreferencias } from '../context/PreferenciasContext';
+import { BACKEND_BASE_URL } from '../config/env';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './ArbolGenealogico.css';
 
 // ==========================================
 // CONFIGURACIÓN
 // ==========================================
-const URL_BASE_BACKEND = 'http://localhost:3000';
+const URL_BASE_BACKEND = BACKEND_BASE_URL;
 const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
 
 const resolverUrlImagen = (url) => {
@@ -159,6 +161,59 @@ const obtenerValorRamaNodo = (nodo = {}) => {
 
 const normalizarTexto = (texto = '') => String(texto || '').trim();
 
+const obtenerPartesFechaHoraEnZona = (fecha, preferencias = {}) => {
+  const date = fecha instanceof Date ? fecha : new Date(fecha);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  const zonaHoraria = preferencias.zonaHoraria || 'America/Mexico_City';
+
+  try {
+    const partes = new Intl.DateTimeFormat('en-US', {
+      timeZone: zonaHoraria,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      hourCycle: 'h23'
+    }).formatToParts(date).reduce((acc, parte) => {
+      if (parte.type !== 'literal') acc[parte.type] = parte.value;
+      return acc;
+    }, {});
+
+    const horaNumerica = Number(partes.hour || 0);
+
+    return {
+      year: Number(partes.year),
+      month: Number(partes.month),
+      day: Number(partes.day),
+      hour: horaNumerica === 24 ? 0 : horaNumerica,
+      minute: String(partes.minute || '00').padStart(2, '0')
+    };
+  } catch (error) {
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+      hour: date.getHours(),
+      minute: String(date.getMinutes()).padStart(2, '0')
+    };
+  }
+};
+
+const formatearFechaHoraEnZona = (fecha, preferencias = {}, opciones = {}) => {
+  const date = fecha instanceof Date ? fecha : new Date(fecha);
+
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat(preferencias.idioma || 'es-MX', {
+    timeZone: preferencias.zonaHoraria || 'America/Mexico_City',
+    ...opciones
+  }).format(date);
+};
+
 const obtenerIniciales = (nombre = '') => {
   const partes = nombre.trim().split(' ').filter(Boolean);
   if (partes.length === 0) return 'NA';
@@ -239,18 +294,18 @@ const obtenerFechaValida = (fecha) => {
   return new Date(partes.year, partes.month - 1, partes.day, 12, 0, 0);
 };
 
-const formatearFechaRelacion = (fecha) => {
+const formatearFechaRelacion = (fecha, preferencias = {}) => {
   const partes = extraerPartesFecha(fecha);
 
   if (!partes) return '';
 
   const date = new Date(partes.year, partes.month - 1, partes.day, 12, 0, 0);
 
-  return date.toLocaleDateString('es-MX', {
+  return new Intl.DateTimeFormat(preferencias.idioma || 'es-MX', {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
-  });
+  }).format(date);
 };
 
 const formatearFechaParaInput = (fecha) => {
@@ -275,23 +330,23 @@ const obtenerFechaHoraEventoValida = (fecha) => {
   return date;
 };
 
-const formatearFechaEventoCorta = (fecha) => {
+const formatearFechaEventoCorta = (fecha, preferencias = {}) => {
   const date = obtenerFechaHoraEventoValida(fecha);
 
   if (!date) return 'PENDIENTE';
 
-  return date.toLocaleDateString('es-MX', {
+  return formatearFechaHoraEnZona(date, preferencias, {
     day: '2-digit',
     month: 'short'
   }).replace('.', '').toUpperCase();
 };
 
-const formatearFechaEventoCompleta = (fecha) => {
+const formatearFechaEventoCompleta = (fecha, preferencias = {}) => {
   const date = obtenerFechaHoraEventoValida(fecha);
 
   if (!date) return 'Fecha pendiente';
 
-  return date.toLocaleDateString('es-MX', {
+  return formatearFechaHoraEnZona(date, preferencias, {
     weekday: 'long',
     day: '2-digit',
     month: 'long',
@@ -299,38 +354,38 @@ const formatearFechaEventoCompleta = (fecha) => {
   });
 };
 
-const formatearHoraEvento = (fecha, todoElDia = false) => {
+const formatearHoraEvento = (fecha, todoElDia = false, preferencias = {}) => {
   if (todoElDia) return 'Todo el día';
 
   const date = obtenerFechaHoraEventoValida(fecha);
 
   if (!date) return 'Hora pendiente';
 
-  return date.toLocaleTimeString('es-MX', {
+  return formatearFechaHoraEnZona(date, preferencias, {
     hour: '2-digit',
     minute: '2-digit'
   });
 };
 
-const formatearFechaEventoParaInput = (fecha) => {
-  const date = obtenerFechaHoraEventoValida(fecha);
+const formatearFechaEventoParaInput = (fecha, preferencias = {}) => {
+  const partes = obtenerPartesFechaHoraEnZona(fecha, preferencias);
 
-  if (!date) return '';
+  if (!partes) return '';
 
-  const year = String(date.getFullYear()).padStart(4, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const year = String(partes.year).padStart(4, '0');
+  const month = String(partes.month).padStart(2, '0');
+  const day = String(partes.day).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
 };
 
-const formatearHoraEventoParaInput = (fecha, valorPorDefecto = '') => {
-  const date = obtenerFechaHoraEventoValida(fecha);
+const formatearHoraEventoParaInput = (fecha, valorPorDefecto = '', preferencias = {}) => {
+  const partes = obtenerPartesFechaHoraEnZona(fecha, preferencias);
 
-  if (!date) return valorPorDefecto;
+  if (!partes) return valorPorDefecto;
 
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const hours = String(partes.hour).padStart(2, '0');
+  const minutes = String(partes.minute).padStart(2, '0');
 
   return `${hours}:${minutes}`;
 };
@@ -391,23 +446,23 @@ const obtenerTextoEstadoUnion = (tipoUnion, nombrePareja) => {
   return `En pareja con ${nombrePareja}`;
 };
 
-const obtenerTextoFechaUnion = (tipoUnion, fechaInicio, fechaFin) => {
+const obtenerTextoFechaUnion = (tipoUnion, fechaInicio, fechaFin, preferencias = {}) => {
   const tipo = tipoUnion || 'pareja';
 
   if (tipo === 'divorcio') {
     return fechaFin
-      ? `Fecha de divorcio: ${formatearFechaRelacion(fechaFin)}`
+      ? `Fecha de divorcio: ${formatearFechaRelacion(fechaFin, preferencias)}`
       : 'Fecha de divorcio pendiente';
   }
 
   if (tipo === 'matrimonio') {
     return fechaInicio
-      ? `Desde ${formatearFechaRelacion(fechaInicio)}`
+      ? `Desde ${formatearFechaRelacion(fechaInicio, preferencias)}`
       : 'Fecha de matrimonio pendiente';
   }
 
   return fechaInicio
-    ? `Desde ${formatearFechaRelacion(fechaInicio)}`
+    ? `Desde ${formatearFechaRelacion(fechaInicio, preferencias)}`
     : 'Fecha de inicio pendiente';
 };
 
@@ -1012,6 +1067,13 @@ const ConectorDinamico = ({ yIn, salidas, modoEliminar, alEliminarLinea }) => {
 };
 
 export default function ArbolGenealogico() {
+  const { idioma, zonaHoraria, formatoFecha } = usePreferencias();
+  const preferenciasRegion = useMemo(() => ({
+    idioma: idioma || 'es-MX',
+    zonaHoraria: zonaHoraria || 'America/Mexico_City',
+    formatoFecha: formatoFecha || 'DD/MM/AAAA'
+  }), [idioma, zonaHoraria, formatoFecha]);
+
   const [esUsuarioAdmin, establecerEsUsuarioAdmin] = useState(false);
   const [vistaActual, establecerVistaActual] = useState('menu');
   const [arbol, establecerArbol] = useState(null);
@@ -1857,7 +1919,7 @@ export default function ArbolGenealogico() {
 
   const abrirFormularioCrearEvento = () => {
     const hoy = new Date();
-    const fechaHoy = formatearFechaEventoParaInput(hoy);
+    const fechaHoy = formatearFechaEventoParaInput(hoy, preferenciasRegion);
 
     establecerModoFormularioEvento('crear');
     establecerEventoEditando(null);
@@ -1888,10 +1950,10 @@ export default function ArbolGenealogico() {
     establecerFormularioEvento({
       titulo: evento.titulo || '',
       tipoEvento: evento.tipoEvento || 'otro',
-      fechaInicio: formatearFechaEventoParaInput(evento.fechaInicio),
-      horaInicio: formatearHoraEventoParaInput(evento.fechaInicio, '18:00'),
-      fechaFin: formatearFechaEventoParaInput(evento.fechaFin),
-      horaFin: formatearHoraEventoParaInput(evento.fechaFin, ''),
+      fechaInicio: formatearFechaEventoParaInput(evento.fechaInicio, preferenciasRegion),
+      horaInicio: formatearHoraEventoParaInput(evento.fechaInicio, '18:00', preferenciasRegion),
+      fechaFin: formatearFechaEventoParaInput(evento.fechaFin, preferenciasRegion),
+      horaFin: formatearHoraEventoParaInput(evento.fechaFin, '', preferenciasRegion),
       todoElDia: Boolean(evento.todoElDia),
       ubicacionTexto: evento.ubicacion?.texto || '',
       ubicacionDireccion: evento.ubicacion?.direccion || '',
@@ -2210,7 +2272,7 @@ export default function ArbolGenealogico() {
       tipoUnion: pareja?.tipoRelacion || '',
       fechaInicio: pareja?.fechaInicio || null,
       fechaFin: pareja?.fechaFin || null,
-      fechaMatrimonio: pareja?.fechaInicio ? formatearFechaRelacion(pareja.fechaInicio) : '',
+      fechaMatrimonio: pareja?.fechaInicio ? formatearFechaRelacion(pareja.fechaInicio, preferenciasRegion) : '',
       usuariosRelacion,
       hijos,
       padres,
@@ -5130,7 +5192,8 @@ La persona seguirá dentro del árbol como miembro normal.`
                                   {obtenerTextoFechaUnion(
                                     tipoUnion,
                                     estadoFamiliarSeleccionado.fechaInicio,
-                                    estadoFamiliarSeleccionado.fechaFin
+                                    estadoFamiliarSeleccionado.fechaFin,
+                                    preferenciasRegion
                                   )}
                                 </span>
 
@@ -5760,11 +5823,11 @@ La persona seguirá dentro del árbol como miembro normal.`
                           return (
                             <div key={evento.id} className="tarjeta-evento" onClick={() => abrirDetalleEvento(evento)}>
                               <div className="d-flex justify-content-between align-items-start gap-2 mb-1">
-                                <div className="evento-fecha">{formatearFechaEventoCorta(evento.fechaInicio)}</div>
+                                <div className="evento-fecha">{formatearFechaEventoCorta(evento.fechaInicio, preferenciasRegion)}</div>
                                 <span className="etiqueta-tipo-evento"><i className={`bi ${configEvento.icono}`}></i> {configEvento.etiqueta}</span>
                               </div>
                               <div className="evento-titulo">{evento.titulo}</div>
-                              <div className="evento-detalle"><i className="bi bi-clock"></i> {formatearFechaEventoCompleta(evento.fechaInicio)} · {formatearHoraEvento(evento.fechaInicio, evento.todoElDia)}</div>
+                              <div className="evento-detalle"><i className="bi bi-clock"></i> {formatearFechaEventoCompleta(evento.fechaInicio, preferenciasRegion)} · {formatearHoraEvento(evento.fechaInicio, evento.todoElDia, preferenciasRegion)}</div>
                               <div className="evento-detalle"><i className="bi bi-geo-alt"></i> {obtenerTextoUbicacionEvento(evento)}</div>
                               {evento.descripcion && <p className="evento-descripcion-corta">{evento.descripcion}</p>}
                               {puedeGestionar && <span className="evento-puede-editar"><i className="bi bi-pencil-square"></i> Editar</span>}

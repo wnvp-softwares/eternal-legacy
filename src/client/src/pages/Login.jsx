@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Login.css';
+import { API_BASE_URL } from '../config/env';
 
 const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
 
@@ -90,7 +91,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
     e.preventDefault();
     setError('');
 
-    const API_URL = 'http://localhost:3000/api/usuarios';
+    const API_URL = `${API_BASE_URL}/usuarios`;
 
     if (esLogin) {
       if (!formulario.email || !formulario.password) {
@@ -202,8 +203,8 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
     try {
       const esVerificacion2FA = tipoVerificacion === '2fa_login';
       const endpoint = esVerificacion2FA
-        ? 'http://localhost:3000/api/usuarios/verificar-2fa-login'
-        : 'http://localhost:3000/api/usuarios/verificar-codigo';
+        ? `${API_BASE_URL}/usuarios/verificar-2fa-login`
+        : `${API_BASE_URL}/usuarios/verificar-codigo`;
 
       const body = esVerificacion2FA
         ? {

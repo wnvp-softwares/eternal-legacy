@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Layout.css';
+import { resolverUrlBackend } from '../config/env';
 
 export default function Layout() {
   const location = useLocation();
@@ -55,7 +56,7 @@ export default function Layout() {
             <img
               src={
                 usuarioLogueado?.imagenPerfil?.urlArchivo
-                  ? `http://localhost:3000${usuarioLogueado.imagenPerfil.urlArchivo}`
+                  ? resolverUrlBackend(usuarioLogueado.imagenPerfil.urlArchivo)
                   : usuarioLogueado?.imagenPerfil
                     ? usuarioLogueado.imagenPerfil
                     : `https://ui-avatars.com/api/?name=${encodeURIComponent(usuarioLogueado?.nombreUsuario || 'Usuario')}&background=0D1B2A&color=fff`

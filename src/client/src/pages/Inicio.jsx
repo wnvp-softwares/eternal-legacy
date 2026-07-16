@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
+import { usePreferencias } from '../context/PreferenciasContext';
+import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import './Inicio.css';
 
 const obtenerId = (valor) => {
@@ -9,6 +11,130 @@ const obtenerId = (valor) => {
 };
 
 const normalizarTexto = (texto = '') => String(texto || '').trim();
+
+const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
+
+const MESES_CORTOS_PUBLICACION = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic'
+];
+
+const obtenerPartesFechaEnZona = (fecha, preferencias = {}) => {
+  const date = fecha instanceof Date ? fecha : new Date(fecha);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  const zonaHoraria = preferencias.zonaHoraria || 'America/Mexico_City';
+
+  try {
+    const partes = new Intl.DateTimeFormat('en-US', {
+      timeZone: zonaHoraria,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      hourCycle: 'h23'
+    }).formatToParts(date).reduce((acc, parte) => {
+      if (parte.type !== 'literal') acc[parte.type] = parte.value;
+      return acc;
+    }, {});
+
+    const horaNumerica = Number(partes.hour || 0);
+
+    return {
+      year: Number(partes.year),
+      month: Number(partes.month),
+      day: Number(partes.day),
+      hour: horaNumerica === 24 ? 0 : horaNumerica,
+      minute: String(partes.minute || '00').padStart(2, '0')
+    };
+  } catch (error) {
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+      hour: date.getHours(),
+      minute: String(date.getMinutes()).padStart(2, '0')
+    };
+  }
+};
+
+const obtenerInicioDiaEnZona = (fecha, preferencias = {}) => {
+  const partes = obtenerPartesFechaEnZona(fecha, preferencias);
+
+  if (!partes) return null;
+
+  return Date.UTC(partes.year, partes.month - 1, partes.day);
+};
+
+const formatearHoraPublicacion = (hour = 0, minute = '00') => {
+  const hora = Number(hour || 0);
+  const hora12 = hora % 12 || 12;
+  const periodo = hora >= 12 ? 'PM' : 'AM';
+
+  return `${hora12}:${String(minute || '00').padStart(2, '0')} ${periodo}`;
+};
+
+const formatearFechaAbsolutaPublicacion = (fecha, ahora, preferencias = {}) => {
+  const partesFecha = obtenerPartesFechaEnZona(fecha, preferencias);
+  const partesAhora = obtenerPartesFechaEnZona(ahora, preferencias);
+
+  if (!partesFecha) return '';
+
+  const mes = MESES_CORTOS_PUBLICACION[partesFecha.month - 1] || '';
+  const incluirAnio = partesAhora ? partesFecha.year !== partesAhora.year : false;
+  const hora = formatearHoraPublicacion(partesFecha.hour, partesFecha.minute);
+
+  return `${partesFecha.day} ${mes}${incluirAnio ? ` ${partesFecha.year}` : ''} · ${hora}`.trim();
+};
+
+const formatearFechaPublicacionSocial = (fechaISO, preferencias = {}) => {
+  if (!fechaISO) return '';
+
+  const fecha = new Date(fechaISO);
+
+  if (Number.isNaN(fecha.getTime())) return '';
+
+  const ahora = new Date(preferencias.ahoraMs || Date.now());
+  const diferenciaSegundos = Math.max(0, Math.floor((ahora.getTime() - fecha.getTime()) / 1000));
+  const inicioHoy = obtenerInicioDiaEnZona(ahora, preferencias);
+  const inicioPublicacion = obtenerInicioDiaEnZona(fecha, preferencias);
+  const diferenciaDias = inicioHoy !== null && inicioPublicacion !== null
+    ? Math.max(0, Math.floor((inicioHoy - inicioPublicacion) / MILISEGUNDOS_POR_DIA))
+    : Math.max(0, Math.floor(diferenciaSegundos / 86400));
+
+  if (diferenciaDias === 0) {
+    if (diferenciaSegundos < 60) return 'Hace unos segundos';
+
+    const minutos = Math.floor(diferenciaSegundos / 60);
+
+    if (minutos < 60) {
+      return minutos === 1 ? 'Hace 1 minuto' : `Hace ${minutos} minutos`;
+    }
+
+    const horas = Math.floor(minutos / 60);
+    return horas === 1 ? 'Hace una hora' : `Hace ${horas} horas`;
+  }
+
+  if (diferenciaDias <= 7) {
+    return diferenciaDias === 1 ? 'Hace 1 día' : `Hace ${diferenciaDias} días`;
+  }
+
+  return formatearFechaAbsolutaPublicacion(fecha, ahora, preferencias);
+};
+
 
 const MESES_EVENTO = {
   0: 'ENE',
@@ -88,7 +214,7 @@ const ETIQUETAS_TIPO_EVENTO = {
   otro: 'Evento familiar'
 };
 
-const obtenerFechaEvento = (fecha) => {
+const obtenerFechaEvento = (fecha, preferencias = {}) => {
   const date = new Date(fecha);
 
   if (Number.isNaN(date.getTime())) {
@@ -100,15 +226,40 @@ const obtenerFechaEvento = (fecha) => {
     };
   }
 
-  return {
-    mes: MESES_EVENTO[date.getMonth()] || date.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '').toUpperCase(),
-    dia: String(date.getDate()).padStart(2, '0'),
-    hora: date.toLocaleTimeString('es-MX', {
+  const idioma = preferencias.idioma || 'es-MX';
+  const zonaHoraria = preferencias.zonaHoraria || 'America/Mexico_City';
+
+  try {
+    const partes = new Intl.DateTimeFormat(idioma, {
+      timeZone: zonaHoraria,
+      month: 'short',
+      day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
-    }),
-    date
-  };
+      minute: '2-digit',
+      hour12: false,
+      hourCycle: 'h23'
+    }).formatToParts(date).reduce((acc, parte) => {
+      if (parte.type !== 'literal') acc[parte.type] = parte.value;
+      return acc;
+    }, {});
+
+    return {
+      mes: String(partes.month || '').replace('.', '').toUpperCase() || '---',
+      dia: String(partes.day || '--').padStart(2, '0'),
+      hora: partes.hour && partes.minute ? `${partes.hour}:${partes.minute}` : '',
+      date
+    };
+  } catch (error) {
+    return {
+      mes: MESES_EVENTO[date.getMonth()] || date.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '').toUpperCase(),
+      dia: String(date.getDate()).padStart(2, '0'),
+      hora: date.toLocaleTimeString('es-MX', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      date
+    };
+  }
 };
 
 const obtenerTextoUbicacionEvento = (evento = {}) => {
@@ -122,8 +273,8 @@ const obtenerTextoUbicacionEvento = (evento = {}) => {
   );
 };
 
-const normalizarEventoInicio = (evento = {}, arbol = {}) => {
-  const fecha = obtenerFechaEvento(evento.fechaInicio);
+const normalizarEventoInicio = (evento = {}, arbol = {}, preferencias = {}) => {
+  const fecha = obtenerFechaEvento(evento.fechaInicio, preferencias);
   const tipoEvento = evento.tipoEvento || 'otro';
   const etiquetaTipo = ETIQUETAS_TIPO_EVENTO[tipoEvento] || 'Evento familiar';
   const ubicacion = obtenerTextoUbicacionEvento(evento);
@@ -162,6 +313,16 @@ const normalizarEventoInicio = (evento = {}, arbol = {}) => {
 export default function Inicio() {
   const navigate = useNavigate();
   const { textoBusqueda } = useOutletContext();
+  const { idioma, zonaHoraria } = usePreferencias();
+  const [marcaTiempoActual, setMarcaTiempoActual] = useState(Date.now());
+
+  const formatearFechaPublicacion = (fechaISO) => {
+    return formatearFechaPublicacionSocial(fechaISO, {
+      idioma: idioma || 'es-MX',
+      zonaHoraria: zonaHoraria || 'America/Mexico_City',
+      ahoraMs: marcaTiempoActual
+    });
+  };
 
   const [modalAbierto, setModalAbierto] = useState(false);
   const [selectorTipoAbierto, setSelectorTipoAbierto] = useState(false);
@@ -190,7 +351,7 @@ export default function Inicio() {
   // ESTADOS PARA LAS PUBLICACIONES DEL MURO
   const token = localStorage.getItem('token');
   const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
-  const API_BASE_URL = 'http://localhost:3000/api';
+  const API_BASE_URL = API_BASE_URL_CONFIG;
 
   const [publicaciones, setPublicaciones] = useState([]);
   const [cargando, setCargando] = useState(token ? true : false);
@@ -304,7 +465,7 @@ export default function Inicio() {
           const datosEventos = await respuestaEventos.json().catch(() => ({}));
           if (!respuestaEventos.ok) return [];
           const eventos = Array.isArray(datosEventos.eventos) ? datosEventos.eventos : [];
-          return eventos.map(evento => normalizarEventoInicio(evento, arbolItem));
+          return eventos.map(evento => normalizarEventoInicio(evento, arbolItem, { idioma, zonaHoraria }));
         })
       );
       const eventos = respuestasEventos.flatMap(resultado => resultado.status === 'fulfilled' ? resultado.value : []).filter(Boolean);
@@ -318,6 +479,14 @@ export default function Inicio() {
       setCargandoEventosFamiliares(false);
     }
   };
+
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      setMarcaTiempoActual(Date.now());
+    }, 60000);
+
+    return () => clearInterval(intervalo);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -343,7 +512,7 @@ export default function Inicio() {
   useEffect(() => {
     if (!token) return;
     cargarProximosEventosFamiliares();
-  }, [token]);
+  }, [token, idioma, zonaHoraria]);
 
   useEffect(() => {
     if (!token || !['menciones', 'etiquetas'].includes(panelHerramientaActivo)) return;
@@ -919,11 +1088,9 @@ export default function Inicio() {
 
   const renderVistaPublicacionAlbum = (pub = {}) => {
     const tieneMultimedia = pub.multimedia && pub.multimedia.length > 0 && pub.multimedia[0];
-    const urlMultimedia = tieneMultimedia ? `http://localhost:3000${pub.multimedia[0].urlArchivo}` : null;
+    const urlMultimedia = tieneMultimedia ? resolverUrlBackend(pub.multimedia[0].urlArchivo) : null;
     const esVideo = tieneMultimedia && pub.multimedia[0].formato?.startsWith('video/');
-    const fechaFormateada = pub.createdAt
-      ? new Date(pub.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
-      : '';
+    const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
 
     // CORRECCIÓN 1: Usar tu función helper para extraer el ID correcto
     const autorId = obtenerId(pub.autor);
@@ -933,7 +1100,7 @@ export default function Inicio() {
         <div className="album-evento-publicacion-header">
           {pub.autor?.imagenPerfil?.urlArchivo ? (
             <img
-              src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
+              src={resolverUrlBackend(pub.autor.imagenPerfil.urlArchivo)}
               alt={pub.autor?.nombreUsuario || 'Autor'}
               className="foto-perfil-post perfil-interactivo" // CORRECCIÓN 3: Clase CSS en vez de inline
               onClick={() => autorId && irAPerfil(pub.autor)}
@@ -1127,7 +1294,7 @@ export default function Inicio() {
             ) : sugerenciasPersonasPublicacion.length > 0 ? (
               sugerenciasPersonasPublicacion.map(persona => (
                 <button key={persona.id} type="button" className="persona-sugerida-publicacion" onClick={() => seleccionarPersonaPublicacion(persona)}>
-                  {persona.imagen ? <img src={typeof persona.imagen === 'string' ? persona.imagen : `http://localhost:3000${persona.imagen.urlArchivo || ''}`} alt={persona.nombre} /> : <span>{persona.nombre.slice(0, 2).toUpperCase()}</span>}
+                  {persona.imagen ? <img src={typeof persona.imagen === 'string' ? persona.imagen : resolverUrlBackend(persona.imagen.urlArchivo || '')} alt={persona.nombre} /> : <span>{persona.nombre.slice(0, 2).toUpperCase()}</span>}
                   <div><strong>{persona.nombre}</strong><small>{esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}</small></div>
                 </button>
               ))
@@ -1363,7 +1530,7 @@ export default function Inicio() {
                   const srcImagenPersona = typeof imagenPersona === 'string'
                     ? imagenPersona
                     : imagenPersona?.urlArchivo
-                      ? `http://localhost:3000${imagenPersona.urlArchivo}`
+                      ? resolverUrlBackend(imagenPersona.urlArchivo)
                       : `https://ui-avatars.com/api/?name=${encodeURIComponent(nombrePersona)}`;
 
                   return (
@@ -1394,9 +1561,9 @@ export default function Inicio() {
 
           {/* MAPEO RE-DISEÑADO CON NUESTRA ESTRUCTURA DUAL */}
           {publicaciones.map((pub) => {
-            const fechaFormateada = new Date(pub.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+            const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
             const tieneMultimedia = pub.multimedia && pub.multimedia.length > 0 && pub.multimedia[0];
-            const urlMultimedia = tieneMultimedia ? `http://localhost:3000${pub.multimedia[0].urlArchivo}` : null;
+            const urlMultimedia = tieneMultimedia ? resolverUrlBackend(pub.multimedia[0].urlArchivo) : null;
             const esVideo = tieneMultimedia && pub.multimedia[0].formato?.startsWith('video/');
             const ubicacionPost = normalizarTexto(pub.ubicacionTexto || pub.ubicacion?.texto || pub.ubicacion?.direccion || '');
             const etiquetasMultimediaPost = Array.isArray(pub.etiquetasMultimedia) ? pub.etiquetasMultimedia : [];
@@ -1412,7 +1579,7 @@ export default function Inicio() {
                       <div className="d-flex gap-3 align-items-center">
                         {pub.autor?.imagenPerfil?.urlArchivo ? (
                           <img
-                            src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
+                            src={resolverUrlBackend(pub.autor.imagenPerfil.urlArchivo)}
                             alt={pub.autor?.nombreUsuario}
                             className="rounded-circle me-2 object-fit-cover perfil-interactivo"
                             style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
@@ -1500,7 +1667,7 @@ export default function Inicio() {
                       <div className="d-flex gap-3 align-items-center">
                         {pub.autor?.imagenPerfil?.urlArchivo ? (
                           <img
-                            src={`http://localhost:3000${pub.autor.imagenPerfil.urlArchivo}`}
+                            src={resolverUrlBackend(pub.autor.imagenPerfil.urlArchivo)}
                             alt={pub.autor?.nombreUsuario}
                             className="rounded-circle me-2 object-fit-cover perfil-interactivo"
                             style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}

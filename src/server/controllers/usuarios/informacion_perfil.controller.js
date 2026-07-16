@@ -6,7 +6,10 @@ const formatearUsuarioCuenta = (usuario) => ({
     email: usuario.email,
     imagenPerfil: usuario.imagenPerfil || null,
     informacionPerfil: usuario.informacionPerfil || null,
-    twoFactorEnabled: usuario.twoFactorEnabled // 👈 AGREGA ESTA LÍNEA MÁGICA
+    twoFactorEnabled: Boolean(usuario.twoFactorEnabled),
+    idioma: usuario.idioma || 'es-MX',
+    zonaHoraria: usuario.zonaHoraria || 'America/Mexico_City',
+    formatoFecha: usuario.formatoFecha || 'DD/MM/AAAA'
 });
 
 const crearPerfilSiNoExiste = async (usuario) => {
