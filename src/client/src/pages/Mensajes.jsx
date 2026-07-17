@@ -57,7 +57,7 @@ export default function Mensajes() {
   useEffect(() => {
     const cargarContactos = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/mensajeria/contactos`, {
+        const res = await fetch(`${API_BASE_URL}/mensajes/contactos`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -83,7 +83,7 @@ export default function Mensajes() {
     if (!contactoId || !token) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/mensajeria/conversacion/${contactoId}`, {
+      const res = await fetch(`${API_BASE_URL}/mensajes/conversacion/${contactoId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -155,7 +155,7 @@ export default function Mensajes() {
         miPublicKey
       );
 
-      const res = await fetch(`${API_BASE_URL}/mensajeria/enviar`, {
+      const res = await fetch(`${API_BASE_URL}/mensajes/enviar`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
