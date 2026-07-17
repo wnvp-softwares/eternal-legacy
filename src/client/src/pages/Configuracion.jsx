@@ -1,8 +1,8 @@
 // client/src/pages/Configuracion.jsx
 import React, { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next'; 
-import { usePreferencias } from '../context/PreferenciasContext'; 
-import { BACKEND_BASE_URL } from '../config/env'; 
+import { useTranslation } from 'react-i18next';
+import { usePreferencias } from '../context/PreferenciasContext';
+import { BACKEND_BASE_URL } from '../config/env';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Configuracion.css';
 
@@ -56,13 +56,13 @@ const formatearFechaParaInput = (fecha) => {
 };
 
 export default function Configuracion() {
-  const { t } = useTranslation(); 
+  const { t } = useTranslation();
   const {
     idioma, setIdioma,
     zonaHoraria, setZonaHoraria,
     formatoFecha, setFormatoFecha,
     actualizarPreferenciasGlobales
-  } = usePreferencias(); 
+  } = usePreferencias();
 
   const [seccionActiva, setSeccionActiva] = useState('cuenta');
 
@@ -156,11 +156,11 @@ export default function Configuracion() {
       });
 
       // Búsqueda defensiva del estado de 2FA en la respuesta del servidor
-      const estado2FA = 
-        usuario.twoFactorEnabled ?? 
-        usuario.two_factor_enabled ?? 
-        data.twoFactorEnabled ?? 
-        data.two_factor_enabled ?? 
+      const estado2FA =
+        usuario.twoFactorEnabled ??
+        usuario.two_factor_enabled ??
+        data.twoFactorEnabled ??
+        data.two_factor_enabled ??
         false;
 
       setTwoFactorEnabled(!!estado2FA);
@@ -186,12 +186,12 @@ export default function Configuracion() {
       setCargando2FAEstado(true);
       const data = await apiFetch('/api/perfil/mi-perfil');
       const usuario = data.usuario || {};
-      
-      const estado2FA = 
-        usuario.twoFactorEnabled ?? 
-        usuario.two_factor_enabled ?? 
-        data.twoFactorEnabled ?? 
-        data.two_factor_enabled ?? 
+
+      const estado2FA =
+        usuario.twoFactorEnabled ??
+        usuario.two_factor_enabled ??
+        data.twoFactorEnabled ??
+        data.two_factor_enabled ??
         false;
 
       setTwoFactorEnabled(!!estado2FA);
@@ -367,7 +367,7 @@ export default function Configuracion() {
 
   const aplicarCambiosApariencia = (e) => {
     e.preventDefault();
-    
+
     localStorage.setItem('tema', tema);
     localStorage.setItem('reducirAnimaciones', reducirAnimaciones);
 
@@ -396,7 +396,7 @@ export default function Configuracion() {
     cargarDatosCuenta();
     cargarDatosPrivacidad();
     cargarZonasHorarias();
-    
+
     const temaGuardado = localStorage.getItem('tema') || 'claro';
     if (temaGuardado === 'oscuro' || (temaGuardado === 'automatico' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.setAttribute('data-bs-theme', 'dark');
@@ -594,10 +594,10 @@ export default function Configuracion() {
                 </h6>
                 <p>Añade una capa extra de seguridad a tu cuenta usando una app de autenticación.</p>
               </div>
-              <button 
-                type="button" 
-                onClick={manejarToggle2FA} 
-                disabled={cambiando2FA || cargando2FAEstado} 
+              <button
+                type="button"
+                onClick={manejarToggle2FA}
+                disabled={cambiando2FA || cargando2FAEstado}
                 className={`btn btn-sm rounded-pill px-3 fw-bold ${twoFactorEnabled ? 'btn-outline-danger' : 'btn-outline-dark'}`}
               >
                 {cambiando2FA ? 'Procesando...' : twoFactorEnabled ? 'Desactivar 2FA' : 'Configurar 2FA'}
@@ -615,14 +615,22 @@ export default function Configuracion() {
             {errorZonasHorarias && <div className="alerta-configuracion error"><i className="bi bi-exclamation-triangle-fill"></i><span>{errorZonasHorarias}</span></div>}
 
             <form onSubmit={guardarRegionYFormatos}>
-              <div className="grupo-form">
+              {/* Campo de Idioma Desactivado */}
+              <div className="grupo-form opacity-75">
                 <label className="label-form">{t('label_idioma')}</label>
-                <select className="input-config" value={idioma} onChange={(e) => setIdioma(e.target.value)}>
+                <select
+                  className="input-config"
+                  value={idioma}
+                  onChange={(e) => setIdioma(e.target.value)}
+                  disabled /* <--- Desactiva la interacción con el control */
+                >
                   <option value="es-MX">Español (México)</option>
                   <option value="es-ES">Español (España)</option>
                   <option value="en-US">English (US)</option>
                 </select>
-                <small className="ayuda-configuracion">El cambio de idioma se aplica de inmediato en los textos preparados para traducción.</small>
+                <small className="ayuda-configuracion">
+                  La selección de idioma se encuentra deshabilitada temporalmente.
+                </small>
               </div>
 
               <div className="grupo-form">
@@ -666,7 +674,7 @@ export default function Configuracion() {
         return (
           <>
             <h3 className="fuente-elegante titulo-panel fs-4">Apariencia</h3>
-            
+
             {mensajeApariencia && (
               <div className="alerta-configuracion exito">
                 <i className="bi bi-check-circle-fill"></i>
@@ -683,10 +691,10 @@ export default function Configuracion() {
               </div>
 
               <div className="d-flex gap-3 mt-3 overflow-x-auto pb-2">
-                <div 
-                  className="border rounded-3 p-3 text-center" 
-                  style={{ 
-                    cursor: 'pointer', 
+                <div
+                  className="border rounded-3 p-3 text-center"
+                  style={{
+                    cursor: 'pointer',
                     borderColor: tema === 'claro' ? 'var(--dorado)' : '#dee2e6',
                     backgroundColor: tema === 'claro' ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
                     minWidth: '110px'
@@ -697,10 +705,10 @@ export default function Configuracion() {
                   <span className="small fw-bold">Modo Claro</span>
                 </div>
 
-                <div 
-                  className="border rounded-3 p-3 text-center" 
-                  style={{ 
-                    cursor: 'pointer', 
+                <div
+                  className="border rounded-3 p-3 text-center"
+                  style={{
+                    cursor: 'pointer',
                     borderColor: tema === 'oscuro' ? 'var(--dorado)' : '#dee2e6',
                     backgroundColor: tema === 'oscuro' ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
                     minWidth: '110px'
@@ -711,10 +719,10 @@ export default function Configuracion() {
                   <span className="small fw-bold">Modo Oscuro</span>
                 </div>
 
-                <div 
-                  className="border rounded-3 p-3 text-center" 
-                  style={{ 
-                    cursor: 'pointer', 
+                <div
+                  className="border rounded-3 p-3 text-center"
+                  style={{
+                    cursor: 'pointer',
                     borderColor: tema === 'automatico' ? 'var(--dorado)' : '#dee2e6',
                     backgroundColor: tema === 'automatico' ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
                     minWidth: '110px'
@@ -735,10 +743,10 @@ export default function Configuracion() {
                   <p>Desactiva las transiciones suaves para mejorar el rendimiento en dispositivos antiguos.</p>
                 </div>
                 <div className="form-check form-switch fs-4 m-0">
-                  <input 
-                    className="form-check-input mt-0" 
-                    type="checkbox" 
-                    checked={reducirAnimaciones} 
+                  <input
+                    className="form-check-input mt-0"
+                    type="checkbox"
+                    checked={reducirAnimaciones}
                     onChange={(e) => setReducirAnimaciones(e.target.checked)}
                   />
                 </div>

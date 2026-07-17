@@ -4,11 +4,23 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Layout.css';
 import { resolverUrlBackend } from '../config/env';
 
+const obtenerUrlImagenPerfil = (imagen, nombreFallback = 'Usuario') => {
+  if (!imagen) {
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreFallback)}&background=0D1B2A&color=fff`;
+  }
+  if (typeof imagen === 'string') {
+    return imagen.startsWith('http') ? imagen : resolverUrlBackend(imagen);
+  }
+  if (typeof imagen === 'object' && imagen?.urlArchivo) {
+    return resolverUrlBackend(imagen.urlArchivo);
+  }
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreFallback)}&background=0D1B2A&color=fff`;
+};
+
 export default function Layout() {
   const location = useLocation();
 
   const [dropdownAbierto, setDropdownAbierto] = useState(false);
-
   const [textoBusqueda, setTextoBusqueda] = useState('');
 
   const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
@@ -40,7 +52,7 @@ export default function Layout() {
         <div className="d-flex align-items-center justify-content-end gap-3 gap-md-4" style={{ minWidth: '150px' }}>
           <div className="d-md-none position-relative iconos-nav"><i className="bi bi-search"></i></div>
 
-          {/* --- MENSAJES Y NOTIFICACIONES (Visibles siempre en PC y Celular) --- */}
+          {/* --- MENSAJES Y NOTIFICACIONES --- */}
           <Link to="/mensajes" className="position-relative iconos-nav text-decoration-none">
             <i className="bi bi-chat"></i>
             <span className="position-absolute badge-notificacion bg-warning text-dark rounded-circle">2</span>
@@ -54,27 +66,19 @@ export default function Layout() {
           {/* --- DROPDOWN DE PERFIL --- */}
           <div className="position-relative">
             <img
-              src={
-                usuarioLogueado?.imagenPerfil?.urlArchivo
-                  ? resolverUrlBackend(usuarioLogueado.imagenPerfil.urlArchivo)
-                  : usuarioLogueado?.imagenPerfil
-                    ? usuarioLogueado.imagenPerfil
-                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(usuarioLogueado?.nombreUsuario || 'Usuario')}&background=0D1B2A&color=fff`
-              }
+              src={obtenerUrlImagenPerfil(usuarioLogueado?.imagenPerfil, usuarioLogueado?.nombreUsuario)}
               alt="Perfil"
               className="foto-perfil-nav"
-              style={{ objectFit: 'cover' }} // Mantiene la foto circular proporcionada sin deformarse
+              style={{ objectFit: 'cover' }}
               onClick={() => setDropdownAbierto(!dropdownAbierto)}
             />
 
             {dropdownAbierto && (
               <div className="dropdown-perfil shadow-lg">
                 <div className="info-dropdown border-bottom">
-                  {/* Nombre real del usuario */}
                   <p className="fw-bold m-0" style={{ color: 'var(--texto-principal)' }}>
                     {usuarioLogueado?.nombreUsuario || 'Usuario'}
                   </p>
-                  {/* Nombre de usuario único en minúsculas */}
                   <p className="small text-muted m-0">
                     @{usuarioLogueado?.nombreUsuario?.toLowerCase() || 'usuario'}
                   </p>
@@ -106,8 +110,7 @@ export default function Layout() {
 
       {/* CONTENEDOR PRINCIPAL */}
       <div className="contenedor-contenido d-flex">
-
-        {/* SIDEBAR IZQUIERDA (PC/Tablet) - MANTENIDO INTACTO CON TODAS LAS OPCIONES */}
+        {/* SIDEBAR IZQUIERDA */}
         <aside className="sidebar-izquierda d-none d-xl-flex flex-column border-end py-4">
           <Link to="/inicio" className={`item-menu ${esActiva('/inicio') ? 'activo' : ''}`}><i className="bi bi-house-door"></i> Inicio</Link>
           <Link to="/arbol-genealogico" className={`item-menu ${esActiva('/arbol-genealogico') ? 'activo' : ''}`}><i className="bi bi-diagram-3"></i> Árbol Genealógico</Link>
@@ -118,7 +121,7 @@ export default function Layout() {
           <Link to="/configuracion" className={`item-menu ${esActiva('/configuracion') ? 'activo' : ''}`}><i className="bi bi-gear"></i> Configuración</Link>
         </aside>
 
-        {/* --- MENÚ INFERIOR MÓVIL (Celulares) - MODIFICADO A 5 BOTONES --- */}
+        {/* MENÚ INFERIOR MÓVIL */}
         <div className="d-xl-none bg-white border-top w-100 position-fixed bottom-0 start-0 d-flex justify-content-around py-2" style={{ zIndex: 1000 }}>
           <Link to="/inicio" className={`${esActiva('/inicio') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>
             <i className={`bi bi-house-door${esActiva('/inicio') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/inicio') ? 'bold' : 'normal' }}>Inicio</span>
@@ -128,7 +131,6 @@ export default function Layout() {
             <i className={`bi bi-diagram-3${esActiva('/arbol-genealogico') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/arbol-genealogico') ? 'bold' : 'normal' }}>Árbol</span>
           </Link>
 
-          {/* Botón Central de Publicar */}
           <Link to="#" className="text-secondary d-flex flex-column align-items-center text-decoration-none">
             <i className="bi bi-plus-square fs-5"></i><span style={{ fontSize: '0.7rem' }}>Publicar</span>
           </Link>
@@ -145,7 +147,6 @@ export default function Layout() {
         <main className="contenido-central flex-grow-1 p-3 p-md-4 mb-5 mb-xl-0 position-relative">
           <Outlet context={{ textoBusqueda }} />
         </main>
-
       </div>
     </div>
   );

@@ -15,23 +15,76 @@ const normalizarTexto = (texto = '') => String(texto || '').trim();
 const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
 
 const MESES_CORTOS_PUBLICACION = [
-  'ene',
-  'feb',
-  'mar',
-  'abr',
-  'may',
-  'jun',
-  'jul',
-  'ago',
-  'sep',
-  'oct',
-  'nov',
-  'dic'
+  'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
 ];
+
+const obtenerImagenDeEntidad = (entidad) => {
+  if (!entidad) return null;
+  if (typeof entidad === 'string') return entidad;
+  return (
+    entidad.imagenPerfil ||
+    entidad.fotoPerfil ||
+    entidad.img ||
+    entidad.imagen ||
+    entidad.foto ||
+    entidad.avatar ||
+    entidad.urlImagen ||
+    entidad.usuario?.imagenPerfil ||
+    entidad.usuario?.img ||
+    entidad.usuario?.fotoPerfil ||
+    entidad.id?.imagenPerfil ||
+    entidad.id?.img ||
+    null
+  );
+};
+
+const obtenerNombreDeEntidad = (entidad, fallback = 'Familiar') => {
+  if (!entidad) return fallback;
+  if (typeof entidad === 'string') return entidad;
+  return normalizarTexto(
+    entidad.nombreUsuario ||
+    entidad.nombre ||
+    entidad.nombreCompleto ||
+    entidad.usuario?.nombreUsuario ||
+    entidad.usuario?.nombre ||
+    entidad.id?.nombreUsuario ||
+    fallback
+  );
+};
+
+const obtenerUrlImagenPerfil = (imagen, nombreFallback = 'Usuario') => {
+  const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreFallback)}&background=0D1B2A&color=fff`;
+
+  // 1. Si no hay imagen
+  if (!imagen) return avatarFallback;
+
+  // 2. Si es una cadena directa
+  if (typeof imagen === 'string') {
+    const rutaLimpia = imagen.trim();
+    if (!rutaLimpia || rutaLimpia === 'undefined' || rutaLimpia === 'null' || rutaLimpia === '[object Object]') {
+      return avatarFallback;
+    }
+    return rutaLimpia.startsWith('http') ? rutaLimpia : resolverUrlBackend(rutaLimpia);
+  }
+
+  // 3. Si es un objeto
+  if (typeof imagen === 'object' && imagen !== null) {
+    const ruta = imagen.urlArchivo || imagen.url || imagen.path || imagen.secure_url || imagen.location || imagen.ruta || imagen.src;
+
+    if (ruta && typeof ruta === 'string') {
+      const rutaLimpia = ruta.trim();
+      if (rutaLimpia && rutaLimpia !== 'undefined' && rutaLimpia !== 'null' && rutaLimpia !== '[object Object]') {
+        return rutaLimpia.startsWith('http') ? rutaLimpia : resolverUrlBackend(rutaLimpia);
+      }
+    }
+  }
+
+  // 4. Fallback por defecto
+  return avatarFallback;
+};
 
 const obtenerPartesFechaEnZona = (fecha, preferencias = {}) => {
   const date = fecha instanceof Date ? fecha : new Date(fecha);
-
   if (Number.isNaN(date.getTime())) return null;
 
   const zonaHoraria = preferencias.zonaHoraria || 'America/Mexico_City';
@@ -73,9 +126,7 @@ const obtenerPartesFechaEnZona = (fecha, preferencias = {}) => {
 
 const obtenerInicioDiaEnZona = (fecha, preferencias = {}) => {
   const partes = obtenerPartesFechaEnZona(fecha, preferencias);
-
   if (!partes) return null;
-
   return Date.UTC(partes.year, partes.month - 1, partes.day);
 };
 
@@ -83,7 +134,6 @@ const formatearHoraPublicacion = (hour = 0, minute = '00') => {
   const hora = Number(hour || 0);
   const hora12 = hora % 12 || 12;
   const periodo = hora >= 12 ? 'PM' : 'AM';
-
   return `${hora12}:${String(minute || '00').padStart(2, '0')} ${periodo}`;
 };
 
@@ -102,9 +152,7 @@ const formatearFechaAbsolutaPublicacion = (fecha, ahora, preferencias = {}) => {
 
 const formatearFechaPublicacionSocial = (fechaISO, preferencias = {}) => {
   if (!fechaISO) return '';
-
   const fecha = new Date(fechaISO);
-
   if (Number.isNaN(fecha.getTime())) return '';
 
   const ahora = new Date(preferencias.ahoraMs || Date.now());
@@ -117,13 +165,8 @@ const formatearFechaPublicacionSocial = (fechaISO, preferencias = {}) => {
 
   if (diferenciaDias === 0) {
     if (diferenciaSegundos < 60) return 'Hace unos segundos';
-
     const minutos = Math.floor(diferenciaSegundos / 60);
-
-    if (minutos < 60) {
-      return minutos === 1 ? 'Hace 1 minuto' : `Hace ${minutos} minutos`;
-    }
-
+    if (minutos < 60) return minutos === 1 ? 'Hace 1 minuto' : `Hace ${minutos} minutos`;
     const horas = Math.floor(minutos / 60);
     return horas === 1 ? 'Hace una hora' : `Hace ${horas} horas`;
   }
@@ -135,20 +178,9 @@ const formatearFechaPublicacionSocial = (fechaISO, preferencias = {}) => {
   return formatearFechaAbsolutaPublicacion(fecha, ahora, preferencias);
 };
 
-
 const MESES_EVENTO = {
-  0: 'ENE',
-  1: 'FEB',
-  2: 'MAR',
-  3: 'ABR',
-  4: 'MAY',
-  5: 'JUN',
-  6: 'JUL',
-  7: 'AGO',
-  8: 'SEP',
-  9: 'OCT',
-  10: 'NOV',
-  11: 'DIC'
+  0: 'ENE', 1: 'FEB', 2: 'MAR', 3: 'ABR', 4: 'MAY', 5: 'JUN',
+  6: 'JUL', 7: 'AGO', 8: 'SEP', 9: 'OCT', 10: 'NOV', 11: 'DIC'
 };
 
 const TIPOS_PUBLICACION_CONFIG = {
@@ -176,25 +208,10 @@ const TIPOS_PUBLICACION_CONFIG = {
 
 const EMOJIS_RAPIDOS = ['❤️', '😊', '😂', '🥹', '🙏', '🎉', '🎂', '📸', '🕊️', '✨', '🌳', '👨‍👩‍👧‍👦', '🏡', '📍', '💛', '🫶'];
 
-const obtenerNombrePersona = (persona = {}) => {
-  return normalizarTexto(
-    persona.nombreUsuario ||
-    persona.nombre ||
-    persona.nombreCompleto ||
-    persona.usuario?.nombreUsuario ||
-    persona.id?.nombreUsuario ||
-    'Usuario'
-  );
-};
-
 const normalizarPersonaSugerida = (persona = {}) => {
-  const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id) || obtenerNombrePersona(persona);
-  const nombre = obtenerNombrePersona(persona);
-  const imagen = persona.img ||
-    persona.imagenPerfil ||
-    persona.usuario?.imagenPerfil ||
-    persona.id?.imagenPerfil ||
-    null;
+  const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id) || obtenerNombreDeEntidad(persona);
+  const nombre = obtenerNombreDeEntidad(persona);
+  const imagen = obtenerImagenDeEntidad(persona);
 
   return {
     ...persona,
@@ -218,12 +235,7 @@ const obtenerFechaEvento = (fecha, preferencias = {}) => {
   const date = new Date(fecha);
 
   if (Number.isNaN(date.getTime())) {
-    return {
-      mes: '---',
-      dia: '--',
-      hora: '',
-      date: null
-    };
+    return { mes: '---', dia: '--', hora: '', date: null };
   }
 
   const idioma = preferencias.idioma || 'es-MX';
@@ -253,10 +265,7 @@ const obtenerFechaEvento = (fecha, preferencias = {}) => {
     return {
       mes: MESES_EVENTO[date.getMonth()] || date.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '').toUpperCase(),
       dia: String(date.getDate()).padStart(2, '0'),
-      hora: date.toLocaleTimeString('es-MX', {
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
+      hora: date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
       date
     };
   }
@@ -264,13 +273,7 @@ const obtenerFechaEvento = (fecha, preferencias = {}) => {
 
 const obtenerTextoUbicacionEvento = (evento = {}) => {
   const ubicacion = evento.ubicacion || {};
-
-  return normalizarTexto(
-    ubicacion.texto ||
-    ubicacion.direccion ||
-    ubicacion.referencia ||
-    ''
-  );
+  return normalizarTexto(ubicacion.texto || ubicacion.direccion || ubicacion.referencia || '');
 };
 
 const normalizarEventoInicio = (evento = {}, arbol = {}, preferencias = {}) => {
@@ -281,20 +284,12 @@ const normalizarEventoInicio = (evento = {}, arbol = {}, preferencias = {}) => {
   const nombreFamilia = normalizarTexto(arbol.nombreFamilia || evento.arbol?.nombreFamilia || 'Árbol familiar');
 
   const detalles = [];
-
-  if (evento.todoElDia) {
-    detalles.push('Todo el día');
-  } else if (fecha.hora) {
-    detalles.push(fecha.hora);
-  }
+  if (evento.todoElDia) detalles.push('Todo el día');
+  else if (fecha.hora) detalles.push(fecha.hora);
 
   detalles.push(etiquetaTipo);
-
-  if (ubicacion) {
-    detalles.push(ubicacion);
-  } else if (nombreFamilia) {
-    detalles.push(nombreFamilia);
-  }
+  if (ubicacion) detalles.push(ubicacion);
+  else if (nombreFamilia) detalles.push(nombreFamilia);
 
   return {
     ...evento,
@@ -329,7 +324,6 @@ export default function Inicio() {
   const [tipoPublicacion, setTipoPublicacion] = useState('historico');
   const [textoPublicacion, setTextoPublicacion] = useState('');
 
-  // ESTADOS PARA HERRAMIENTAS DEL MODAL DE PUBLICACIÓN
   const [panelHerramientaActivo, setPanelHerramientaActivo] = useState(null);
   const [ubicacionPublicacion, setUbicacionPublicacion] = useState('');
   const [ubicacionTemporal, setUbicacionTemporal] = useState('');
@@ -340,15 +334,13 @@ export default function Inicio() {
   const [eventoRelacionadoPublicacion, setEventoRelacionadoPublicacion] = useState(null);
   const [etiquetasImagen, setEtiquetasImagen] = useState([]);
 
-  // ESTADOS PARA EL MANEJO DE MULTIMEDIA
   const [archivoAdjunto, setArchivoAdjunto] = useState(null);
   const [vistaPrevia, setVistaPrevia] = useState('');
   const fileInputRef = useRef(null);
   const gifInputRef = useRef(null);
   const textareaPublicacionRef = useRef(null);
-  const overlayRef = useRef(null); // Overlay visual para pintar menciones sin alterar el textarea
+  const overlayRef = useRef(null);
 
-  // ESTADOS PARA LAS PUBLICACIONES DEL MURO
   const token = localStorage.getItem('token');
   const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
   const API_BASE_URL = API_BASE_URL_CONFIG;
@@ -357,43 +349,32 @@ export default function Inicio() {
   const [cargando, setCargando] = useState(token ? true : false);
   const [error, setError] = useState(token ? '' : 'No has iniciado sesión.');
 
-  // ESTADOS PARA LOS EVENTOS FAMILIARES DEL WIDGET LATERAL
   const [proximosEventosFamiliares, setProximosEventosFamiliares] = useState([]);
   const [cargandoEventosFamiliares, setCargandoEventosFamiliares] = useState(token ? true : false);
   const [errorEventosFamiliares, setErrorEventosFamiliares] = useState('');
 
-  // ESTADOS PARA ÁLBUM / HILO DE EVENTO FAMILIAR
   const [albumEventoAbierto, setAlbumEventoAbierto] = useState(false);
   const [eventoAlbumSeleccionado, setEventoAlbumSeleccionado] = useState(null);
   const [publicacionesEvento, setPublicacionesEvento] = useState([]);
   const [cargandoPublicacionesEvento, setCargandoPublicacionesEvento] = useState(false);
   const [errorPublicacionesEvento, setErrorPublicacionesEvento] = useState('');
 
-  // ESTADOS PARA BUSQUEDA
   const [resultadosPersonas, setResultadosPersonas] = useState([]);
   const [buscando, setBuscando] = useState(false);
 
-  // ESTADOS PARA INTERACCIÓN
   const [comentariosPorPub, setComentariosPorPub] = useState({});
   const [comentarioAbierto, setComentarioAbierto] = useState({});
   const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState({});
 
-  // Cargar comentarios
   const obtenerComentariosDesdeBackend = async (pubId) => {
     if (!token || !pubId) return [];
-
     try {
       const respuesta = await fetch(`${API_BASE_URL}/comentarios/publicacion/${pubId}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-
       const datos = await respuesta.json().catch(() => []);
-
-      if (!respuesta.ok) {
-        return [];
-      }
-
+      if (!respuesta.ok) return [];
       return Array.isArray(datos) ? datos : [];
     } catch (err) {
       console.error('Error al cargar comentarios:', err);
@@ -403,18 +384,12 @@ export default function Inicio() {
 
   const cargarComentarios = async (pubId) => {
     const comentarios = await obtenerComentariosDesdeBackend(pubId);
-
-    setComentariosPorPub(prev => ({
-      ...prev,
-      [pubId]: comentarios
-    }));
-
+    setComentariosPorPub(prev => ({ ...prev, [pubId]: comentarios }));
     return comentarios;
   };
 
   const cargarComentariosDePublicaciones = async (listaPublicaciones = []) => {
     if (!token || !Array.isArray(listaPublicaciones) || listaPublicaciones.length === 0) return;
-
     try {
       const publicacionesConId = listaPublicaciones
         .map(pub => ({ ...pub, idSeguro: pub?._id || pub?.id }))
@@ -481,10 +456,7 @@ export default function Inicio() {
   };
 
   useEffect(() => {
-    const intervalo = setInterval(() => {
-      setMarcaTiempoActual(Date.now());
-    }, 60000);
-
+    const intervalo = setInterval(() => { setMarcaTiempoActual(Date.now()); }, 60000);
     return () => clearInterval(intervalo);
   }, []);
 
@@ -594,7 +566,6 @@ export default function Inicio() {
     }
   };
 
-  // NUEVO: SINCRONIZADOR DE SCROLL PARA LA MAGIA DE TWITTER
   const manejarScrollTextarea = (e) => {
     if (overlayRef.current) {
       overlayRef.current.scrollTop = e.target.scrollTop;
@@ -744,7 +715,6 @@ export default function Inicio() {
 
   const enviarComentario = async (pubId) => {
     const texto = nuevoComentarioTexto[pubId];
-
     if (!pubId || !texto || !texto.trim()) return;
 
     try {
@@ -754,24 +724,15 @@ export default function Inicio() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          publicacionId: pubId,
-          texto: texto.trim()
-        })
+        body: JSON.stringify({ publicacionId: pubId, texto: texto.trim() })
       });
 
       const datos = await respuesta.json().catch(() => ({}));
-
-      if (!respuesta.ok) {
-        console.error(datos.mensaje || 'No se pudo crear el comentario.');
-        return;
-      }
+      if (!respuesta.ok) return;
 
       const comentarioRender = {
         ...datos.comentario,
-        autor: datos.comentario?.autor || {
-          nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo'
-        }
+        autor: datos.comentario?.autor || { nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo' }
       };
 
       setComentariosPorPub(prev => ({
@@ -802,6 +763,7 @@ export default function Inicio() {
       restaurarMuro();
       return;
     }
+
     const ejecutarBusqueda = setTimeout(async () => {
       setBuscando(true);
       try {
@@ -815,6 +777,7 @@ export default function Inicio() {
         }
       } catch (err) { console.error(err); } finally { setBuscando(false); }
     }, 400);
+
     return () => clearTimeout(ejecutarBusqueda);
   }, [textoBusqueda, token]);
 
@@ -823,9 +786,7 @@ export default function Inicio() {
 
   const obtenerIdPersonaPerfil = (persona = {}) => {
     if (!persona) return null;
-
     if (typeof persona === 'string') return persona;
-
     return (
       obtenerId(persona) ||
       obtenerId(persona.usuario) ||
@@ -839,14 +800,9 @@ export default function Inicio() {
 
   const irAPerfil = (persona) => {
     const personaId = obtenerIdPersonaPerfil(persona);
-
-    if (!personaId) {
-      console.warn('No se encontró ID para abrir el perfil:', persona);
-      return;
-    }
+    if (!personaId) return;
 
     const miId = usuarioLogueado?.id || usuarioLogueado?._id;
-
     if (miId && String(personaId) === String(miId)) {
       navigate('/perfil');
       return;
@@ -856,149 +812,56 @@ export default function Inicio() {
   };
 
   const normalizarHandleMencion = (valor = '') => {
-    return String(valor || '')
-      .replace(/^@/, '')
-      .replace(/\s+/g, '_')
-      .trim()
-      .toLowerCase();
-  };
-
-  const obtenerNombreMencion = (persona = {}) => {
-    return normalizarTexto(
-      persona.nombre ||
-      persona.nombreUsuario ||
-      persona.nombreCompleto ||
-      persona.usuario?.nombreUsuario ||
-      persona.usuario?.nombre ||
-      persona.id?.nombreUsuario ||
-      ''
-    );
+    return String(valor || '').replace(/^@/, '').replace(/\s+/g, '_').trim().toLowerCase();
   };
 
   const buscarPersonaPorMencion = (textoMencion = '', menciones = []) => {
     if (!Array.isArray(menciones) || menciones.length === 0) return null;
-
     const mencionNormalizada = normalizarHandleMencion(textoMencion);
 
     return menciones.find((persona) => {
       const posiblesNombres = [
-        persona.nombre,
-        persona.nombreUsuario,
-        persona.nombreCompleto,
-        persona.usuario?.nombreUsuario,
-        persona.usuario?.nombre,
-        persona.id?.nombreUsuario
+        persona.nombre, persona.nombreUsuario, persona.nombreCompleto,
+        persona.usuario?.nombreUsuario, persona.usuario?.nombre, persona.id?.nombreUsuario
       ].filter(Boolean);
 
       return posiblesNombres.some(nombre => normalizarHandleMencion(nombre) === mencionNormalizada);
     }) || null;
   };
 
-
   const normalizarEventoParaPublicacion = (evento = {}) => {
     if (!evento) return null;
 
     const eventoBase = evento.evento || evento.eventoRelacionado || evento.eventoId || evento;
-    const id =
-      obtenerId(eventoBase) ||
-      obtenerId(evento.evento) ||
-      obtenerId(evento.eventoRelacionado) ||
-      obtenerId(evento.eventoId) ||
-      evento.id ||
-      evento._id ||
-      evento.eventoRelacionadoId ||
-      null;
-
-    const titulo = normalizarTexto(
-      evento.titulo ||
-      evento.nombre ||
-      evento.tituloSnapshot ||
-      eventoBase?.titulo ||
-      eventoBase?.nombre ||
-      eventoBase?.tituloSnapshot ||
-      'Evento familiar'
-    );
+    const id = obtenerId(eventoBase) || obtenerId(evento.evento) || obtenerId(evento.eventoRelacionado) || obtenerId(evento.eventoId) || evento.id || evento._id || evento.eventoRelacionadoId || null;
+    const titulo = normalizarTexto(evento.titulo || evento.nombre || evento.tituloSnapshot || eventoBase?.titulo || eventoBase?.nombre || eventoBase?.tituloSnapshot || 'Evento familiar');
 
     if (!id && !titulo) return null;
 
-    const fechaInicio =
-      evento.fechaInicio ||
-      evento.fecha ||
-      evento.fechaInicioSnapshot ||
-      eventoBase?.fechaInicio ||
-      eventoBase?.fecha ||
-      eventoBase?.fechaInicioSnapshot ||
-      null;
-
-    const tipoEvento =
-      evento.tipoEvento ||
-      evento.tipoEventoSnapshot ||
-      eventoBase?.tipoEvento ||
-      eventoBase?.tipoEventoSnapshot ||
-      'otro';
-
-    const nombreFamilia = normalizarTexto(
-      evento.nombreFamilia ||
-      evento.nombreFamiliaSnapshot ||
-      eventoBase?.nombreFamilia ||
-      eventoBase?.nombreFamiliaSnapshot ||
-      evento.arbol?.nombreFamilia ||
-      eventoBase?.arbol?.nombreFamilia ||
-      'Árbol familiar'
-    );
+    const fechaInicio = evento.fechaInicio || evento.fecha || evento.fechaInicioSnapshot || eventoBase?.fechaInicio || eventoBase?.fecha || eventoBase?.fechaInicioSnapshot || null;
+    const tipoEvento = evento.tipoEvento || evento.tipoEventoSnapshot || eventoBase?.tipoEvento || eventoBase?.tipoEventoSnapshot || 'otro';
+    const nombreFamilia = normalizarTexto(evento.nombreFamilia || evento.nombreFamiliaSnapshot || eventoBase?.nombreFamilia || eventoBase?.nombreFamiliaSnapshot || evento.arbol?.nombreFamilia || eventoBase?.arbol?.nombreFamilia || 'Árbol familiar');
 
     const fecha = obtenerFechaEvento(fechaInicio);
     const etiquetaTipo = ETIQUETAS_TIPO_EVENTO[tipoEvento] || 'Evento familiar';
-    const detalle = normalizarTexto(
-      evento.detalle ||
-      eventoBase?.detalle ||
-      [
-        fecha?.date ? `${fecha.dia} ${fecha.mes}` : '',
-        etiquetaTipo,
-        nombreFamilia
-      ].filter(Boolean).join(' • ')
-    );
+    const detalle = normalizarTexto(evento.detalle || eventoBase?.detalle || [fecha?.date ? `${fecha.dia} ${fecha.mes}` : '', etiquetaTipo, nombreFamilia].filter(Boolean).join(' • '));
 
     return {
       id: id || `${titulo}-${fechaInicio || Date.now()}`,
-      titulo,
-      fechaInicio,
-      tipoEvento,
-      nombreFamilia,
-      detalle,
-      fecha,
-      etiquetaTipo,
+      titulo, fechaInicio, tipoEvento, nombreFamilia, detalle, fecha, etiquetaTipo,
       descripcion: evento.descripcion || eventoBase?.descripcion || '',
       ubicacion: obtenerTextoUbicacionEvento(eventoBase || evento)
     };
   };
 
   const obtenerEventoRelacionadoDePublicacion = (pub = {}) => {
-    return normalizarEventoParaPublicacion(
-      pub.eventoRelacionado ||
-      pub.eventoFamiliar ||
-      pub.eventoRelacionadoPublicacion ||
-      pub.evento ||
-      (
-        pub.eventoRelacionadoId
-          ? {
-            id: pub.eventoRelacionadoId,
-            titulo: pub.eventoTitulo || pub.tituloEvento || pub.eventoRelacionadoTitulo || 'Evento familiar',
-            fechaInicio: pub.eventoFechaInicio || null,
-            tipoEvento: pub.eventoTipo || 'otro',
-            nombreFamilia: pub.eventoNombreFamilia || 'Árbol familiar'
-          }
-          : null
-      )
-    );
+    return normalizarEventoParaPublicacion(pub.eventoRelacionado || pub.eventoFamiliar || pub.eventoRelacionadoPublicacion || pub.evento || (pub.eventoRelacionadoId ? { id: pub.eventoRelacionadoId, titulo: pub.eventoTitulo || pub.tituloEvento || pub.eventoRelacionadoTitulo || 'Evento familiar', fechaInicio: pub.eventoFechaInicio || null, tipoEvento: pub.eventoTipo || 'otro', nombreFamilia: pub.eventoNombreFamilia || 'Árbol familiar' } : null));
   };
 
   const publicacionPerteneceAEvento = (pub = {}, evento = {}) => {
     const eventoPub = obtenerEventoRelacionadoDePublicacion(pub);
     const eventoNormalizado = normalizarEventoParaPublicacion(evento);
-
     if (!eventoPub || !eventoNormalizado) return false;
-
     return String(eventoPub.id) === String(eventoNormalizado.id);
   };
 
@@ -1033,50 +896,32 @@ export default function Inicio() {
       });
 
       const datos = await respuesta.json().catch(() => ({}));
-
       if (respuesta.ok) {
-        const lista = Array.isArray(datos.publicaciones)
-          ? datos.publicaciones
-          : Array.isArray(datos)
-            ? datos
-            : [];
-
+        const lista = Array.isArray(datos.publicaciones) ? datos.publicaciones : Array.isArray(datos) ? datos : [];
         setPublicacionesEvento(lista.length > 0 ? lista : publicacionesLocales);
         return;
       }
 
       setPublicacionesEvento(publicacionesLocales);
-
       if (respuesta.status !== 404) {
         setErrorPublicacionesEvento(datos.mensaje || 'No se pudieron cargar todas las publicaciones de este evento.');
       }
     } catch (err) {
       setPublicacionesEvento(publicacionesLocales);
-      setErrorPublicacionesEvento(
-        publicacionesLocales.length > 0
-          ? ''
-          : 'No se pudieron cargar las publicaciones de este evento.'
-      );
+      setErrorPublicacionesEvento(publicacionesLocales.length > 0 ? '' : 'No se pudieron cargar las publicaciones de este evento.');
     } finally {
       setCargandoPublicacionesEvento(false);
     }
   };
 
-  const abrirAlbumEvento = (evento) => {
-    cargarPublicacionesDeEvento(evento);
-  };
+  const abrirAlbumEvento = (evento) => { cargarPublicacionesDeEvento(evento); };
 
   const renderChipEventoPublicacion = (evento) => {
     const eventoNormalizado = normalizarEventoParaPublicacion(evento);
     if (!eventoNormalizado) return null;
 
     return (
-      <button
-        type="button"
-        className="evento-post-render evento-post-render-clickable"
-        onClick={() => abrirAlbumEvento(eventoNormalizado)}
-        title={`Ver publicaciones de ${eventoNormalizado.titulo}`}
-      >
+      <button type="button" className="evento-post-render evento-post-render-clickable" onClick={() => abrirAlbumEvento(eventoNormalizado)} title={`Ver publicaciones de ${eventoNormalizado.titulo}`}>
         <i className="bi bi-calendar-heart-fill"></i>
         <div>
           <strong>{eventoNormalizado.titulo}</strong>
@@ -1091,36 +936,28 @@ export default function Inicio() {
     const urlMultimedia = tieneMultimedia ? resolverUrlBackend(pub.multimedia[0].urlArchivo) : null;
     const esVideo = tieneMultimedia && pub.multimedia[0].formato?.startsWith('video/');
     const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
+    const autorId = obtenerIdPersonaPerfil(pub.autor) || obtenerIdPersonaPerfil(pub.usuario);
 
-    // CORRECCIÓN 1: Usar tu función helper para extraer el ID correcto
-    const autorId = obtenerId(pub.autor);
+    const imagenAutorAlbum = obtenerImagenDeEntidad(pub.autor) || obtenerImagenDeEntidad(pub.usuario);
+    const nombreAutorAlbum = obtenerNombreDeEntidad(pub.autor) || obtenerNombreDeEntidad(pub.usuario, 'Familiar');
+    const srcAvatarAlbum = obtenerUrlImagenPerfil(imagenAutorAlbum, nombreAutorAlbum);
 
     return (
       <article key={pub._id || `${pub.contenido}-${fechaFormateada}`} className="album-evento-publicacion">
         <div className="album-evento-publicacion-header">
-          {pub.autor?.imagenPerfil?.urlArchivo ? (
-            <img
-              src={resolverUrlBackend(pub.autor.imagenPerfil.urlArchivo)}
-              alt={pub.autor?.nombreUsuario || 'Autor'}
-              className="foto-perfil-post perfil-interactivo" // CORRECCIÓN 3: Clase CSS en vez de inline
-              onClick={() => autorId && irAPerfil(pub.autor)}
-            />
-          ) : (
-            <img
-              src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`}
-              alt="Autor"
-              className="foto-perfil-post perfil-interactivo"
-              onClick={() => autorId && irAPerfil(pub.autor)}
-            />
-          )}
-
+          <img
+            src={srcAvatarAlbum}
+            alt={nombreAutorAlbum}
+            className="foto-perfil-post perfil-interactivo"
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreAutorAlbum)}&background=0D1B2A&color=fff`;
+            }}
+            onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}
+          />
           <div>
-            {/* Clic sobre el Nombre del usuario */}
-            <strong
-              className="perfil-interactivo"
-              onClick={() => autorId && irAPerfil(pub.autor)}
-            >
-              {pub.autor?.nombreUsuario || 'Usuario'}
+            <strong className="perfil-interactivo" onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}>
+              {nombreAutorAlbum}
             </strong>
             {fechaFormateada && <span>{fechaFormateada}</span>}
           </div>
@@ -1134,11 +971,7 @@ export default function Inicio() {
 
         {tieneMultimedia && (
           <div className="album-evento-multimedia">
-            {esVideo ? (
-              <video src={urlMultimedia} controls controlsList="nodownload" />
-            ) : (
-              <img src={urlMultimedia} alt="Momento del evento" />
-            )}
+            {esVideo ? <video src={urlMultimedia} controls controlsList="nodownload" /> : <img src={urlMultimedia} alt="Momento del evento" />}
           </div>
         )}
       </article>
@@ -1172,15 +1005,12 @@ export default function Inicio() {
           </span>
         );
       }
-
       return <React.Fragment key={`texto-${index}`}>{parte}</React.Fragment>;
     });
   };
 
-  // MODIFICADO: ELIMINADAS LAS MENCIONES DE LOS CHIPS
   const renderChipsHerramientas = () => {
     const hayChips = ubicacionPublicacion || eventoRelacionadoPublicacion;
-
     if (!hayChips) return null;
 
     return (
@@ -1189,23 +1019,14 @@ export default function Inicio() {
           <span className="chip-publicacion ubicacion">
             <i className="bi bi-geo-alt-fill"></i>
             {ubicacionPublicacion}
-            <button type="button" onClick={() => setUbicacionPublicacion('')} aria-label="Quitar ubicación">
-              <i className="bi bi-x"></i>
-            </button>
+            <button type="button" onClick={() => setUbicacionPublicacion('')} aria-label="Quitar ubicación"><i className="bi bi-x"></i></button>
           </span>
         )}
-
         {eventoRelacionadoPublicacion && (
           <span className="chip-publicacion evento">
             <i className="bi bi-calendar-heart-fill"></i>
             {eventoRelacionadoPublicacion.titulo}
-            <button
-              type="button"
-              onClick={() => setEventoRelacionadoPublicacion(null)}
-              aria-label="Quitar evento relacionado"
-            >
-              <i className="bi bi-x"></i>
-            </button>
+            <button type="button" onClick={() => setEventoRelacionadoPublicacion(null)} aria-label="Quitar evento relacionado"><i className="bi bi-x"></i></button>
           </span>
         )}
       </div>
@@ -1294,7 +1115,7 @@ export default function Inicio() {
             ) : sugerenciasPersonasPublicacion.length > 0 ? (
               sugerenciasPersonasPublicacion.map(persona => (
                 <button key={persona.id} type="button" className="persona-sugerida-publicacion" onClick={() => seleccionarPersonaPublicacion(persona)}>
-                  {persona.imagen ? <img src={typeof persona.imagen === 'string' ? persona.imagen : resolverUrlBackend(persona.imagen.urlArchivo || '')} alt={persona.nombre} /> : <span>{persona.nombre.slice(0, 2).toUpperCase()}</span>}
+                  <img src={obtenerUrlImagenPerfil(persona.imagen, persona.nombre)} alt={persona.nombre} />
                   <div><strong>{persona.nombre}</strong><small>{esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}</small></div>
                 </button>
               ))
@@ -1353,21 +1174,14 @@ export default function Inicio() {
       {albumEventoAbierto && eventoAlbumSeleccionado && (
         <div className="modal-backdrop-custom" onClick={cerrarAlbumEvento}>
           <div className="modal-album-evento" onClick={(e) => e.stopPropagation()}>
-            <button className="btn-cerrar-modal btn-cerrar-album-evento" onClick={cerrarAlbumEvento}>
-              <i className="bi bi-x"></i>
-            </button>
+            <button className="btn-cerrar-modal btn-cerrar-album-evento" onClick={cerrarAlbumEvento}><i className="bi bi-x"></i></button>
 
             <div className="album-evento-hero">
-              <div className="album-evento-icono">
-                <i className="bi bi-calendar-heart-fill"></i>
-              </div>
-
+              <div className="album-evento-icono"><i className="bi bi-calendar-heart-fill"></i></div>
               <div className="album-evento-info">
                 <span className="album-evento-kicker">ÁLBUM DEL EVENTO</span>
                 <h3>{eventoAlbumSeleccionado.titulo}</h3>
-                <p>
-                  {eventoAlbumSeleccionado.detalle || eventoAlbumSeleccionado.nombreFamilia}
-                </p>
+                <p>{eventoAlbumSeleccionado.detalle || eventoAlbumSeleccionado.nombreFamilia}</p>
               </div>
             </div>
 
@@ -1377,31 +1191,18 @@ export default function Inicio() {
                   <strong>{publicacionesEvento.length}</strong>
                   <span>{publicacionesEvento.length === 1 ? 'publicación relacionada' : 'publicaciones relacionadas'}</span>
                 </div>
-                <button
-                  type="button"
-                  className="btn-refrescar-album-evento"
-                  onClick={() => cargarPublicacionesDeEvento(eventoAlbumSeleccionado)}
-                  disabled={cargandoPublicacionesEvento}
-                >
+                <button type="button" className="btn-refrescar-album-evento" onClick={() => cargarPublicacionesDeEvento(eventoAlbumSeleccionado)} disabled={cargandoPublicacionesEvento}>
                   <i className={`bi ${cargandoPublicacionesEvento ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
                   Actualizar
                 </button>
               </div>
 
               {cargandoPublicacionesEvento ? (
-                <div className="estado-album-evento">
-                  <span className="spinner-border spinner-border-sm me-2"></span>
-                  Cargando momentos del evento...
-                </div>
+                <div className="estado-album-evento"><span className="spinner-border spinner-border-sm me-2"></span>Cargando momentos del evento...</div>
               ) : errorPublicacionesEvento ? (
-                <div className="estado-album-evento error">
-                  <i className="bi bi-exclamation-triangle me-2"></i>
-                  {errorPublicacionesEvento}
-                </div>
+                <div className="estado-album-evento error"><i className="bi bi-exclamation-triangle me-2"></i>{errorPublicacionesEvento}</div>
               ) : publicacionesEvento.length > 0 ? (
-                <div className="lista-publicaciones-album-evento">
-                  {publicacionesEvento.map(renderVistaPublicacionAlbum)}
-                </div>
+                <div className="lista-publicaciones-album-evento">{publicacionesEvento.map(renderVistaPublicacionAlbum)}</div>
               ) : (
                 <div className="estado-album-evento vacio">
                   <i className="bi bi-images"></i>
@@ -1414,7 +1215,7 @@ export default function Inicio() {
         </div>
       )}
 
-      {/* MODAL OVERLAY (NUEVO TEXTAREA TWITTER-STYLE) */}
+      {/* MODAL DE PUBLICACIÓN */}
       {modalAbierto && (
         <div className="modal-backdrop-custom" onClick={cerrarModalPublicacion}>
           <div className="modal-publicacion" onClick={(e) => e.stopPropagation()}>
@@ -1431,8 +1232,6 @@ export default function Inicio() {
             </div>
 
             <div className="modal-cuerpo mt-3">
-
-              {/* LA MAGIA SUCEDE AQUÍ: CONTENEDOR SUPERPUESTO */}
               <div className="contenedor-input-superpuesto">
                 <div className="form-control input-publicacion input-overlay" ref={overlayRef} aria-hidden="true">
                   {textoPublicacion ? renderTextoConMenciones(textoPublicacion) : ''}
@@ -1508,11 +1307,16 @@ export default function Inicio() {
           {textoBusqueda.trim() === '' && (
             <div className="tarjeta shadow-sm mb-4 p-3">
               <div className="tarjeta p-3 mb-4 shadow-sm disparador-modal d-flex align-items-center gap-3" onClick={abrirSelectorTipoPublicacion}>
-                {usuarioLogueado?.imagenPerfil ? (
-                  <img src={usuarioLogueado.imagenPerfil} alt="Mi perfil" className="rounded-circle me-3 object-fit-cover" style={{ width: '45px', height: '45px', border: '1px solid #dee2e6' }} />
-                ) : (
-                  <img src={`https://ui-avatars.com/api/?name=${usuarioLogueado?.nombreUsuario || 'Usuario'}&background=0D1B2A&color=fff`} alt="Perfil" className="foto-perfil-post" />
-                )}
+                <img
+                  src={obtenerUrlImagenPerfil(obtenerImagenDeEntidad(usuarioLogueado), usuarioLogueado?.nombreUsuario)}
+                  alt="Mi perfil"
+                  className="rounded-circle me-3 object-fit-cover"
+                  style={{ width: '45px', height: '45px', border: '1px solid #dee2e6' }}
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(usuarioLogueado?.nombreUsuario || 'Usuario')}&background=0D1B2A&color=fff`;
+                  }}
+                />
                 <div className="input-simulado-compacto flex-grow-1">Preserva un nuevo recuerdo o momento familiar...</div>
                 <button className="btn-icono-compacto historia" type="button"><i className="bi bi-plus-lg"></i></button>
               </div>
@@ -1525,13 +1329,9 @@ export default function Inicio() {
               <div className="d-flex flex-wrap gap-3">
                 {resultadosPersonas.map(persona => {
                   const personaId = obtenerIdPersonaPerfil(persona);
-                  const nombrePersona = persona.nombreUsuario || persona.nombre || (persona.id && persona.id.nombreUsuario) || 'Usuario';
-                  const imagenPersona = persona.img || persona.imagenPerfil || persona.usuario?.imagenPerfil || persona.id?.imagenPerfil || null;
-                  const srcImagenPersona = typeof imagenPersona === 'string'
-                    ? imagenPersona
-                    : imagenPersona?.urlArchivo
-                      ? resolverUrlBackend(imagenPersona.urlArchivo)
-                      : `https://ui-avatars.com/api/?name=${encodeURIComponent(nombrePersona)}`;
+                  const nombrePersona = obtenerNombreDeEntidad(persona, 'Usuario');
+                  const imagenPersona = obtenerImagenDeEntidad(persona);
+                  const srcImagenPersona = obtenerUrlImagenPerfil(imagenPersona, nombrePersona);
 
                   return (
                     <button
@@ -1541,7 +1341,15 @@ export default function Inicio() {
                       style={{ minWidth: '200px' }}
                       onClick={() => irAPerfil(persona)}
                     >
-                      <img src={srcImagenPersona} alt={nombrePersona} className="foto-perfil-chica" />
+                      <img
+                        src={srcImagenPersona}
+                        alt={nombrePersona}
+                        className="foto-perfil-chica"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombrePersona)}&background=0D1B2A&color=fff`;
+                        }}
+                      />
                       <div className="text-start">
                         <p className="mb-0 fw-bold texto-principal" style={{ fontSize: '0.9rem' }}>
                           {nombrePersona}
@@ -1559,7 +1367,7 @@ export default function Inicio() {
           {error && <p className="text-center text-danger py-3">{error}</p>}
           {!cargando && publicaciones.length === 0 && <p className="text-center text-muted py-3">El muro está vacío.</p>}
 
-          {/* MAPEO RE-DISEÑADO CON NUESTRA ESTRUCTURA DUAL */}
+          {/* MAPEO DE PUBLICACIONES */}
           {publicaciones.map((pub) => {
             const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
             const tieneMultimedia = pub.multimedia && pub.multimedia.length > 0 && pub.multimedia[0];
@@ -1568,180 +1376,96 @@ export default function Inicio() {
             const ubicacionPost = normalizarTexto(pub.ubicacionTexto || pub.ubicacion?.texto || pub.ubicacion?.direccion || '');
             const etiquetasMultimediaPost = Array.isArray(pub.etiquetasMultimedia) ? pub.etiquetasMultimedia : [];
             const eventoRelacionadoPost = obtenerEventoRelacionadoDePublicacion(pub);
-            const autorId = obtenerIdPersonaPerfil(pub.autor);
+            
+            const autorId = obtenerIdPersonaPerfil(pub.autor) || obtenerIdPersonaPerfil(pub.usuario);
+            const imagenAutor = obtenerImagenDeEntidad(pub.autor) || obtenerImagenDeEntidad(pub.usuario);
+            const nombreAutor = obtenerNombreDeEntidad(pub.autor) || obtenerNombreDeEntidad(pub.usuario, 'Familiar');
+            const srcAvatarAutor = obtenerUrlImagenPerfil(imagenAutor, nombreAutor);
 
             return (
               <div key={pub._id} className="tarjeta shadow-sm mb-4">
-
-                {pub.tipo === 'historico' ? (
-                  <>
-                    <div className="d-flex justify-content-between align-items-start mb-2">
-                      <div className="d-flex gap-3 align-items-center">
-                        {pub.autor?.imagenPerfil?.urlArchivo ? (
-                          <img
-                            src={resolverUrlBackend(pub.autor.imagenPerfil.urlArchivo)}
-                            alt={pub.autor?.nombreUsuario}
-                            className="rounded-circle me-2 object-fit-cover perfil-interactivo"
-                            style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
-                            onClick={() => autorId && irAPerfil(pub.autor)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if ((e.key === 'Enter' || e.key === ' ') && autorId) {
-                                e.preventDefault();
-                                irAPerfil(pub.autor);
-                              }
-                            }}
-                          />
-                        ) : (
-                          <img
-                            src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`}
-                            alt="Autor"
-                            className="foto-perfil-post perfil-interactivo"
-                            onClick={() => autorId && irAPerfil(pub.autor)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if ((e.key === 'Enter' || e.key === ' ') && autorId) {
-                                e.preventDefault();
-                                irAPerfil(pub.autor);
-                              }
-                            }}
-                          />
-                        )}
-                        <div>
-                          <div className="etiqueta-tipo-publicacion"><span>RECUERDO HISTÓRICO</span></div>
-                          <div className="d-flex align-items-baseline gap-2 mt-1">
-                            <p
-                              className={`nombre-autor fs-5 mb-0 ${autorId ? 'perfil-interactivo' : ''}`}
-                              onClick={() => autorId && irAPerfil(pub.autor)}
-                              role={autorId ? 'button' : undefined}
-                              tabIndex={autorId ? 0 : undefined}
-                              onKeyDown={(e) => {
-                                if ((e.key === 'Enter' || e.key === ' ') && autorId) {
-                                  e.preventDefault();
-                                  irAPerfil(pub.autor);
-                                }
-                              }}
-                            >
-                              {pub.autor?.nombreUsuario || 'Usuario'}
-                            </p>
-                            <span className="info-autor mb-0">{fechaFormateada}</span>
-                          </div>
-                          <div className="etiqueta-historica-inferior">
-                            <i className="bi bi-globe-americas text-muted" title="Público"></i>
-                            <span>{pub.etiqueta?.nombre || 'Sin Etiqueta'}</span>
-                            {pub.anio && <span className="anio-historico">• {pub.anio}</span>}
-                          </div>
-                          {ubicacionPost && <div className="ubicacion-post-render"><i className="bi bi-geo-alt-fill"></i>{ubicacionPost}</div>}
-                        </div>
+                <div className="d-flex justify-content-between align-items-start mb-2">
+                  <div className="d-flex gap-3 align-items-center">
+                    <img
+                      src={srcAvatarAutor}
+                      alt={nombreAutor}
+                      className="rounded-circle me-2 object-fit-cover perfil-interactivo"
+                      style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreAutor)}&background=0D1B2A&color=fff`;
+                      }}
+                      onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if ((e.key === 'Enter' || e.key === ' ') && autorId) {
+                          e.preventDefault();
+                          irAPerfil(pub.autor || pub.usuario);
+                        }
+                      }}
+                    />
+                    <div>
+                      <div className="etiqueta-tipo-publicacion">
+                        <span>{pub.tipo === 'historico' ? 'RECUERDO HISTÓRICO' : 'MOMENTO FAMILIAR'}</span>
                       </div>
-                      <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
+                      <div className="d-flex align-items-baseline gap-2 mt-1">
+                        <p
+                          className={`nombre-autor fs-5 mb-0 ${autorId ? 'perfil-interactivo' : ''}`}
+                          onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}
+                          role={autorId ? 'button' : undefined}
+                          tabIndex={autorId ? 0 : undefined}
+                          onKeyDown={(e) => {
+                            if ((e.key === 'Enter' || e.key === ' ') && autorId) {
+                              e.preventDefault();
+                              irAPerfil(pub.autor || pub.usuario);
+                            }
+                          }}
+                        >
+                          {nombreAutor}
+                        </p>
+                        <span className="info-autor mb-0">{fechaFormateada}</span>
+                      </div>
+                      {pub.tipo === 'historico' ? (
+                        <div className="etiqueta-historica-inferior">
+                          <i className="bi bi-globe-americas text-muted" title="Público"></i>
+                          <span>{pub.etiqueta?.nombre || 'Sin Etiqueta'}</span>
+                          {pub.anio && <span className="anio-historico">• {pub.anio}</span>}
+                        </div>
+                      ) : (
+                        <div className="etiqueta-contexto-familiar">
+                          <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i><span>Con Familia</span>
+                        </div>
+                      )}
+                      {ubicacionPost && <div className="ubicacion-post-render"><i className="bi bi-geo-alt-fill"></i>{ubicacionPost}</div>}
+                      {pub.tipo !== 'historico' && eventoRelacionadoPost && renderChipEventoPublicacion(eventoRelacionadoPost)}
                     </div>
+                  </div>
+                  <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
+                </div>
 
-                    <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
+                <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
 
-                    {tieneMultimedia && (
-                      <div className="contenedor-polaroid">
-                        <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
-                          {esVideo ? (
-                            <video src={urlMultimedia} className="imagen-post-historico w-100" controls controlsList="nodownload" />
-                          ) : (
-                            <img src={urlMultimedia} alt="Recuerdo" className="imagen-post-historico" />
-                          )}
-                        </div>
-                        <div className="carrusel-indicadores"><span className="carrusel-dot activo"></span></div>
-                      </div>
-                    )}
-
-                    {etiquetasMultimediaPost.length > 0 && (
-                      <div className="etiquetas-post-render">
-                        <i className="bi bi-person-bounding-box"></i>
-                        {etiquetasMultimediaPost.map((persona, index) => persona.nombre || persona.nombreUsuario || persona).join(', ')}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div className="d-flex justify-content-between align-items-start mb-2">
-                      <div className="d-flex gap-3 align-items-center">
-                        {pub.autor?.imagenPerfil?.urlArchivo ? (
-                          <img
-                            src={resolverUrlBackend(pub.autor.imagenPerfil.urlArchivo)}
-                            alt={pub.autor?.nombreUsuario}
-                            className="rounded-circle me-2 object-fit-cover perfil-interactivo"
-                            style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
-                            onClick={() => autorId && irAPerfil(pub.autor)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if ((e.key === 'Enter' || e.key === ' ') && autorId) {
-                                e.preventDefault();
-                                irAPerfil(pub.autor);
-                              }
-                            }}
-                          />
-                        ) : (
-                          <img
-                            src={`https://ui-avatars.com/api/?name=${pub.autor?.nombreUsuario || 'Familiar'}&background=cbd5e1`}
-                            alt="Autor"
-                            className="foto-perfil-post perfil-interactivo"
-                            onClick={() => autorId && irAPerfil(pub.autor)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if ((e.key === 'Enter' || e.key === ' ') && autorId) {
-                                e.preventDefault();
-                                irAPerfil(pub.autor);
-                              }
-                            }}
-                          />
-                        )}
-                        <div>
-                          <div className="etiqueta-tipo-publicacion"><span>MOMENTO FAMILIAR</span></div>
-                          <div className="d-flex align-items-baseline gap-2 mt-1">
-                            <p
-                              className={`nombre-autor fs-5 mb-0 ${autorId ? 'perfil-interactivo' : ''}`}
-                              onClick={() => autorId && irAPerfil(pub.autor)}
-                              role={autorId ? 'button' : undefined}
-                              tabIndex={autorId ? 0 : undefined}
-                              onKeyDown={(e) => {
-                                if ((e.key === 'Enter' || e.key === ' ') && autorId) {
-                                  e.preventDefault();
-                                  irAPerfil(pub.autor);
-                                }
-                              }}
-                            >
-                              {pub.autor?.nombreUsuario || 'Usuario'}
-                            </p>
-                            <span className="info-autor mb-0">{fechaFormateada}</span>
-                          </div>
-                          <div className="etiqueta-contexto-familiar">
-                            <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i><span>Con Familia</span>
-                          </div>
-                          {ubicacionPost && <div className="ubicacion-post-render"><i className="bi bi-geo-alt-fill"></i>{ubicacionPost}</div>}
-                          {eventoRelacionadoPost && renderChipEventoPublicacion(eventoRelacionadoPost)}
-                        </div>
-                      </div>
-                      <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
+                {tieneMultimedia && (
+                  <div className={pub.tipo === 'historico' ? 'contenedor-polaroid' : 'contenedor-moderno'}>
+                    <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
+                      {esVideo ? (
+                        <video src={urlMultimedia} className={pub.tipo === 'historico' ? 'imagen-post-historico w-100' : 'imagen-post-moderna w-100'} controls controlsList="nodownload" />
+                      ) : (
+                        <img src={urlMultimedia} alt="Recuerdo" className={pub.tipo === 'historico' ? 'imagen-post-historico' : 'imagen-post-moderna'} />
+                      )}
                     </div>
+                    <div className={pub.tipo === 'historico' ? 'carrusel-indicadores' : 'carrusel-indicadores-moderno'}>
+                      <span className={pub.tipo === 'historico' ? 'carrusel-dot activo' : 'carrusel-dot-moderno activo'}></span>
+                    </div>
+                  </div>
+                )}
 
-                    <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
-
-                    {tieneMultimedia && (
-                      <div className="contenedor-moderno">
-                        {esVideo ? <video src={urlMultimedia} className="imagen-post-moderna w-100" controls controlsList="nodownload" /> : <img src={urlMultimedia} alt="Recuerdo" className="imagen-post-moderna" />}
-                        <div className="carrusel-indicadores-moderno"><span className="carrusel-dot-moderno activo"></span></div>
-                      </div>
-                    )}
-
-                    {etiquetasMultimediaPost.length > 0 && (
-                      <div className="etiquetas-post-render">
-                        <i className="bi bi-person-bounding-box"></i>
-                        {etiquetasMultimediaPost.map((persona, index) => persona.nombre || persona.nombreUsuario || persona).join(', ')}
-                      </div>
-                    )}
-                  </>
+                {etiquetasMultimediaPost.length > 0 && (
+                  <div className="etiquetas-post-render">
+                    <i className="bi bi-person-bounding-box"></i>
+                    {etiquetasMultimediaPost.map((persona) => persona.nombre || persona.nombreUsuario || persona).join(', ')}
+                  </div>
                 )}
 
                 <div className="d-flex justify-content-between mt-4 pt-3 border-top">
