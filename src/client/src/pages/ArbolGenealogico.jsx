@@ -891,8 +891,17 @@ const TarjetaPareja = ({
             if (modoEliminar && unionId) {
               e.stopPropagation();
               alEliminarUnion(unionId);
+              return;
+            }
+
+            if (puedeEditarUnion && !modoEliminar) {
+              e.stopPropagation();
+              establecerMenuUnionAbierto(prev => !prev);
             }
           }}
+          role={puedeEditarUnion ? 'button' : undefined}
+          tabIndex={puedeEditarUnion ? 0 : undefined}
+          title={puedeEditarUnion ? `Cambiar estado de relación: ${configUnion.etiqueta}` : configUnion.etiqueta}
         >
           <div className="icono-union-actual" title={configUnion.etiqueta}>
             <IconoUnion tipoUnion={tipoUnion} />
@@ -5015,7 +5024,7 @@ La persona seguirá dentro del árbol como miembro normal.`
 
         {/* --- PANELES LATERALES DERECHOS CONDICIONALES --- */}
         {(nodoSeleccionado || mostrarFiltros || mostrarInvitar || mostrarEventos) && !modoColocacion && !modoRelacionar && !modoEliminar && !modoMover && (
-          <div className="panel-lateral-derecho d-none d-lg-flex">
+          <div className="panel-lateral-derecho">
             {nodoSeleccionado ? (
               <div className="d-flex flex-column h-100 position-relative">
                 <button className="boton-cerrar-panel btn-cerrar-absoluto" onClick={() => establecerNodoSeleccionado(null)}><i className="bi bi-x"></i></button>
@@ -5843,7 +5852,7 @@ La persona seguirá dentro del árbol como miembro normal.`
                       )}
                     </div>
 
-                    <div className="p-4 border-top" style={{ borderColor: 'var(--borde-color)', backgroundColor: 'var(--fondo-tarjeta)' }}>
+                    <div className="p-4 border-top acciones-eventos-footer" style={{ borderColor: 'var(--borde-color)', backgroundColor: 'var(--fondo-tarjeta)' }}>
                       <button
                         className="btn w-100 rounded-pill"
                         style={{ backgroundColor: 'var(--dorado)', color: 'white', fontWeight: 'bold', padding: '10px 0' }}

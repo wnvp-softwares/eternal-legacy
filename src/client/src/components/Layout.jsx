@@ -1,31 +1,428 @@
-import React, { useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Layout.css';
-import { resolverUrlBackend } from '../config/env';
+import { API_BASE_URL, resolverUrlBackend } from '../config/env';
+
+const CLAVE_BUSQUEDAS_RECIENTES = 'legacy_busquedas_recientes';
+
+const normalizarTexto = (texto = '') => String(texto || '').trim();
+
+const obtenerId = (valor) => {
+  if (!valor) return null;
+  if (typeof valor === 'string') return valor;
+  return valor._id || valor.id || null;
+};
 
 const obtenerUrlImagenPerfil = (imagen, nombreFallback = 'Usuario') => {
-  if (!imagen) {
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreFallback)}&background=0D1B2A&color=fff`;
-  }
+  const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreFallback || 'Usuario')}&background=0D1B2A&color=fff`;
+
+  if (!imagen) return avatarFallback;
+
   if (typeof imagen === 'string') {
-    return imagen.startsWith('http') ? imagen : resolverUrlBackend(imagen);
+    const rutaLimpia = imagen.trim();
+    if (!rutaLimpia || rutaLimpia === 'undefined' || rutaLimpia === 'null' || rutaLimpia === '[object Object]') {
+      return avatarFallback;
+    }
+    return rutaLimpia.startsWith('http') ? rutaLimpia : resolverUrlBackend(rutaLimpia);
   }
-  if (typeof imagen === 'object' && imagen?.urlArchivo) {
-    return resolverUrlBackend(imagen.urlArchivo);
+
+  if (typeof imagen === 'object') {
+    const ruta = imagen.urlArchivo || imagen.url || imagen.path || imagen.secure_url || imagen.location || imagen.ruta || imagen.src;
+    if (ruta && typeof ruta === 'string') {
+      return ruta.startsWith('http') ? ruta : resolverUrlBackend(ruta);
+    }
   }
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreFallback)}&background=0D1B2A&color=fff`;
+
+  return avatarFallback;
+};
+
+const obtenerNombreEntidad = (entidad = {}, fallback = 'Usuario') => {
+  if (!entidad) return fallback;
+  if (typeof entidad === 'string') return entidad;
+
+  return normalizarTexto(
+    entidad.nombreUsuario ||
+    entidad.nombre ||
+    entidad.nombreCompleto ||
+    entidad.autor?.nombreUsuario ||
+    entidad.usuario?.nombreUsuario ||
+    entidad.id?.nombreUsuario ||
+    fallback
+  );
+};
+
+const obtenerImagenEntidad = (entidad = {}) => {
+  if (!entidad) return null;
+  if (typeof entidad === 'string') return entidad;
+
+  return (
+    entidad.imagenPerfil ||
+    entidad.fotoPerfil ||
+    entidad.img ||
+    entidad.imagen ||
+    entidad.foto ||
+    entidad.avatar ||
+    entidad.urlImagen ||
+    entidad.autor?.imagenPerfil ||
+    entidad.usuario?.imagenPerfil ||
+    entidad.id?.imagenPerfil ||
+    null
+  );
+};
+
+const normalizarPersonaResultado = (persona = {}) => {
+  const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id);
+  const nombre = obtenerNombreEntidad(persona, 'Usuario');
+  const imagen = obtenerImagenEntidad(persona);
+
+  return {
+    ...persona,
+    id,
+    nombre,
+    imagen,
+    tipoResultado: 'persona'
+  };
+};
+
+const normalizarPublicacionResultado = (publicacion = {}) => {
+  const id = obtenerId(publicacion);
+  const autor = publicacion.autor || {};
+  const nombreAutor = obtenerNombreEntidad(autor, 'Usuario');
+  const imagenAutor = obtenerImagenEntidad(autor);
+  const contenido = normalizarTexto(publicacion.contenido || publicacion.texto || 'Publicación sin texto');
+  const multimedia = Array.isArray(publicacion.multimedia) ? publicacion.multimedia[0] : null;
+
+  return {
+    ...publicacion,
+    id,
+    nombreAutor,
+    imagenAutor,
+    contenido,
+    vistaPreviaMultimedia: multimedia?.urlArchivo || multimedia?.url || null,
+    tipoResultado: 'publicacion'
+  };
+};
+
+const leerBusquedasRecientes = () => {
+  try {
+    const guardadas = JSON.parse(localStorage.getItem(CLAVE_BUSQUEDAS_RECIENTES) || '[]');
+    return Array.isArray(guardadas) ? guardadas.slice(0, 8) : [];
+  } catch (error) {
+    return [];
+  }
 };
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const contenedorBusquedaRef = useRef(null);
+  const inputBusquedaMovilRef = useRef(null);
 
   const [dropdownAbierto, setDropdownAbierto] = useState(false);
   const [textoBusqueda, setTextoBusqueda] = useState('');
+  const [busquedaAbierta, setBusquedaAbierta] = useState(false);
+  const [busquedaMovilAbierta, setBusquedaMovilAbierta] = useState(false);
+  const [buscandoGlobal, setBuscandoGlobal] = useState(false);
+  const [resultadosBusquedaGlobal, setResultadosBusquedaGlobal] = useState({
+    personas: [],
+    publicaciones: []
+  });
+  const [busquedasRecientes, setBusquedasRecientes] = useState(leerBusquedasRecientes);
 
-  const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+  const usuarioLogueado = JSON.parse(localStorage.getItem('usuario') || '{}');
+  const token = localStorage.getItem('token');
+  const queryBusqueda = textoBusqueda.trim();
 
   const esActiva = (ruta) => location.pathname.includes(ruta);
+
+  const guardarBusquedasRecientes = (nuevasBusquedas) => {
+    const limitadas = nuevasBusquedas.slice(0, 8);
+    setBusquedasRecientes(limitadas);
+    localStorage.setItem(CLAVE_BUSQUEDAS_RECIENTES, JSON.stringify(limitadas));
+  };
+
+  const agregarBusquedaReciente = (item) => {
+    if (!item) return;
+
+    const itemNormalizado = {
+      tipo: item.tipo || 'busqueda',
+      texto: normalizarTexto(item.texto || item.nombre || textoBusqueda),
+      id: item.id || null,
+      nombre: item.nombre || item.texto || '',
+      imagen: item.imagen || null
+    };
+
+    if (!itemNormalizado.texto && !itemNormalizado.nombre) return;
+
+    const claveNueva = `${itemNormalizado.tipo}-${itemNormalizado.id || itemNormalizado.texto || itemNormalizado.nombre}`.toLowerCase();
+    const sinDuplicados = busquedasRecientes.filter((busqueda) => {
+      const claveActual = `${busqueda.tipo}-${busqueda.id || busqueda.texto || busqueda.nombre}`.toLowerCase();
+      return claveActual !== claveNueva;
+    });
+
+    guardarBusquedasRecientes([itemNormalizado, ...sinDuplicados]);
+  };
+
+  const limpiarBusquedasRecientes = () => {
+    guardarBusquedasRecientes([]);
+  };
+
+  const cerrarBuscador = ({ limpiarTexto = false } = {}) => {
+    setBusquedaAbierta(false);
+    setBusquedaMovilAbierta(false);
+    if (limpiarTexto) {
+      setTextoBusqueda('');
+      setResultadosBusquedaGlobal({ personas: [], publicaciones: [] });
+    }
+  };
+
+  const abrirBuscadorMovil = () => {
+    setDropdownAbierto(false);
+    setBusquedaMovilAbierta(true);
+    setBusquedaAbierta(true);
+  };
+
+  const ejecutarBusquedaEnter = () => {
+    if (!queryBusqueda) return;
+    agregarBusquedaReciente({ tipo: 'busqueda', texto: queryBusqueda });
+    setBusquedaAbierta(false);
+    setBusquedaMovilAbierta(false);
+    navigate('/inicio');
+  };
+
+  const seleccionarPersona = (persona) => {
+    if (!persona?.id) return;
+    agregarBusquedaReciente({
+      tipo: 'persona',
+      id: persona.id,
+      nombre: persona.nombre,
+      texto: persona.nombre,
+      imagen: persona.imagen
+    });
+    cerrarBuscador({ limpiarTexto: true });
+    navigate(`/perfil/${persona.id}`);
+  };
+
+  const seleccionarPublicacion = (publicacion) => {
+    agregarBusquedaReciente({ tipo: 'busqueda', texto: queryBusqueda || publicacion.contenido?.slice(0, 40) || 'Publicación' });
+    setBusquedaAbierta(false);
+    setBusquedaMovilAbierta(false);
+    navigate('/inicio');
+  };
+
+  const seleccionarReciente = (busqueda) => {
+    if (busqueda.tipo === 'persona' && busqueda.id) {
+      seleccionarPersona({ id: busqueda.id, nombre: busqueda.nombre || busqueda.texto, imagen: busqueda.imagen });
+      return;
+    }
+
+    setTextoBusqueda(busqueda.texto || busqueda.nombre || '');
+    setBusquedaAbierta(true);
+  };
+
+  useEffect(() => {
+    if (!busquedaMovilAbierta) return;
+
+    const timer = setTimeout(() => {
+      inputBusquedaMovilRef.current?.focus();
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [busquedaMovilAbierta]);
+
+  useEffect(() => {
+    const manejarClickFuera = (evento) => {
+      if (busquedaMovilAbierta) return;
+      if (contenedorBusquedaRef.current && !contenedorBusquedaRef.current.contains(evento.target)) {
+        setBusquedaAbierta(false);
+      }
+    };
+
+    document.addEventListener('mousedown', manejarClickFuera);
+    return () => document.removeEventListener('mousedown', manejarClickFuera);
+  }, [busquedaMovilAbierta]);
+
+  useEffect(() => {
+    const manejarEscape = (evento) => {
+      if (evento.key === 'Escape') {
+        cerrarBuscador();
+      }
+    };
+
+    document.addEventListener('keydown', manejarEscape);
+    return () => document.removeEventListener('keydown', manejarEscape);
+  }, []);
+
+  useEffect(() => {
+    if (!token || !queryBusqueda) {
+      setResultadosBusquedaGlobal({ personas: [], publicaciones: [] });
+      setBuscandoGlobal(false);
+      return;
+    }
+
+    const controlador = new AbortController();
+    const temporizador = setTimeout(async () => {
+      try {
+        setBuscandoGlobal(true);
+        const respuesta = await fetch(`${API_BASE_URL}/publicaciones/buscar?q=${encodeURIComponent(queryBusqueda)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controlador.signal
+        });
+
+        if (!respuesta.ok) {
+          setResultadosBusquedaGlobal({ personas: [], publicaciones: [] });
+          return;
+        }
+
+        const datos = await respuesta.json();
+        setResultadosBusquedaGlobal({
+          personas: (Array.isArray(datos.personas) ? datos.personas : []).map(normalizarPersonaResultado).slice(0, 6),
+          publicaciones: (Array.isArray(datos.publicaciones) ? datos.publicaciones : []).map(normalizarPublicacionResultado).slice(0, 5)
+        });
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          setResultadosBusquedaGlobal({ personas: [], publicaciones: [] });
+        }
+      } finally {
+        setBuscandoGlobal(false);
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(temporizador);
+      controlador.abort();
+    };
+  }, [queryBusqueda, token]);
+
+  const renderBusquedasRecientes = () => (
+    <div className="busqueda-seccion">
+      <div className="busqueda-seccion-header">
+        <span>Búsquedas recientes</span>
+        {busquedasRecientes.length > 0 && (
+          <button type="button" onClick={limpiarBusquedasRecientes}>Borrar</button>
+        )}
+      </div>
+
+      {busquedasRecientes.length === 0 ? (
+        <div className="busqueda-estado-vacio">
+          <i className="bi bi-clock-history"></i>
+          <p>Aquí aparecerán tus búsquedas recientes.</p>
+        </div>
+      ) : (
+        busquedasRecientes.map((busqueda) => {
+          const esPersona = busqueda.tipo === 'persona';
+          const texto = busqueda.nombre || busqueda.texto || 'Búsqueda';
+
+          return (
+            <button
+              key={`${busqueda.tipo}-${busqueda.id || busqueda.texto || texto}`}
+              type="button"
+              className="resultado-busqueda-item"
+              onClick={() => seleccionarReciente(busqueda)}
+            >
+              <span className="avatar-busqueda avatar-reciente">
+                {esPersona && busqueda.imagen ? (
+                  <img src={obtenerUrlImagenPerfil(busqueda.imagen, texto)} alt={texto} />
+                ) : (
+                  <i className={`bi ${esPersona ? 'bi-person' : 'bi-clock-history'}`}></i>
+                )}
+              </span>
+              <span className="contenido-resultado-busqueda">
+                <strong>{texto}</strong>
+                <small>{esPersona ? 'Perfil reciente' : 'Búsqueda reciente'}</small>
+              </span>
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
+
+  const renderResultadosBusqueda = () => {
+    const personas = resultadosBusquedaGlobal.personas || [];
+    const publicaciones = resultadosBusquedaGlobal.publicaciones || [];
+    const hayResultados = personas.length > 0 || publicaciones.length > 0;
+
+    if (buscandoGlobal) {
+      return (
+        <div className="busqueda-estado-vacio">
+          <i className="bi bi-search"></i>
+          <p>Buscando...</p>
+        </div>
+      );
+    }
+
+    if (!hayResultados) {
+      return (
+        <div className="busqueda-estado-vacio">
+          <i className="bi bi-emoji-neutral"></i>
+          <p>No encontramos resultados para “{queryBusqueda}”.</p>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {personas.length > 0 && (
+          <div className="busqueda-seccion">
+            <div className="busqueda-seccion-header"><span>Personas</span></div>
+            {personas.map((persona) => (
+              <button
+                key={persona.id || persona.nombre}
+                type="button"
+                className="resultado-busqueda-item"
+                onClick={() => seleccionarPersona(persona)}
+              >
+                <span className="avatar-busqueda">
+                  <img src={obtenerUrlImagenPerfil(persona.imagen, persona.nombre)} alt={persona.nombre} />
+                </span>
+                <span className="contenido-resultado-busqueda">
+                  <strong>{persona.nombre}</strong>
+                  <small>Ver perfil</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {publicaciones.length > 0 && (
+          <div className="busqueda-seccion">
+            <div className="busqueda-seccion-header"><span>Publicaciones</span></div>
+            {publicaciones.map((publicacion) => (
+              <button
+                key={publicacion.id || publicacion.contenido}
+                type="button"
+                className="resultado-busqueda-item publicacion"
+                onClick={() => seleccionarPublicacion(publicacion)}
+              >
+                <span className="avatar-busqueda">
+                  <img src={obtenerUrlImagenPerfil(publicacion.imagenAutor, publicacion.nombreAutor)} alt={publicacion.nombreAutor} />
+                </span>
+                <span className="contenido-resultado-busqueda">
+                  <strong>{publicacion.nombreAutor}</strong>
+                  <small>{publicacion.contenido}</small>
+                </span>
+                {publicacion.vistaPreviaMultimedia && (
+                  <img
+                    className="miniatura-publicacion-busqueda"
+                    src={resolverUrlBackend(publicacion.vistaPreviaMultimedia)}
+                    alt="Vista previa"
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  };
+
+  const renderContenidoBuscador = () => (
+    <>
+      {!queryBusqueda ? renderBusquedasRecientes() : renderResultadosBusqueda()}
+    </>
+  );
 
   return (
     <div className="layout-principal">
@@ -37,20 +434,50 @@ export default function Layout() {
         </div>
 
         <div className="flex-grow-1 d-flex justify-content-center d-none d-md-flex">
-          <div className="contenedor-busqueda">
+          <div className="contenedor-busqueda" ref={contenedorBusquedaRef}>
             <i className="bi bi-search icono-busqueda"></i>
             <input
               type="text"
               className="barra-busqueda"
-              placeholder="Buscar recuerdos, familiares, o árboles..."
+              placeholder="Buscar recuerdos, familiares o personas..."
               value={textoBusqueda}
-              onChange={(e) => setTextoBusqueda(e.target.value)}
+              onFocus={() => setBusquedaAbierta(true)}
+              onChange={(e) => {
+                setTextoBusqueda(e.target.value);
+                setBusquedaAbierta(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') ejecutarBusquedaEnter();
+              }}
             />
+            {textoBusqueda && (
+              <button
+                type="button"
+                className="boton-limpiar-busqueda"
+                onClick={() => cerrarBuscador({ limpiarTexto: true })}
+                aria-label="Limpiar búsqueda"
+              >
+                <i className="bi bi-x"></i>
+              </button>
+            )}
+
+            {busquedaAbierta && !busquedaMovilAbierta && (
+              <div className="panel-busqueda-global shadow-lg">
+                {renderContenidoBuscador()}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="d-flex align-items-center justify-content-end gap-3 gap-md-4" style={{ minWidth: '150px' }}>
-          <div className="d-md-none position-relative iconos-nav"><i className="bi bi-search"></i></div>
+          <button
+            type="button"
+            className="d-md-none position-relative iconos-nav boton-busqueda-movil"
+            onClick={abrirBuscadorMovil}
+            aria-label="Abrir búsqueda"
+          >
+            <i className="bi bi-search"></i>
+          </button>
 
           {/* --- MENSAJES Y NOTIFICACIONES --- */}
           <Link to="/mensajes" className="position-relative iconos-nav text-decoration-none">
@@ -107,6 +534,38 @@ export default function Layout() {
           </div>
         </div>
       </nav>
+
+      {busquedaMovilAbierta && (
+        <div className="modal-busqueda-movil">
+          <div className="cabecera-busqueda-movil">
+            <button type="button" className="boton-volver-busqueda" onClick={() => cerrarBuscador()}>
+              <i className="bi bi-arrow-left"></i>
+            </button>
+            <div className="input-busqueda-movil-contenedor">
+              <i className="bi bi-search"></i>
+              <input
+                ref={inputBusquedaMovilRef}
+                type="text"
+                value={textoBusqueda}
+                placeholder="Buscar personas o recuerdos..."
+                onChange={(e) => setTextoBusqueda(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') ejecutarBusquedaEnter();
+                }}
+              />
+              {textoBusqueda && (
+                <button type="button" onClick={() => cerrarBuscador({ limpiarTexto: true })}>
+                  <i className="bi bi-x-circle-fill"></i>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="contenido-busqueda-movil">
+            {renderContenidoBuscador()}
+          </div>
+        </div>
+      )}
 
       {/* CONTENEDOR PRINCIPAL */}
       <div className="contenedor-contenido d-flex">

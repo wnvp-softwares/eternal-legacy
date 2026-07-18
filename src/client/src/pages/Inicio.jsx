@@ -307,7 +307,7 @@ const normalizarEventoInicio = (evento = {}, arbol = {}, preferencias = {}) => {
 
 export default function Inicio() {
   const navigate = useNavigate();
-  const { textoBusqueda } = useOutletContext();
+  const { textoBusqueda = '' } = useOutletContext() || {};
   const { idioma, zonaHoraria } = usePreferencias();
   const [marcaTiempoActual, setMarcaTiempoActual] = useState(Date.now());
 
