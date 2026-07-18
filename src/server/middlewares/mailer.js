@@ -10,8 +10,7 @@ const transporter = nodemailer.createTransport({
 });
 
 /**
- * Envía códigos de seguridad por correo.
- * Por defecto se usa para registro, pero también puede usarse para 2FA.
+ * Envía códigos de seguridad por correo con el estilo institucional de Legacy.
  *
  * @param {string} email - Destino
  * @param {string} codigo - Código de 6 dígitos
@@ -30,15 +29,83 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
             from: `"Legacy" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: asunto,
-            text: `${accion} ${codigo}`,
+            text: `${titulo}\n\n${descripcion}\n\n${accion} ${codigo}\n\nEste código expira en unos minutos. Si no solicitaste este acceso, puedes ignorar este correo.`,
             html: `
-                <div style="font-family: Arial, sans-serif; color: #0D1B2A; line-height: 1.5;">
-                    <h2 style="margin-bottom: 8px;">${titulo}</h2>
-                    <p>${descripcion}</p>
-                    <p style="margin-top: 20px;">${accion}</p>
-                    <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px; margin: 12px 0;">${codigo}</p>
-                    <p style="color: #64748b; font-size: 13px;">Este código expira en unos minutos. Si no solicitaste este acceso, puedes ignorar este correo.</p>
-                </div>
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${titulo}</title>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f4f6f8; font-family: Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f8; padding: 30px 10px;">
+                    <tr>
+                        <td align="center">
+                            <!-- Contenedor Principal -->
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+                                
+                                <!-- Cabecera con Azul Marino e Inserción Dorada -->
+                                <tr>
+                                    <td align="center" style="background-color: #0D1B2A; padding: 32px 20px; border-bottom: 3px solid #CBA135;">
+                                        <h1 style="margin: 0; color: #ffffff; font-family: 'Playfair Display', Georgia, serif; font-size: 26px; font-weight: 700; letter-spacing: 2px;">
+                                            LEGACY
+                                        </h1>
+                                        <p style="margin: 4px 0 0 0; color: #CBA135; font-size: 11px; text-transform: uppercase; letter-spacing: 3px; font-weight: 600;">
+                                            Preservando tu historia
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <!-- Cuerpo del Mensaje -->
+                                <tr>
+                                    <td style="padding: 36px 32px; text-align: center;">
+                                        <h2 style="margin: 0 0 12px 0; color: #0D1B2A; font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 700;">
+                                            ${titulo}
+                                        </h2>
+                                        
+                                        <p style="margin: 0 0 24px 0; color: #475569; font-size: 15px; line-height: 1.6;">
+                                            ${descripcion}
+                                        </p>
+
+                                        <!-- Caja Resaltada con el Código -->
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
+                                            <tr>
+                                                <td align="center">
+                                                    <div style="background-color: #fef8eb; border: 1px solid rgba(203, 161, 53, 0.35); border-radius: 12px; padding: 18px 24px; display: inline-block;">
+                                                        <span style="display: block; color: #8c6b18; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;">
+                                                            ${accion}
+                                                        </span>
+                                                        <span style="font-family: 'Courier New', Courier, monospace; font-size: 34px; font-weight: 800; color: #0D1B2A; letter-spacing: 8px; display: block;">
+                                                            ${codigo}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <!-- Nota de Expiración -->
+                                        <p style="margin: 24px 0 0 0; color: #64748b; font-size: 13px; line-height: 1.5;">
+                                            Este código expira en pocos minutos.<br>Si no solicitaste este acceso, puedes ignorar este correo de forma segura.
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <!-- Pie de Página -->
+                                <tr>
+                                    <td style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #f1f5f9;">
+                                        <p style="margin: 0; color: #94a3b8; font-size: 12px;">
+                                            &copy; ${new Date().getFullYear()} Legacy. Todos los derechos reservados.
+                                        </p>
+                                    </td>
+                                </tr>
+
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
             `
         });
 
