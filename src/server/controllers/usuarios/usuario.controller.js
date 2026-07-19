@@ -2,6 +2,7 @@ const { Usuario, InformacionPerfil } = require('../../models/index.model');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const enviarCodigoVerificacion = require('../../middlewares/mailer');
+const { construirUrlPublicaArchivo } = require('../../configs/uploads.config');
 
 const DURACION_CODIGO_2FA_MS = 5 * 60 * 1000;
 const DURACION_TOKEN_2FA = '10m';
@@ -44,7 +45,7 @@ const crearTokenTemporal2FA = (usuarioId) => {
 };
 
 const obtenerUrlArchivo = (archivo) => {
-    return archivo?.urlArchivo ? `http://localhost:3000${archivo.urlArchivo}` : null;
+    return construirUrlPublicaArchivo(archivo?.urlArchivo);
 };
 
 const formatearUsuarioSesion = (usuario) => ({

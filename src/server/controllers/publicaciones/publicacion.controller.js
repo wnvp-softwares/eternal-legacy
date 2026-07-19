@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { Publicacion, Upload } = require('../../models/index.model');
 
 const EventoFamiliar = require('../../models/arboles/eventoFamiliar.model');
+const { construirRutaPublicaUpload } = require('../../configs/uploads.config');
 
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
@@ -170,7 +171,7 @@ const crearPublicacion = async (req, res) => {
         const idsMultimedia = [];
 
         if (req.file) {
-            const urlArchivo = `/uploads/${req.file.filename}`;
+            const urlArchivo = construirRutaPublicaUpload(req.file.filename);
 
             const nuevoUpload = new Upload({
                 propietario: req.usuario.id,

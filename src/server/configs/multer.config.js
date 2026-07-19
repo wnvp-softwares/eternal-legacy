@@ -1,13 +1,38 @@
 const multer = require('multer');
 const path = require('path');
 
+const {
+    UPLOADS_DIR,
+    MAX_UPLOAD_SIZE_BYTES,
+    asegurarDirectorioUploads
+} = require('./uploads.config');
+
+const limpiarNombreArchivo = (nombreOriginal = 'archivo') => {
+    const extension = path.extname(nombreOriginal);
+    const nombreBase = path.basename(nombreOriginal, extension);
+
+    const nombreSeguro = nombreBase
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9-_]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .toLowerCase() || 'archivo';
+
+    return `${nombreSeguro}${extension.toLowerCase()}`;
+};
+
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, path.join(__dirname, '../../uploads'));
+        asegurarDirectorioUploads();
+        cb(null, UPLOADS_DIR);
     },
+
     filename: function (req, file, cb) {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
+        const nombreSeguro = limpiarNombreArchivo(file.originalname);
+
+        cb(null, `${uniqueSuffix}-${nombreSeguro}`);
     }
 });
 
@@ -22,7 +47,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
     storage: storage,
     limits: {
-        fileSize: 1024 * 1024 * 50 // Límite máximo de 50MB por archivo
+        fileSize: MAX_UPLOAD_SIZE_BYTES
     },
     fileFilter: fileFilter
 });

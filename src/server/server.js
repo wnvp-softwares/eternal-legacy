@@ -1,9 +1,12 @@
 require('dotenv').config();
 const express = require('express');
-const router = express.Router();
 const cors = require('cors');
-const path = require('path');
 const conectarDB = require('./configs/database.config');
+const {
+    UPLOADS_DIR,
+    UPLOADS_PUBLIC_PATH,
+    asegurarDirectorioUploads
+} = require('./configs/uploads.config');
 const app = express();
 
 const CLIENT_URLS = (process.env.CLIENT_URLS || process.env.CLIENT_URL || 'http://localhost:5173')
@@ -26,8 +29,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Hacer pública la carpeta de uploads para ver las fotos
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Hacer pública la carpeta configurada para ver fotos y videos
+asegurarDirectorioUploads();
+app.use(UPLOADS_PUBLIC_PATH, express.static(UPLOADS_DIR));
 
 // --- IMPORTAR EL ÍNDICE CENTRAL DE RUTAS ---
 const rutasPrincipales = require('./routes/index.routes');
@@ -46,4 +50,5 @@ app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en el puerto: ${PORT}`);
     console.log(`Puedes probarlo entrando a ${process.env.BACKEND_BASE_URL || `http://localhost:${PORT}`}`);
     console.log(`Clientes permitidos por CORS: ${CLIENT_URLS.join(', ')}`);
+    console.log(`Uploads públicos: ${UPLOADS_PUBLIC_PATH} -> ${UPLOADS_DIR}`);
 });
