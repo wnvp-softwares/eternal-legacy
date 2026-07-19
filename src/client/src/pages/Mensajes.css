@@ -419,3 +419,37 @@
 .boton-toggle-banner:hover {
     background-color: rgba(16, 185, 129, 0.15);
 }
+
+/* Item del chat cuando tiene mensajes sin leer */
+.item-chat.tiene-no-leidos {
+    background-color: rgba(13, 110, 253, 0.05);
+    /* Un tono azul muy sutil de fondo */
+    border-left: 4px solid #0d6efd;
+    /* Barra lateral indicativa estilo Slack/WhatsApp */
+    transition: all 0.2s ease;
+}
+
+/* Animación y diseño del globo del contador */
+.el-globo-notificacion {
+    font-size: 0.75rem;
+    padding: 0.35em 0.65em;
+    background-color: #0d6efd !important;
+    /* Color azul de Bootstrap o usa el tuyo */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Asegurar que los nombres pesen más si no están leídos */
+.item-chat.tiene-no-leidos .nombre-chat {
+    font-weight: 700 !important;
+}
+
+/* El doble check en burbuja de enviados */
+.burbuja.enviado .bi-check-all {
+    color: #00e5ff !important;
+    /* Color cian/azul brillante para el "Leído" */
+}
+
+.burbuja.enviado .bi-check {
+    color: #a0a0a0;
+    /* Gris para el enviado simple */
+}

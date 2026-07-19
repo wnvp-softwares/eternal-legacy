@@ -4,6 +4,8 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Layout.css';
 import { API_BASE_URL, resolverUrlBackend } from '../config/env';
 
+import { trackearEvento } from '../utils/telemetria';
+
 const CLAVE_BUSQUEDAS_RECIENTES = 'legacy_busquedas_recientes';
 
 const normalizarTexto = (texto = '') => String(texto || '').trim();
@@ -130,6 +132,8 @@ export default function Layout() {
   });
   const [busquedasRecientes, setBusquedasRecientes] = useState(leerBusquedasRecientes);
 
+  const [mensajesNoLeidos, setMensajesNoLeidos] = useState(0);
+
   const usuarioLogueado = JSON.parse(localStorage.getItem('usuario') || '{}');
   const token = localStorage.getItem('token');
   const queryBusqueda = textoBusqueda.trim();
@@ -213,7 +217,7 @@ export default function Layout() {
 
   const seleccionarReciente = (busqueda) => {
     if (busqueda.tipo === 'persona' && busqueda.id) {
-      seleccionarPersona({ id: busqueda.id, nombre: busqueda.nombre || busqueda.texto, imagen: busqueda.imagen });
+      seleccionarPersona({ id: busqueda.id, text: busqueda.nombre || busqueda.texto, imagen: busqueda.imagen });
       return;
     }
 
@@ -255,6 +259,36 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
+    if (!token) return;
+
+    const obtenerTotalNoLeidos = async () => {
+      try {
+        const respuesta = await fetch(`${API_BASE_URL}/mensajes/contactos`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (respuesta.ok) {
+          const data = await respuesta.json();
+
+          const listaContactos = Array.isArray(data)
+            ? data
+            : (data.contactos || data.contactosPermitidos || data.personas || data.contactosDirectos || []);
+
+          const total = listaContactos.reduce((acc, contacto) => acc + (contacto.mensajesNoLeidos || 0), 0);
+          setMensajesNoLeidos(total);
+        }
+      } catch (error) {
+        console.error('Error al obtener el conteo de mensajes no leídos en Layout:', error);
+      }
+    };
+
+    obtenerTotalNoLeidos();
+
+    const intervalo = setInterval(obtenerTotalNoLeidos, 5000);
+    return () => clearInterval(intervalo);
+  }, [token]);
+
+  useEffect(() => {
     if (!token || !queryBusqueda) {
       setResultadosBusquedaGlobal({ personas: [], publicaciones: [] });
       setBuscandoGlobal(false);
@@ -294,6 +328,46 @@ export default function Layout() {
       controlador.abort();
     };
   }, [queryBusqueda, token]);
+
+  // Dentro de tu función Layout() en client/src/components/Layout.jsx
+
+  useEffect(() => {
+    // Registra automáticamente cada vez que el usuario cambia de pantalla
+    trackearEvento(
+      'navegacion',
+      'vista_pantalla',
+      location.pathname,
+      { fechaExacta: new Date().toISOString() }
+    );
+  }, [location.pathname]); // Se dispara cada vez que cambia la URL
+
+  // Dentro de tu función Layout() en client/src/components/Layout.jsx
+
+  useEffect(() => {
+    const manejarClickGlobal = (evento) => {
+      // Busca si el elemento clickeado (o alguno de sus padres) tiene el atributo 'data-track'
+      const elementoInteres = evento.target.closest('[data-track]');
+
+      if (!elementoInteres) return; // Si no tiene el atributo, lo ignoramos
+
+      // Extraemos los datos del botón/enlace de forma dinámica
+      const seccion = elementoInteres.getAttribute('data-seccion') || location.pathname;
+      const accion = elementoInteres.getAttribute('data-accion') || 'click_elemento';
+      const elementoId = elementoInteres.id || elementoInteres.getAttribute('data-id') || 'sin_id';
+
+      // Opcional: registrar texto interno del botón para la minería
+      const texto = elementoInteres.innerText?.trim().slice(0, 30) || '';
+
+      trackearEvento(seccion, accion, elementoId, { textoBoton: texto });
+    };
+
+    // Escuchamos absolutamente todos los clicks de la app
+    document.addEventListener('click', manejarClickGlobal);
+
+    return () => {
+      document.removeEventListener('click', manejarClickGlobal);
+    };
+  }, [location.pathname]);
 
   const renderBusquedasRecientes = () => (
     <div className="busqueda-seccion">
@@ -482,12 +556,17 @@ export default function Layout() {
           {/* --- MENSAJES Y NOTIFICACIONES --- */}
           <Link to="/mensajes" className="position-relative iconos-nav text-decoration-none">
             <i className="bi bi-chat"></i>
-            <span className="position-absolute badge-notificacion bg-warning text-dark rounded-circle">2</span>
+            {mensajesNoLeidos > 0 && (
+              <span className="position-absolute badge-notificacion bg-danger text-white rounded-circle">
+                {mensajesNoLeidos}
+              </span>
+            )}
           </Link>
 
-          <Link to="/notificaciones" className="position-relative iconos-nav text-decoration-none">
+          <Link to="/notificaciones" className="position-relative iconos-nav text-decoration-none" title="En desarrollo">
             <i className="bi bi-bell"></i>
-            <span className="position-absolute badge-notificacion bg-danger text-white rounded-circle">3</span>
+            {/* CORREGIDO: Se removió el punto rojo de notificaciones */}
+            <i className="bi bi-gear-fill position-absolute text-secondary" style={{ fontSize: '0.65rem', bottom: '-2px', left: '-2px', backgroundColor: 'white', borderRadius: '50%', padding: '1px' }}></i>
           </Link>
 
           {/* --- DROPDOWN DE PERFIL --- */}
@@ -569,13 +648,27 @@ export default function Layout() {
 
       {/* CONTENEDOR PRINCIPAL */}
       <div className="contenedor-contenido d-flex">
-        {/* SIDEBAR IZQUIERDA */}
+        {/* --- SIDEBAR IZQUIERDA --- */}
         <aside className="sidebar-izquierda d-none d-xl-flex flex-column border-end py-4">
           <Link to="/inicio" className={`item-menu ${esActiva('/inicio') ? 'activo' : ''}`}><i className="bi bi-house-door"></i> Inicio</Link>
           <Link to="/arbol-genealogico" className={`item-menu ${esActiva('/arbol-genealogico') ? 'activo' : ''}`}><i className="bi bi-diagram-3"></i> Árbol Genealógico</Link>
-          <Link to="/mensajes" className={`item-menu ${esActiva('/mensajes') ? 'activo' : ''}`}><i className="bi bi-chat-dots"></i> Mensajes</Link>
+
+          <Link to="/mensajes" className={`item-menu ${esActiva('/mensajes') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
+            <span><i className="bi bi-chat-dots"></i> Mensajes</span>
+            {mensajesNoLeidos > 0 && (
+              <span className="badge bg-danger rounded-pill px-2 py-1 me-3" style={{ fontSize: '0.75rem' }}>
+                {mensajesNoLeidos}
+              </span>
+            )}
+          </Link>
+
           <Link to="/red" className={`item-menu ${esActiva('/red') ? 'activo' : ''}`}><i className="bi bi-people"></i> Red</Link>
-          <Link to="/notificaciones" className={`item-menu ${esActiva('/notificaciones') ? 'activo' : ''}`}><i className="bi bi-bell"></i> Notificaciones</Link>
+
+          <Link to="/notificaciones" className={`item-menu ${esActiva('/notificaciones') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
+            <span><i className="bi bi-bell"></i> Notificaciones</span>
+            <i className="bi bi-gear-fill text-muted me-3" style={{ fontSize: '0.85rem' }} title="En desarrollo"></i>
+          </Link>
+
           <Link to="/perfil" className={`item-menu ${esActiva('/perfil') ? 'activo' : ''}`}><i className="bi bi-person"></i> Perfil</Link>
           <Link to="/configuracion" className={`item-menu ${esActiva('/configuracion') ? 'activo' : ''}`}><i className="bi bi-gear"></i> Configuración</Link>
         </aside>

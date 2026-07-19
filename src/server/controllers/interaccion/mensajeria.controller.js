@@ -37,35 +37,28 @@ const obtenerContactosPermitidos = async (req, res) => {
     try {
         const miId = req.usuario.id;
 
-        // A. IDs de Amigos Aceptados
+        // A, B, C. (Tu lógica exacta de IDs se mantiene igual...)
         const relacionesAmigos = await Amigo.find({
             $or: [{ usuarioSolicitante: miId }, { usuarioReceptor: miId }],
             estado: 'Aceptado'
         });
-        const idsAmigos = relacionesAmigos.map(a => 
+        const idsAmigos = relacionesAmigos.map(a =>
             a.usuarioSolicitante.toString() === miId ? a.usuarioReceptor.toString() : a.usuarioSolicitante.toString()
         );
 
-        // B. IDs de Familiares Aceptados
         const relacionesFamilia = await Familia.find({
             $or: [{ usuarioPrincipal: miId }, { familiar: miId }],
             estado: 'Aceptado'
         });
-        const idsFamilia = relacionesFamilia.map(f => 
+        const idsFamilia = relacionesFamilia.map(f =>
             f.usuarioPrincipal.toString() === miId ? f.familiar.toString() : f.usuarioPrincipal.toString()
         );
 
-        // C. IDs de Seguimiento Mutuo
         const siguiendo = await Seguidor.find({ seguidor: miId }).select('seguido');
         const idsQueSigo = siguiendo.map(s => s.seguido);
-        
-        const seguidoresMutuos = await Seguidor.find({
-            seguidor: { $in: idsQueSigo },
-            seguido: miId
-        });
+        const seguidoresMutuos = await Seguidor.find({ seguidor: { $in: idsQueSigo }, seguido: miId });
         const idsMutuos = seguidoresMutuos.map(s => s.seguidor.toString());
 
-        // D. Unir todos los IDs únicos
         const idsPermitidos = Array.from(new Set([...idsAmigos, ...idsFamilia, ...idsMutuos]));
 
         // E. Obtener perfiles de usuarios
@@ -73,7 +66,20 @@ const obtenerContactosPermitidos = async (req, res) => {
             .select('nombreUsuario email publicKey imagenPerfil')
             .populate({ path: 'imagenPerfil', select: 'urlArchivo' });
 
-        res.status(200).json(contactos);
+        // --- NUEVO: Agregar el conteo de mensajes no leídos para cada contacto ---
+        const contactosConEstado = await Promise.all(contactos.map(async (contacto) => {
+            const noLeidos = await Mensajeria.countDocuments({
+                creador: contacto._id, // Mensajes enviados por el contacto
+                receptor: miId,        // Hacia mí
+                fechaVisto: null       // Que no he leído
+            });
+
+            const contactoObj = contacto.toObject();
+            contactoObj.mensajesNoLeidos = noLeidos;
+            return contactoObj;
+        }));
+
+        res.status(200).json(contactosConEstado);
     } catch (error) {
         console.error('❌ Error al obtener contactos permitidos:', error);
         res.status(500).json({ mensaje: 'Error al obtener contactos' });
@@ -113,8 +119,8 @@ const enviarMensaje = async (req, res) => {
 
         const esPermitido = await sonContactosPermitidos(miId, receptorId);
         if (!esPermitido) {
-            return res.status(403).json({ 
-                mensaje: 'Solo puedes enviar mensajes a tus amigos, familiares o seguidores mutuos.' 
+            return res.status(403).json({
+                mensaje: 'Solo puedes enviar mensajes a tus amigos, familiares o seguidores mutuos.'
             });
         }
 
@@ -135,8 +141,27 @@ const enviarMensaje = async (req, res) => {
     }
 };
 
+const marcarComoLeido = async (req, res) => {
+    try {
+        const { contactoId } = req.params;
+        const miId = req.usuario.id;
+
+        // Actualiza todos los mensajes que te envió ese contacto y que no has visto
+        await Mensajeria.updateMany(
+            { creador: contactoId, receptor: miId, fechaVisto: null },
+            { $set: { fechaVisto: new Date() } }
+        );
+
+        res.status(200).json({ mensaje: 'Mensajes marcados como leídos con éxito.' });
+    } catch (error) {
+        console.error('❌ Error al marcar mensajes como leídos:', error);
+        res.status(500).json({ mensaje: 'Error al actualizar el estado de lectura' });
+    }
+};
+
 module.exports = {
     obtenerContactosPermitidos,
     obtenerConversacionConContacto,
-    enviarMensaje
+    enviarMensaje,
+    marcarComoLeido
 };

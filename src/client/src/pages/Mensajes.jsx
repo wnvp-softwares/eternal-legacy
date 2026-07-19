@@ -24,7 +24,7 @@ export default function Mensajes() {
   const [bannerMinimizado, setBannerMinimizado] = useState(false);
   const [cargandoMensajes, setCargandoMensajes] = useState(false);
   const [miPublicKey, setMiPublicKey] = useState(null);
-  
+
   const finMensajesRef = useRef(null);
   const token = localStorage.getItem('token');
 
@@ -92,8 +92,8 @@ export default function Mensajes() {
         const miUsuario = JSON.parse(localStorage.getItem('usuario') || '{}');
         const miId = miUsuario.id || miUsuario._id;
 
-        const listaMensajes = Array.isArray(datosCifrados) 
-          ? datosCifrados 
+        const listaMensajes = Array.isArray(datosCifrados)
+          ? datosCifrados
           : (datosCifrados.mensajes || []);
 
         const mensajesDescifrados = await Promise.all(
@@ -105,7 +105,8 @@ export default function Mensajes() {
               id: obtenerId(msg) || Math.random().toString(),
               tipo: esCreador ? 'enviado' : 'recibido',
               texto: textoPlano,
-              createdAt: msg.createdAt
+              createdAt: msg.createdAt,
+              leido: msg.fechaVisto !== null // <-- NUEVO: Guarda si ya fue leído[cite: 3]
             };
           })
         );
@@ -117,14 +118,30 @@ export default function Mensajes() {
     }
   };
 
+  const marcarConversacionComoLeida = async (contactoId) => {
+    if (!contactoId || !token) return;
+    try {
+      await fetch(`${API_BASE_URL}/mensajes/marcar-leido/${contactoId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch (error) {
+      console.error('Error al marcar como leído:', error);
+    }
+  };
+
   useEffect(() => {
     const contactoId = obtenerId(chatSeleccionado);
     if (!contactoId) return;
 
     setCargandoMensajes(true);
+
+    // Leemos y cargamos al entrar
+    marcarConversacionComoLeida(contactoId);
     cargarMensajesConversacion(contactoId).finally(() => setCargandoMensajes(false));
 
     const intervalo = setInterval(() => {
+      marcarConversacionComoLeida(contactoId); // Sigue marcando como leído si llegan nuevos estando adentro
       cargarMensajesConversacion(contactoId);
     }, 3000);
 
@@ -187,18 +204,18 @@ export default function Mensajes() {
   return (
     <div className="contenedor-mensajes">
       <div className="tarjeta-mensajes">
-        
+
         {/* --- COLUMNA IZQUIERDA: LISTA DE CONTACTOS PERMITIDOS --- */}
         <div className={`columna-lista-chats ${chatSeleccionado ? 'd-none d-lg-flex' : 'd-flex'}`}>
           <div className="cabecera-lista">
             <h2 className="fuente-elegante fw-bold titulo-mensajes fs-3">Mensajes</h2>
-            
+
             <div className="buscador-chats">
               <i className="bi bi-search"></i>
-              <input 
-                type="text" 
-                className="input-buscar-chat" 
-                placeholder="Buscar amigo o familia..." 
+              <input
+                type="text"
+                className="input-buscar-chat"
+                placeholder="Buscar amigo o familia..."
                 value={busquedaPersona}
                 onChange={(e) => setBusquedaPersona(e.target.value)}
               />
@@ -209,8 +226,8 @@ export default function Mensajes() {
             {contactosFiltrados.length === 0 ? (
               <div className="p-3 text-center text-muted">
                 <small>
-                  {busquedaPersona 
-                    ? 'No se encontraron personas con ese nombre.' 
+                  {busquedaPersona
+                    ? 'No se encontraron personas con ese nombre.'
                     : 'No tienes conexiones de amigos o familia disponibles para chatear.'}
                 </small>
               </div>
@@ -218,30 +235,43 @@ export default function Mensajes() {
               contactosFiltrados.map((contacto) => {
                 const idContacto = obtenerId(contacto);
                 const nombreContacto = contacto.nombreUsuario || contacto.nombre || 'Usuario';
-                const urlImagen = contacto.imagenPerfil?.urlArchivo 
+                const tieneMensajesNuevos = contacto.mensajesNoLeidos > 0; // <-- NUEVO
+
+                const urlImagen = contacto.imagenPerfil?.urlArchivo
                   ? resolverUrlBackend(contacto.imagenPerfil.urlArchivo)
                   : `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreContacto)}`;
 
                 return (
-                  <div 
-                    key={idContacto || nombreContacto} 
-                    className={`item-chat ${obtenerId(chatSeleccionado) === idContacto ? 'activo' : ''}`}
-                    onClick={() => setChatSeleccionado(contacto)}
+                  <div
+                    key={idContacto || nombreContacto}
+                    className={`item-chat ${obtenerId(chatSeleccionado) === idContacto ? 'activo' : ''} ${tieneMensajesNuevos ? 'tiene-no-leidos' : ''}`} // <-- Clase condicional
+                    onClick={() => {
+                      setChatSeleccionado(contacto);
+                      // Opcional: Limpiar el contador localmente de inmediato al hacer click para mejorar UX
+                      contacto.mensajesNoLeidos = 0;
+                    }}
                   >
                     <div className="avatar-chat">
-                      <img 
-                        src={urlImagen} 
-                        alt={nombreContacto} 
-                        className="foto-avatar" 
-                      />
+                      <img src={urlImagen} alt={nombreContacto} className="foto-avatar" />
                     </div>
-                    <div className="info-chat">
-                      <div className="nombre-tiempo">
-                        <h6 className="nombre-chat">{nombreContacto}</h6>
+                    <div className="info-chat flex-grow-1">
+                      <div className="nombre-tiempo d-flex justify-content-between align-items-center">
+                        <h6 className={`nombre-chat mb-0 ${tieneMensajesNuevos ? 'fw-bold text-dark' : ''}`}>{nombreContacto}</h6>
+
+                        {/* Globo indicador visual si hay mensajes nuevos */}
+                        {tieneMensajesNuevos && (
+                          <span className="badge rounded-pill bg-primary el-globo-notificacion animate__animated animate__bounceIn">
+                            {contacto.mensajesNoLeidos}
+                          </span>
+                        )}
                       </div>
                       <div className="mensaje-previo">
-                        <p className="texto-previo text-success">
-                          <i className="bi bi-shield-lock-fill me-1"></i>Conexión Cifrada
+                        <p className={`texto-previo mb-0 ${tieneMensajesNuevos ? 'fw-bold text-dark' : 'text-success'}`}>
+                          {tieneMensajesNuevos ? (
+                            <span><i className="bi bi-chat-left-dots-fill me-1 text-primary"></i>Mensaje nuevo</span>
+                          ) : (
+                            <span><i className="bi bi-shield-lock-fill me-1"></i>Conexión Cifrada</span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -262,13 +292,13 @@ export default function Mensajes() {
                   <button className="boton-atras-movil d-lg-none" onClick={() => setChatSeleccionado(null)}>
                     <i className="bi bi-arrow-left"></i>
                   </button>
-                  <img 
-                    src={chatSeleccionado.imagenPerfil?.urlArchivo 
+                  <img
+                    src={chatSeleccionado.imagenPerfil?.urlArchivo
                       ? resolverUrlBackend(chatSeleccionado.imagenPerfil.urlArchivo)
-                      : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatSeleccionado.nombreUsuario || 'Usuario')}`} 
-                    alt={chatSeleccionado.nombreUsuario} 
-                    className="foto-avatar" 
-                    style={{width: '42px', height: '42px'}}
+                      : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatSeleccionado.nombreUsuario || 'Usuario')}`}
+                    alt={chatSeleccionado.nombreUsuario}
+                    className="foto-avatar"
+                    style={{ width: '42px', height: '42px' }}
                   />
                   <div className="detalles-cabecera">
                     <h5>{chatSeleccionado.nombreUsuario || chatSeleccionado.nombre}</h5>
@@ -289,8 +319,8 @@ export default function Mensajes() {
                     <span className="texto-corto-e2e">Cifrado Extremo a Extremo activo</span>
                   )}
                 </div>
-                <button 
-                  className="boton-toggle-banner" 
+                <button
+                  className="boton-toggle-banner"
                   onClick={() => setBannerMinimizado(!bannerMinimizado)}
                 >
                   <i className={`bi bi-chevron-${bannerMinimizado ? 'down' : 'up'}`}></i>
@@ -310,11 +340,18 @@ export default function Mensajes() {
                     <div key={msg.id} className={`fila-mensaje ${msg.tipo}`}>
                       <div className={`burbuja ${msg.tipo}`}>
                         {msg.texto}
-                        <small className="d-block mt-1 opacity-75 text-end" style={{fontSize: '0.7rem'}}>
-                          {msg.createdAt && !isNaN(new Date(msg.createdAt)) 
-                            ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-                            : ''}
-                        </small>
+                        <div className="d-flex align-items-center justify-content-end mt-1 opacity-75" style={{ fontSize: '0.7rem' }}>
+                          <span className="me-1">
+                            {msg.createdAt && !isNaN(new Date(msg.createdAt))
+                              ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : ''}
+                          </span>
+
+                          {/* Si el mensaje fue enviado por mí, muestra el estatus de lectura */}
+                          {msg.tipo === 'enviado' && (
+                            <i className={`bi ${msg.leido ? 'bi-check-all text-info' : 'bi-check'} fs-6`} style={{ marginLeft: '4px' }}></i>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -324,10 +361,10 @@ export default function Mensajes() {
 
               {/* Área de Entrada */}
               <div className="area-escribir">
-                <input 
-                  type="text" 
-                  className="input-mensaje" 
-                  placeholder="Escribe un mensaje cifrado..." 
+                <input
+                  type="text"
+                  className="input-mensaje"
+                  placeholder="Escribe un mensaje cifrado..."
                   value={mensajeTexto}
                   onChange={(e) => setMensajeTexto(e.target.value)}
                   onKeyDown={(e) => {
@@ -341,7 +378,7 @@ export default function Mensajes() {
             </>
           ) : (
             <div className="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
-              <i className="bi bi-chat-dots" style={{ fontSize: '4rem', color: 'var(--borde-color)'}}></i>
+              <i className="bi bi-chat-dots" style={{ fontSize: '4rem', color: 'var(--borde-color)' }}></i>
               <h4 className="mt-3 fuente-elegante">Tus Mensajes</h4>
               <p>Selecciona una persona para iniciar una conversación segura.</p>
             </div>
