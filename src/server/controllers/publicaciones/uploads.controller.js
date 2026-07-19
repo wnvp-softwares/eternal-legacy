@@ -2,15 +2,16 @@ const { Upload } = require('../../models/index.model');
 
 const subirArchivo = async (req, res) => {
     try {
-        // req.file existe mágicamente aquí gracias al middleware de Multer
+
         if (!req.file) {
-            return res.status(400).json({ mensaje: 'Por favor, selecciona un archivo válido' });
+            return res.status(400).json({
+                mensaje: 'Por favor, selecciona un archivo válido'
+            });
         }
 
-        // Creamos el registro en la Base de Datos
         const nuevoUpload = new Upload({
-            propietario: req.usuario.id, // Sabemos quién lo sube gracias al Token
-            urlArchivo: `/uploads/${req.file.filename}`, // Esta será la URL pública para ver la foto
+            propietario: req.usuario.id,
+            urlArchivo: req.file.path,
             formato: req.file.mimetype,
             pesoBytes: req.file.size
         });
@@ -23,8 +24,11 @@ const subirArchivo = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error al subir archivo:', error);
-        res.status(500).json({ mensaje: 'Error interno al procesar el archivo' });
+        console.error(error);
+
+        res.status(500).json({
+            mensaje: 'Error interno al procesar el archivo'
+        });
     }
 };
 

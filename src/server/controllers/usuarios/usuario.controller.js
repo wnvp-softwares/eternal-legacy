@@ -2,7 +2,6 @@ const { Usuario, InformacionPerfil } = require('../../models/index.model');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const enviarCodigoVerificacion = require('../../middlewares/mailer');
-const { construirUrlPublicaArchivo } = require('../../configs/uploads.config');
 
 const DURACION_CODIGO_2FA_MS = 5 * 60 * 1000;
 const DURACION_TOKEN_2FA = '10m';
@@ -44,18 +43,18 @@ const crearTokenTemporal2FA = (usuarioId) => {
     );
 };
 
-const obtenerUrlArchivo = (archivo) => {
-    return construirUrlPublicaArchivo(archivo?.urlArchivo);
-};
-
 const formatearUsuarioSesion = (usuario) => ({
     id: usuario._id,
     nombreUsuario: usuario.nombreUsuario,
     email: usuario.email,
-    imagenPerfil: obtenerUrlArchivo(usuario.imagenPerfil),
-    imagenPortada: obtenerUrlArchivo(usuario.imagenPortada),
+
+    imagenPerfil: usuario.imagenPerfil?.urlArchivo || null,
+    imagenPortada: usuario.imagenPortada?.urlArchivo || null,
+
     informacionPerfil: usuario.informacionPerfil,
+
     twoFactorEnabled: Boolean(usuario.twoFactorEnabled),
+
     idioma: usuario.idioma || 'es-MX',
     zonaHoraria: usuario.zonaHoraria || 'America/Mexico_City',
     formatoFecha: usuario.formatoFecha || 'DD/MM/AAAA'
