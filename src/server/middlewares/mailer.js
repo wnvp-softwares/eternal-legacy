@@ -2,11 +2,16 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
-    }
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000
 });
 
 transporter.verify((error, success) => {
@@ -35,6 +40,10 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
         descripcion = 'Usa este código para continuar con el proceso en Legacy.',
         accion = 'Tu código de verificación es:'
     } = opciones;
+
+    await transporter.verify();
+
+    console.log("✅ SMTP verificado");
 
     try {
         const info = await transporter.sendMail({
