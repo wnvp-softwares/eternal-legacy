@@ -9,7 +9,7 @@ const resend=new Resend(process.env.RESEND_API_KEY);
 
 const result=await resend.emails.send({
     from:process.env.EMAIL_FROM,
-    to:"tu_correo@gmail.com",
+    to:"wnvp115@gmail.com",
     subject:"Prueba Legacy",
     html:"<h1>Funcionando con Resend 🚀</h1>"
 });
