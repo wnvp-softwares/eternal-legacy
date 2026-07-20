@@ -1,15 +1,16 @@
 const express = require('express');
-const router = express.Router(); // 👈 ESTA LÍNEA ES LA QUE FALTA O ESTÁ ESCRITA INCORRECTAMENTE
+const router = express.Router();
 
 const { verificarToken } = require('../../middlewares/auth.middleware');
 
-const { buscarTodo } = require('../../controllers/publicaciones/busqueda.controller');
+const upload = require('../../configs/multer.config');
 
-const upload = require('../../configs/multer.config'); 
-const { 
-    crearPublicacion, 
-    obtenerPublicaciones, 
-    reaccionarPublicacion 
+const {
+    crearPublicacion,
+    obtenerPublicaciones,
+    buscarTodo,
+    obtenerPublicacionesPorEvento,
+    reaccionarPublicacion
 } = require('../../controllers/publicaciones/publicacion.controller');
 
 router.get('/buscar', verificarToken, buscarTodo);
@@ -20,7 +21,10 @@ router.post('/crear', verificarToken, upload.single('archivo'), crearPublicacion
 // Ruta para obtener el muro
 router.get('/muro', verificarToken, obtenerPublicaciones);
 
-// Nueva ruta para dar me gusta / reaccionar
+// Ruta para obtener publicaciones relacionadas a un evento familiar
+router.get('/evento/:eventoId', verificarToken, obtenerPublicacionesPorEvento);
+
+// Ruta para dar me gusta / reaccionar
 router.post('/:id/reaccionar', verificarToken, reaccionarPublicacion);
 
 module.exports = router;

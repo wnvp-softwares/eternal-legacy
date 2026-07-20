@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { Publicacion, Upload } = require('../../models/index.model');
+const { Publicacion, Upload, Usuario, Arbol } = require('../../models/index.model');
 
 const EventoFamiliar = require('../../models/arboles/eventoFamiliar.model');
 const { construirRutaPublicaUpload } = require('../../configs/uploads.config');
@@ -18,6 +18,15 @@ const obtenerIdSeguro = (valor) => {
 
 const esObjectIdValido = (id) => {
     return Boolean(id) && mongoose.Types.ObjectId.isValid(String(id));
+};
+
+const sonMismoId = (id1, id2) => {
+    const valor1 = obtenerIdSeguro(id1);
+    const valor2 = obtenerIdSeguro(id2);
+
+    if (!valor1 || !valor2) return false;
+
+    return valor1 === valor2;
 };
 
 const parseJSONSeguro = (valor, valorPorDefecto = null) => {
@@ -64,6 +73,122 @@ const obtenerNombreFamiliaDesdeArbol = (arbol) => {
         arbol.titulo ||
         ''
     ).trim();
+};
+
+const usuarioPerteneceAlArbol = (arbol, usuarioId) => {
+    if (!arbol || !usuarioId) return false;
+
+    if (sonMismoId(arbol.creador, usuarioId)) return true;
+
+    if (Array.isArray(arbol.admins) && arbol.admins.some(adminId => sonMismoId(adminId, usuarioId))) {
+        return true;
+    }
+
+    return (Array.isArray(arbol.miembros) ? arbol.miembros : []).some((miembro) => {
+        return sonMismoId(miembro.usuario, usuarioId) && miembro.estado === 'Activo';
+    });
+};
+
+const obtenerArbolesPermitidosUsuario = async (usuarioId) => {
+    if (!usuarioId || !esObjectIdValido(usuarioId)) return [];
+
+    return Arbol.find({
+        activo: true,
+        $or: [
+            { creador: usuarioId },
+            { admins: usuarioId },
+            {
+                miembros: {
+                    $elemMatch: {
+                        usuario: usuarioId,
+                        estado: 'Activo'
+                    }
+                }
+            }
+        ]
+    }).select('_id nombreFamilia nombre titulo creador admins miembros');
+};
+
+const obtenerIdsArbolesPermitidosUsuario = async (usuarioId) => {
+    const arboles = await obtenerArbolesPermitidosUsuario(usuarioId);
+    return arboles.map(arbol => arbol._id);
+};
+
+const construirFiltroVisibilidadPublicaciones = async (usuarioId) => {
+    const idsArbolesPermitidos = await obtenerIdsArbolesPermitidosUsuario(usuarioId);
+
+    return {
+        $or: [
+            { tipo: 'historico' },
+            { privacidad: 'publico' },
+            { autor: usuarioId },
+
+            // Publicaciones familiares nuevas.
+            {
+                tipo: 'familiar',
+                privacidad: 'familia',
+                arbolAudiencia: { $in: idsArbolesPermitidos }
+            },
+
+            // Compatibilidad con publicaciones familiares antiguas que estaban ligadas a evento.
+            {
+                tipo: 'familiar',
+                privacidad: { $exists: false },
+                'eventoRelacionado.arbol': { $in: idsArbolesPermitidos }
+            },
+            {
+                tipo: 'familiar',
+                arbolAudiencia: { $exists: false },
+                'eventoRelacionado.arbol': { $in: idsArbolesPermitidos }
+            }
+        ]
+    };
+};
+
+const obtenerArbolAudienciaValido = async ({ usuarioId, arbolAudienciaId, eventoRelacionado }) => {
+    let arbolId = arbolAudienciaId || null;
+
+    if (!arbolId) {
+        const eventoPayload = parseJSONSeguro(eventoRelacionado, null);
+        arbolId =
+            obtenerIdSeguro(eventoPayload?.arbol) ||
+            eventoPayload?.arbolId ||
+            null;
+    }
+
+    if (!arbolId || !esObjectIdValido(arbolId)) {
+        return {
+            error: {
+                status: 400,
+                mensaje: 'Selecciona la familia o árbol donde será visible este Momento Familiar.'
+            }
+        };
+    }
+
+    const arbol = await Arbol.findOne({
+        _id: arbolId,
+        activo: true
+    });
+
+    if (!arbol) {
+        return {
+            error: {
+                status: 404,
+                mensaje: 'El árbol seleccionado no existe o ya no está activo.'
+            }
+        };
+    }
+
+    if (!usuarioPerteneceAlArbol(arbol, usuarioId)) {
+        return {
+            error: {
+                status: 403,
+                mensaje: 'No puedes publicar un Momento Familiar en un árbol al que no perteneces.'
+            }
+        };
+    }
+
+    return { arbol };
 };
 
 const construirEventoRelacionado = async ({ eventoRelacionadoId, eventoRelacionado }) => {
@@ -146,7 +271,25 @@ const poblarPublicacion = async (publicacionId) => {
         .populate('menciones.usuario', 'nombreUsuario email imagenPerfil')
         .populate('etiquetasMultimedia.usuario', 'nombreUsuario email imagenPerfil')
         .populate('eventoRelacionado.evento')
-        .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo');
+        .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
+        .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
+};
+
+const poblarConsultaPublicaciones = (consulta) => {
+    return consulta
+        .populate({
+            path: 'autor',
+            select: 'nombreUsuario email imagenPerfil',
+            populate: {
+                path: 'imagenPerfil'
+            }
+        })
+        .populate('multimedia')
+        .populate('menciones.usuario', 'nombreUsuario email imagenPerfil')
+        .populate('etiquetasMultimedia.usuario', 'nombreUsuario email imagenPerfil')
+        .populate('eventoRelacionado.evento')
+        .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
+        .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
 };
 
 // CREAR PUBLICACIÓN CON ARCHIVO MULTIMEDIA REAL
@@ -159,13 +302,33 @@ const crearPublicacion = async (req, res) => {
             menciones,
             etiquetasMultimedia,
             eventoRelacionadoId,
-            eventoRelacionado
+            eventoRelacionado,
+            arbolAudienciaId
         } = req.body || {};
 
         if (!contenido || contenido.trim() === '') {
             return res.status(400).json({
                 mensaje: 'El contenido no puede estar vacío.'
             });
+        }
+
+        const tipoSeguro = tipo === 'familiar' ? 'familiar' : 'historico';
+        let arbolAudiencia = null;
+
+        if (tipoSeguro === 'familiar') {
+            const resultadoArbol = await obtenerArbolAudienciaValido({
+                usuarioId: req.usuario.id,
+                arbolAudienciaId,
+                eventoRelacionado
+            });
+
+            if (resultadoArbol.error) {
+                return res.status(resultadoArbol.error.status).json({
+                    mensaje: resultadoArbol.error.mensaje
+                });
+            }
+
+            arbolAudiencia = resultadoArbol.arbol;
         }
 
         const idsMultimedia = [];
@@ -191,7 +354,10 @@ const crearPublicacion = async (req, res) => {
 
         const nuevaPublicacion = new Publicacion({
             autor: req.usuario.id,
-            tipo: tipo || 'historico',
+            tipo: tipoSeguro,
+            privacidad: tipoSeguro === 'familiar' ? 'familia' : 'publico',
+            arbolAudiencia: arbolAudiencia?._id || null,
+            nombreFamiliaAudienciaSnapshot: arbolAudiencia ? obtenerNombreFamiliaDesdeArbol(arbolAudiencia) : '',
             contenido: contenido.trim(),
             multimedia: idsMultimedia,
             ubicacionTexto: ubicacionTexto || '',
@@ -221,26 +387,78 @@ const crearPublicacion = async (req, res) => {
 // OBTENER LAS PUBLICACIONES DEL MURO
 const obtenerPublicaciones = async (req, res) => {
     try {
-        const publicaciones = await Publicacion.find()
-            .sort({ createdAt: -1 })
-            .populate({
-                path: 'autor',
-                select: 'nombreUsuario email imagenPerfil',
-                populate: {
-                    path: 'imagenPerfil'
-                }
-            })
-            .populate('multimedia')
-            .populate('menciones.usuario', 'nombreUsuario email imagenPerfil')
-            .populate('etiquetasMultimedia.usuario', 'nombreUsuario email imagenPerfil')
-            .populate('eventoRelacionado.evento')
-            .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo');
+        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(req.usuario.id);
+
+        const publicaciones = await poblarConsultaPublicaciones(
+            Publicacion.find(filtroVisibilidad).sort({ createdAt: -1 })
+        );
 
         res.status(200).json(publicaciones);
     } catch (error) {
         console.error('❌ Error al obtener publicaciones:', error);
         res.status(500).json({
             mensaje: 'Error al obtener las publicaciones del servidor.'
+        });
+    }
+};
+
+// BÚSQUEDA GLOBAL DE PUBLICACIONES Y PERSONAS
+const buscarTodo = async (req, res) => {
+    try {
+        const query = String(req.query.q || '').trim();
+
+        if (!query) {
+            return res.status(200).json({
+                personas: [],
+                publicaciones: []
+            });
+        }
+
+        const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(req.usuario.id);
+
+        const [personas, publicaciones] = await Promise.all([
+            Usuario.find({
+                $or: [
+                    { nombreUsuario: regex },
+                    { email: regex }
+                ]
+            })
+                .select('nombreUsuario email imagenPerfil')
+                .populate('imagenPerfil')
+                .limit(10),
+
+            poblarConsultaPublicaciones(
+                Publicacion.find({
+                    $and: [
+                        filtroVisibilidad,
+                        {
+                            $or: [
+                                { contenido: regex },
+                                { ubicacionTexto: regex },
+                                { tipo: regex },
+                                { nombreFamiliaAudienciaSnapshot: regex },
+                                { 'eventoRelacionado.tituloSnapshot': regex },
+                                { 'eventoRelacionado.nombreFamiliaSnapshot': regex }
+                            ]
+                        }
+                    ]
+                })
+                    .sort({ createdAt: -1 })
+                    .limit(20)
+            )
+        ]);
+
+        res.status(200).json({
+            personas,
+            publicaciones
+        });
+    } catch (error) {
+        console.error('❌ Error al buscar publicaciones/personas:', error);
+        res.status(500).json({
+            mensaje: 'Error interno al realizar la búsqueda.',
+            personas: [],
+            publicaciones: []
         });
     }
 };
@@ -256,22 +474,17 @@ const obtenerPublicacionesPorEvento = async (req, res) => {
             });
         }
 
-        const publicaciones = await Publicacion.find({
-            'eventoRelacionado.evento': eventoId
-        })
-            .sort({ createdAt: -1 })
-            .populate({
-                path: 'autor',
-                select: 'nombreUsuario email imagenPerfil',
-                populate: {
-                    path: 'imagenPerfil'
-                }
+        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(req.usuario.id);
+
+        const publicaciones = await poblarConsultaPublicaciones(
+            Publicacion.find({
+                $and: [
+                    { 'eventoRelacionado.evento': eventoId },
+                    filtroVisibilidad
+                ]
             })
-            .populate('multimedia')
-            .populate('menciones.usuario', 'nombreUsuario email imagenPerfil')
-            .populate('etiquetasMultimedia.usuario', 'nombreUsuario email imagenPerfil')
-            .populate('eventoRelacionado.evento')
-            .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo');
+                .sort({ createdAt: -1 })
+        );
 
         res.status(200).json({
             mensaje: 'Publicaciones del evento recuperadas correctamente.',
@@ -298,11 +511,17 @@ const reaccionarPublicacion = async (req, res) => {
             });
         }
 
-        const publicacion = await Publicacion.findById(id);
+        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(usuarioId);
+        const publicacion = await Publicacion.findOne({
+            $and: [
+                { _id: id },
+                filtroVisibilidad
+            ]
+        });
 
         if (!publicacion) {
             return res.status(404).json({
-                mensaje: 'Publicación no encontrada'
+                mensaje: 'Publicación no encontrada o sin permiso para verla.'
             });
         }
 
@@ -344,6 +563,7 @@ const reaccionarPublicacion = async (req, res) => {
 module.exports = {
     crearPublicacion,
     obtenerPublicaciones,
+    buscarTodo,
     obtenerPublicacionesPorEvento,
     reaccionarPublicacion
 };

@@ -83,6 +83,97 @@ const obtenerUrlImagenPerfil = (imagen, nombreFallback = 'Usuario') => {
   return avatarFallback;
 };
 
+const obtenerPrimerArchivoMultimedia = (multimedia) => {
+  if (!multimedia) return null;
+  if (Array.isArray(multimedia)) return multimedia.find(Boolean) || null;
+  return multimedia;
+};
+
+const normalizarRutaMultimedia = (rutaOriginal) => {
+  if (!rutaOriginal || typeof rutaOriginal !== 'string') return null;
+
+  let ruta = rutaOriginal.trim();
+
+  if (!ruta || ruta === 'undefined' || ruta === 'null' || ruta === '[object Object]') {
+    return null;
+  }
+
+  ruta = ruta.replace(/\\/g, '/');
+
+  if (
+    ruta.startsWith('http://') ||
+    ruta.startsWith('https://') ||
+    ruta.startsWith('data:') ||
+    ruta.startsWith('blob:')
+  ) {
+    return ruta;
+  }
+
+  const indiceUploads = ruta.lastIndexOf('/uploads/');
+  if (indiceUploads >= 0) {
+    ruta = ruta.slice(indiceUploads);
+  }
+
+  if (!ruta.startsWith('/') && !ruta.includes('/') && /\.[a-z0-9]{2,8}$/i.test(ruta)) {
+    ruta = `/uploads/${ruta}`;
+  }
+
+  return resolverUrlBackend(ruta);
+};
+
+const obtenerUrlMultimediaPublicacion = (multimedia) => {
+  const archivo = obtenerPrimerArchivoMultimedia(multimedia);
+
+  if (!archivo) return null;
+
+  if (typeof archivo === 'string') {
+    return normalizarRutaMultimedia(archivo);
+  }
+
+  if (typeof archivo !== 'object') return null;
+
+  const ruta =
+    archivo.urlArchivo ||
+    archivo.url ||
+    archivo.path ||
+    archivo.ruta ||
+    archivo.src ||
+    archivo.secure_url ||
+    archivo.location ||
+    archivo.filename ||
+    archivo.nombreArchivo ||
+    '';
+
+  if (ruta && typeof ruta === 'object') {
+    return obtenerUrlMultimediaPublicacion(ruta);
+  }
+
+  return normalizarRutaMultimedia(ruta);
+};
+
+const obtenerFormatoMultimediaPublicacion = (multimedia) => {
+  const archivo = obtenerPrimerArchivoMultimedia(multimedia);
+
+  if (!archivo || typeof archivo !== 'object') return '';
+
+  return String(
+    archivo.formato ||
+    archivo.mimetype ||
+    archivo.mimeType ||
+    archivo.tipo ||
+    archivo.type ||
+    ''
+  );
+};
+
+const esVideoMultimediaPublicacion = (multimedia) => {
+  const formato = obtenerFormatoMultimediaPublicacion(multimedia).toLowerCase();
+  const url = obtenerUrlMultimediaPublicacion(multimedia) || '';
+
+  return formato.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(url);
+};
+
+
 const obtenerPartesFechaEnZona = (fecha, preferencias = {}) => {
   const date = fecha instanceof Date ? fecha : new Date(fecha);
   if (Number.isNaN(date.getTime())) return null;
@@ -305,6 +396,47 @@ const normalizarEventoInicio = (evento = {}, arbol = {}, preferencias = {}) => {
   };
 };
 
+const normalizarArbolAudiencia = (arbol = {}) => {
+  const id = obtenerId(arbol);
+
+  return {
+    ...arbol,
+    id,
+    nombreFamilia: normalizarTexto(arbol.nombreFamilia || arbol.nombre || arbol.titulo || 'Árbol familiar')
+  };
+};
+
+const obtenerArbolAudienciaDePublicacion = (pub = {}) => {
+  const arbol =
+    pub.arbolAudiencia ||
+    pub.audienciaArbol ||
+    pub.arbol ||
+    pub.eventoRelacionado?.arbol ||
+    pub.eventoRelacionado?.evento?.arbol ||
+    null;
+
+  if (arbol && typeof arbol === 'object') {
+    return normalizarArbolAudiencia(arbol);
+  }
+
+  const id = obtenerId(arbol) || pub.arbolAudienciaId || pub.audienciaArbolId || null;
+  const nombreFamilia = normalizarTexto(
+    pub.nombreFamiliaAudienciaSnapshot ||
+    pub.eventoRelacionado?.nombreFamiliaSnapshot ||
+    pub.eventoRelacionado?.nombreFamilia ||
+    pub.eventoNombreFamilia ||
+    ''
+  );
+
+  if (!id && !nombreFamilia) return null;
+
+  return {
+    id,
+    nombreFamilia: nombreFamilia || 'Árbol familiar'
+  };
+};
+
+
 export default function Inicio() {
   const navigate = useNavigate();
   const { textoBusqueda = '' } = useOutletContext() || {};
@@ -332,6 +464,9 @@ export default function Inicio() {
   const [cargandoSugerenciasPublicacion, setCargandoSugerenciasPublicacion] = useState(false);
   const [mencionesPublicacion, setMencionesPublicacion] = useState([]);
   const [eventoRelacionadoPublicacion, setEventoRelacionadoPublicacion] = useState(null);
+  const [arbolesAudienciaPublicacion, setArbolesAudienciaPublicacion] = useState([]);
+  const [cargandoArbolesAudiencia, setCargandoArbolesAudiencia] = useState(false);
+  const [arbolAudienciaPublicacion, setArbolAudienciaPublicacion] = useState(null);
   const [etiquetasImagen, setEtiquetasImagen] = useState([]);
 
   const [archivoAdjunto, setArchivoAdjunto] = useState(null);
@@ -413,6 +548,52 @@ export default function Inicio() {
     }
   };
 
+  const cargarArbolesAudienciaPublicacion = async () => {
+    if (!token) {
+      setArbolesAudienciaPublicacion([]);
+      setCargandoArbolesAudiencia(false);
+      return [];
+    }
+
+    try {
+      setCargandoArbolesAudiencia(true);
+
+      const respuesta = await fetch(`${API_BASE_URL}/arboles/mis-arboles`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (respuesta.status === 404) {
+        setArbolesAudienciaPublicacion([]);
+        return [];
+      }
+
+      const datos = await respuesta.json();
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'Error al cargar tus árboles.');
+
+      const arboles = (Array.isArray(datos.arboles) ? datos.arboles : [])
+        .map(normalizarArbolAudiencia)
+        .filter(arbol => arbol.id);
+
+      setArbolesAudienciaPublicacion(arboles);
+
+      setArbolAudienciaPublicacion(prev => {
+        if (prev && arboles.some(arbol => String(arbol.id) === String(prev.id))) {
+          return prev;
+        }
+
+        return arboles[0] || null;
+      });
+
+      return arboles;
+    } catch (err) {
+      console.error('Error al cargar árboles para publicaciones familiares:', err);
+      setArbolesAudienciaPublicacion([]);
+      return [];
+    } finally {
+      setCargandoArbolesAudiencia(false);
+    }
+  };
+
   const cargarProximosEventosFamiliares = async () => {
     if (!token) {
       setProximosEventosFamiliares([]);
@@ -429,6 +610,11 @@ export default function Inicio() {
       const datosArboles = await respuestaArboles.json();
       if (!respuestaArboles.ok) throw new Error(datosArboles.mensaje || 'Error al cargar árboles.');
       const arboles = Array.isArray(datosArboles.arboles) ? datosArboles.arboles : [];
+      const arbolesNormalizados = arboles.map(normalizarArbolAudiencia).filter(arbol => arbol.id);
+      if (arbolesNormalizados.length > 0) {
+        setArbolesAudienciaPublicacion(prev => prev.length > 0 ? prev : arbolesNormalizados);
+        setArbolAudienciaPublicacion(prev => prev || arbolesNormalizados[0] || null);
+      }
       if (arboles.length === 0) { setProximosEventosFamiliares([]); return; }
       const respuestasEventos = await Promise.allSettled(
         arboles.map(async (arbolItem) => {
@@ -483,8 +669,22 @@ export default function Inicio() {
 
   useEffect(() => {
     if (!token) return;
+    cargarArbolesAudienciaPublicacion();
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
     cargarProximosEventosFamiliares();
   }, [token, idioma, zonaHoraria]);
+
+  useEffect(() => {
+    if (tipoPublicacion !== 'familiar') return;
+    if (arbolAudienciaPublicacion) return;
+    if (arbolesAudienciaPublicacion.length === 0) return;
+
+    setArbolAudienciaPublicacion(arbolesAudienciaPublicacion[0]);
+  }, [tipoPublicacion, arbolAudienciaPublicacion, arbolesAudienciaPublicacion]);
+
 
   useEffect(() => {
     if (!token || !['menciones', 'etiquetas'].includes(panelHerramientaActivo)) return;
@@ -629,9 +829,22 @@ export default function Inicio() {
 
   const abrirSelectorTipoPublicacion = () => setSelectorTipoAbierto(true);
 
-  const iniciarPublicacion = (tipo) => {
+  const iniciarPublicacion = async (tipo) => {
     const tipoSeguro = TIPOS_PUBLICACION_CONFIG[tipo] ? tipo : 'historico';
+
+    let arbolesDisponibles = arbolesAudienciaPublicacion;
+
+    if (tipoSeguro === 'familiar' && arbolesDisponibles.length === 0) {
+      arbolesDisponibles = await cargarArbolesAudienciaPublicacion();
+    }
+
+    if (tipoSeguro === 'familiar' && arbolesDisponibles.length === 0) {
+      alert('Necesitas pertenecer a un árbol para publicar un Momento Familiar.');
+      return;
+    }
+
     setTipoPublicacion(tipoSeguro);
+    setArbolAudienciaPublicacion(tipoSeguro === 'familiar' ? (arbolesDisponibles[0] || null) : null);
     setTextoPublicacion('');
     limpiarMultimedia();
     limpiarHerramientasPublicacion();
@@ -646,10 +859,19 @@ export default function Inicio() {
       alert('Por favor, escribe un mensaje para tu publicación.');
       return;
     }
+
+    if (tipoPublicacion === 'familiar' && !arbolAudienciaPublicacion?.id) {
+      alert('Selecciona la familia donde será visible este Momento Familiar.');
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append('tipo', tipoPublicacion);
       formData.append('contenido', textoPublicacion);
+      if (tipoPublicacion === 'familiar') {
+        formData.append('arbolAudienciaId', arbolAudienciaPublicacion.id);
+      }
       if (ubicacionPublicacion) formData.append('ubicacionTexto', ubicacionPublicacion);
       if (mencionesPublicacion.length > 0) formData.append('menciones', JSON.stringify(mencionesPublicacion.map(p => ({ id: p.id, nombre: p.nombre }))));
       if (tipoPublicacion === 'familiar' && eventoRelacionadoPublicacion) {
@@ -671,6 +893,8 @@ export default function Inicio() {
           ubicacionTexto: datos.publicacion?.ubicacionTexto || ubicacionPublicacion,
           menciones: datos.publicacion?.menciones || mencionesPublicacion,
           eventoRelacionado: datos.publicacion?.eventoRelacionado || eventoRelacionadoPublicacion,
+          arbolAudiencia: datos.publicacion?.arbolAudiencia || arbolAudienciaPublicacion,
+          nombreFamiliaAudienciaSnapshot: datos.publicacion?.nombreFamiliaAudienciaSnapshot || arbolAudienciaPublicacion?.nombreFamilia || '',
           etiquetasMultimedia: datos.publicacion?.etiquetasMultimedia || etiquetasImagen
         };
         setPublicaciones([publicacionCreada, ...publicaciones]);
@@ -932,9 +1156,11 @@ export default function Inicio() {
   };
 
   const renderVistaPublicacionAlbum = (pub = {}) => {
-    const tieneMultimedia = pub.multimedia && pub.multimedia.length > 0 && pub.multimedia[0];
-    const urlMultimedia = tieneMultimedia ? resolverUrlBackend(pub.multimedia[0].urlArchivo) : null;
-    const esVideo = tieneMultimedia && pub.multimedia[0].formato?.startsWith('video/');
+    const urlMultimedia = obtenerUrlMultimediaPublicacion(pub.multimedia);
+
+    const tieneMultimedia = Boolean(urlMultimedia);
+
+    const esVideo = esVideoMultimediaPublicacion(pub.multimedia);
     const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
     const autorId = obtenerIdPersonaPerfil(pub.autor) || obtenerIdPersonaPerfil(pub.usuario);
 
@@ -971,7 +1197,11 @@ export default function Inicio() {
 
         {tieneMultimedia && (
           <div className="album-evento-multimedia">
-            {esVideo ? <video src={urlMultimedia} controls controlsList="nodownload" /> : <img src={urlMultimedia} alt="Momento del evento" />}
+            {esVideo ? <video src={urlMultimedia} controls controlsList="nodownload" /> : <img
+              src={urlMultimedia}
+              alt="Momento del evento"
+              onError={() => console.warn('No se pudo cargar multimedia del álbum:', urlMultimedia, pub.multimedia)}
+            />}
           </div>
         )}
       </article>
@@ -1010,11 +1240,17 @@ export default function Inicio() {
   };
 
   const renderChipsHerramientas = () => {
-    const hayChips = ubicacionPublicacion || eventoRelacionadoPublicacion;
+    const hayChips = ubicacionPublicacion || eventoRelacionadoPublicacion || (tipoPublicacion === 'familiar' && arbolAudienciaPublicacion);
     if (!hayChips) return null;
 
     return (
       <div className="chips-publicacion-modal">
+        {tipoPublicacion === 'familiar' && arbolAudienciaPublicacion && (
+          <span className="chip-publicacion familia">
+            <i className="bi bi-shield-lock-fill"></i>
+            Visible para {arbolAudienciaPublicacion.nombreFamilia}
+          </span>
+        )}
         {ubicacionPublicacion && (
           <span className="chip-publicacion ubicacion">
             <i className="bi bi-geo-alt-fill"></i>
@@ -1232,6 +1468,43 @@ export default function Inicio() {
             </div>
 
             <div className="modal-cuerpo mt-3">
+              {tipoPublicacion === 'familiar' && (
+                <div className="selector-audiencia-familiar mb-3">
+                  <div className="selector-audiencia-info">
+                    <span className="selector-audiencia-icono"><i className="bi bi-shield-lock-fill"></i></span>
+                    <div>
+                      <strong>Visible solo para familia</strong>
+                      <small>Este momento solo aparecerá para miembros del árbol seleccionado.</small>
+                    </div>
+                  </div>
+
+                  {cargandoArbolesAudiencia ? (
+                    <div className="selector-audiencia-cargando">
+                      <span className="spinner-border spinner-border-sm me-2"></span>
+                      Cargando árboles...
+                    </div>
+                  ) : arbolesAudienciaPublicacion.length > 1 ? (
+                    <select
+                      className="select-audiencia-familiar"
+                      value={arbolAudienciaPublicacion?.id || ''}
+                      onChange={(e) => {
+                        const arbolSeleccionado = arbolesAudienciaPublicacion.find(arbol => String(arbol.id) === String(e.target.value));
+                        setArbolAudienciaPublicacion(arbolSeleccionado || null);
+                      }}
+                    >
+                      {arbolesAudienciaPublicacion.map(arbol => (
+                        <option key={arbol.id} value={arbol.id}>{arbol.nombreFamilia}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="audiencia-familiar-unica">
+                      <i className="bi bi-tree-fill"></i>
+                      {arbolAudienciaPublicacion?.nombreFamilia || arbolesAudienciaPublicacion[0]?.nombreFamilia || 'Árbol familiar'}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="contenedor-input-superpuesto">
                 <div className="form-control input-publicacion input-overlay" ref={overlayRef} aria-hidden="true">
                   {textoPublicacion ? renderTextoConMenciones(textoPublicacion) : ''}
@@ -1370,9 +1643,11 @@ export default function Inicio() {
           {/* MAPEO DE PUBLICACIONES */}
           {publicaciones.map((pub) => {
             const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
-            const tieneMultimedia = pub.multimedia && pub.multimedia.length > 0 && pub.multimedia[0];
-            const urlMultimedia = tieneMultimedia ? resolverUrlBackend(pub.multimedia[0].urlArchivo) : null;
-            const esVideo = tieneMultimedia && pub.multimedia[0].formato?.startsWith('video/');
+            const urlMultimedia = obtenerUrlMultimediaPublicacion(pub.multimedia);
+
+            const tieneMultimedia = Boolean(urlMultimedia);
+
+            const esVideo = esVideoMultimediaPublicacion(pub.multimedia);
             const ubicacionPost = normalizarTexto(pub.ubicacionTexto || pub.ubicacion?.texto || pub.ubicacion?.direccion || '');
             const etiquetasMultimediaPost = Array.isArray(pub.etiquetasMultimedia) ? pub.etiquetasMultimedia : [];
             const eventoRelacionadoPost = obtenerEventoRelacionadoDePublicacion(pub);
@@ -1434,7 +1709,8 @@ export default function Inicio() {
                         </div>
                       ) : (
                         <div className="etiqueta-contexto-familiar">
-                          <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i><span>Con Familia</span>
+                          <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i>
+                          <span>Con {obtenerArbolAudienciaDePublicacion(pub)?.nombreFamilia || 'Familia'}</span>
                         </div>
                       )}
                       {ubicacionPost && <div className="ubicacion-post-render"><i className="bi bi-geo-alt-fill"></i>{ubicacionPost}</div>}
@@ -1452,7 +1728,12 @@ export default function Inicio() {
                       {esVideo ? (
                         <video src={urlMultimedia} className={pub.tipo === 'historico' ? 'imagen-post-historico w-100' : 'imagen-post-moderna w-100'} controls controlsList="nodownload" />
                       ) : (
-                        <img src={urlMultimedia} alt="Recuerdo" className={pub.tipo === 'historico' ? 'imagen-post-historico' : 'imagen-post-moderna'} />
+                        <img
+                            src={urlMultimedia}
+                            alt="Recuerdo"
+                            className={pub.tipo === 'historico' ? 'imagen-post-historico' : 'imagen-post-moderna'}
+                            onError={() => console.warn('No se pudo cargar multimedia de la publicación:', urlMultimedia, pub.multimedia)}
+                          />
                       )}
                     </div>
                     <div className={pub.tipo === 'historico' ? 'carrusel-indicadores' : 'carrusel-indicadores-moderno'}>

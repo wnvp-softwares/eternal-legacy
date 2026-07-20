@@ -200,6 +200,97 @@ const formatearFechaFormalEnZona = (fecha, preferencias = {}, opciones = {}) => 
   }).format(date);
 };
 
+const obtenerPrimerArchivoMultimedia = (multimedia) => {
+  if (!multimedia) return null;
+  if (Array.isArray(multimedia)) return multimedia.find(Boolean) || null;
+  return multimedia;
+};
+
+const normalizarRutaMultimedia = (rutaOriginal) => {
+  if (!rutaOriginal || typeof rutaOriginal !== 'string') return null;
+
+  let ruta = rutaOriginal.trim();
+
+  if (!ruta || ruta === 'undefined' || ruta === 'null' || ruta === '[object Object]') {
+    return null;
+  }
+
+  ruta = ruta.replace(/\\/g, '/');
+
+  if (
+    ruta.startsWith('http://') ||
+    ruta.startsWith('https://') ||
+    ruta.startsWith('data:') ||
+    ruta.startsWith('blob:')
+  ) {
+    return ruta;
+  }
+
+  const indiceUploads = ruta.lastIndexOf('/uploads/');
+  if (indiceUploads >= 0) {
+    ruta = ruta.slice(indiceUploads);
+  }
+
+  if (!ruta.startsWith('/') && !ruta.includes('/') && /\.[a-z0-9]{2,8}$/i.test(ruta)) {
+    ruta = `/uploads/${ruta}`;
+  }
+
+  return resolverUrlBackend(ruta);
+};
+
+const obtenerUrlMultimediaPublicacion = (multimedia) => {
+  const archivo = obtenerPrimerArchivoMultimedia(multimedia);
+
+  if (!archivo) return null;
+
+  if (typeof archivo === 'string') {
+    return normalizarRutaMultimedia(archivo);
+  }
+
+  if (typeof archivo !== 'object') return null;
+
+  const ruta =
+    archivo.urlArchivo ||
+    archivo.url ||
+    archivo.path ||
+    archivo.ruta ||
+    archivo.src ||
+    archivo.secure_url ||
+    archivo.location ||
+    archivo.filename ||
+    archivo.nombreArchivo ||
+    '';
+
+  if (ruta && typeof ruta === 'object') {
+    return obtenerUrlMultimediaPublicacion(ruta);
+  }
+
+  return normalizarRutaMultimedia(ruta);
+};
+
+const obtenerFormatoMultimediaPublicacion = (multimedia) => {
+  const archivo = obtenerPrimerArchivoMultimedia(multimedia);
+
+  if (!archivo || typeof archivo !== 'object') return '';
+
+  return String(
+    archivo.formato ||
+    archivo.mimetype ||
+    archivo.mimeType ||
+    archivo.tipo ||
+    archivo.type ||
+    ''
+  );
+};
+
+const esVideoMultimediaPublicacion = (multimedia) => {
+  const formato = obtenerFormatoMultimediaPublicacion(multimedia).toLowerCase();
+  const url = obtenerUrlMultimediaPublicacion(multimedia) || '';
+
+  return formato.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(url);
+};
+
+
 export default function Perfil() {
   const [sonAmigos, setSonAmigos] = useState(false);
   const [estadoFamilia, setEstadoFamilia] = useState(null);
@@ -752,7 +843,7 @@ export default function Perfil() {
 
   const publicacionesFiltradas = publicaciones;
   const publicacionesHistoricas = publicaciones.filter(post => post.tipo === 'historico');
-  const fotosGaleria = publicaciones.filter(post => post.multimedia && post.multimedia[0]?.urlArchivo);
+  const fotosGaleria = publicaciones.filter(post => Boolean(obtenerUrlMultimediaPublicacion(post.multimedia)));
 
   if (cargando) {
     return (
@@ -1131,11 +1222,11 @@ export default function Perfil() {
 
                     <p className="texto-post historico">{post.texto || post.contenido}</p>
 
-                    {post.multimedia && post.multimedia.length > 0 && (
+                    {obtenerUrlMultimediaPublicacion(post.multimedia) && (
                       <div className={esHistorico ? "contenedor-polaroid" : "contenedor-moderno"}>
                         <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
                           <img
-                            src={resolverUrlBackend(post.multimedia[0]?.urlArchivo)}
+                            src={obtenerUrlMultimediaPublicacion(post.multimedia)}
                             alt="Archivo adjunto"
                             className={esHistorico ? "imagen-post-historico" : "imagen-post-moderna"}
                             style={{
@@ -1253,10 +1344,10 @@ export default function Perfil() {
                         </div>
 
                         {/* Bloque de Imagen (se renderiza a la derecha si existe) */}
-                        {post.multimedia && post.multimedia.length > 0 && (
+                        {obtenerUrlMultimediaPublicacion(post.multimedia) && (
                           <div style={{ minWidth: '120px', maxWidth: '180px', width: '100%' }} className="align-self-center align-self-sm-start">
                             <img
-                              src={resolverUrlBackend(post.multimedia[0]?.urlArchivo)}
+                              src={obtenerUrlMultimediaPublicacion(post.multimedia)}
                               alt="Timeline"
                               className="img-fluid rounded"
                               style={{ maxHeight: '120px', width: '100%', objectFit: 'cover' }}
@@ -1288,7 +1379,7 @@ export default function Perfil() {
                   {fotosGaleria.map((post) => (
                     <div key={post._id} className="galeria-item">
                       <img
-                        src={resolverUrlBackend(post.multimedia[0]?.urlArchivo)}
+                        src={obtenerUrlMultimediaPublicacion(post.multimedia)}
                         alt="Galería"
                         className="galeria-img"
                       />

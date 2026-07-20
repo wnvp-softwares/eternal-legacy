@@ -76,6 +76,24 @@ const publicacionSchema = new mongoose.Schema({
         default: 'historico'
     },
 
+    privacidad: {
+        type: String,
+        enum: ['publico', 'familia'],
+        default: 'publico'
+    },
+
+    arbolAudiencia: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Arbol',
+        default: null
+    },
+
+    nombreFamiliaAudienciaSnapshot: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+
     contenido: {
         type: String,
         trim: true,
@@ -113,8 +131,23 @@ const publicacionSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+publicacionSchema.pre('validate', function () {
+    if (this.tipo === 'familiar') {
+        this.privacidad = 'familia';
+    }
+
+    if (this.tipo === 'historico') {
+        this.privacidad = 'publico';
+        this.arbolAudiencia = null;
+        this.nombreFamiliaAudienciaSnapshot = '';
+    }
+});
+
 publicacionSchema.index({ autor: 1, createdAt: -1 });
 publicacionSchema.index({ tipo: 1, createdAt: -1 });
+publicacionSchema.index({ privacidad: 1, createdAt: -1 });
+publicacionSchema.index({ arbolAudiencia: 1, createdAt: -1 });
 publicacionSchema.index({ 'eventoRelacionado.evento': 1, createdAt: -1 });
+publicacionSchema.index({ 'eventoRelacionado.arbol': 1, createdAt: -1 });
 
 module.exports = mongoose.model('Publicacion', publicacionSchema);

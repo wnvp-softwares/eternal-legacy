@@ -5,6 +5,11 @@ const cors = require('cors');
 
 const conectarDB = require('./configs/database.config');
 
+const {
+    UPLOADS_PUBLIC_PATH,
+    UPLOADS_ABSOLUTE_DIR
+} = require('./configs/uploads.config');
+
 const app = express();
 
 const CLIENT_URLS = (
@@ -35,6 +40,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// --- SERVIR ARCHIVOS SUBIDOS ---
+app.use(UPLOADS_PUBLIC_PATH, express.static(UPLOADS_ABSOLUTE_DIR));
+
 // --- IMPORTAR EL ÍNDICE CENTRAL DE RUTAS ---
 const rutasPrincipales = require('./routes/index.routes');
 
@@ -57,4 +65,5 @@ app.listen(PORT, () => {
         }`
     );
     console.log(`Clientes permitidos por CORS: ${CLIENT_URLS.join(', ')}`);
+    console.log(`Uploads públicos: ${UPLOADS_PUBLIC_PATH} -> ${UPLOADS_ABSOLUTE_DIR}`);
 });
