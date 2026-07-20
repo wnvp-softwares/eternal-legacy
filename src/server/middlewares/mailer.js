@@ -9,14 +9,6 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
-    }
-});
-
 transporter.verify((error, success) => {
     if (error) {
         console.error('❌ Error verificando SMTP:', error);
@@ -36,7 +28,7 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
     console.log('📧 Preparando envío');
     console.log('Destino:', email);
     console.log('Usuario SMTP:', process.env.EMAIL_USER);
-    
+
     const {
         asunto = 'Código de Verificación para Registro',
         titulo = 'Código de verificación',
