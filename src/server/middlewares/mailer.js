@@ -9,6 +9,22 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+    }
+});
+
+transporter.verify((error, success) => {
+    if (error) {
+        console.error('❌ Error verificando SMTP:', error);
+    } else {
+        console.log('✅ SMTP listo para enviar correos');
+    }
+});
+
 /**
  * Envía códigos de seguridad por correo con el estilo institucional de Legacy.
  *
@@ -17,6 +33,10 @@ const transporter = nodemailer.createTransport({
  * @param {object} opciones - Configuración opcional del correo
  */
 const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
+    console.log('📧 Preparando envío');
+    console.log('Destino:', email);
+    console.log('Usuario SMTP:', process.env.EMAIL_USER);
+    
     const {
         asunto = 'Código de Verificación para Registro',
         titulo = 'Código de verificación',
@@ -25,7 +45,7 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
     } = opciones;
 
     try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             from: `"Legacy" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: asunto,
@@ -109,6 +129,12 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
             `
         });
 
+        console.log('✅ Correo enviado');
+        console.log('Message ID:', info.messageId);
+        console.log('Accepted:', info.accepted);
+        console.log('Rejected:', info.rejected);
+        console.log('Response:', info.response);
+
         return true;
     } catch (error) {
         console.error('Error al enviar el correo:', error);
@@ -135,7 +161,7 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
     const badgeBorder = esBug ? 'rgba(220, 38, 38, 0.3)' : 'rgba(203, 161, 53, 0.35)';
 
     try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             from: `"Legacy App" <${process.env.EMAIL_USER}>`,
             to: 'legacydesarrollo@gmail.com',
             subject: `[Legacy Support] ${tipo}: ${usuario}`,
@@ -245,6 +271,12 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
             </html>
             `
         });
+
+        console.log('✅ Correo enviado');
+        console.log('Message ID:', info.messageId);
+        console.log('Accepted:', info.accepted);
+        console.log('Rejected:', info.rejected);
+        console.log('Response:', info.response);
 
         return true;
     } catch (error) {
