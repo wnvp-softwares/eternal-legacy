@@ -45,9 +45,12 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en el puerto: ${PORT}`);
     console.log(
-        `Puedes probarlo entrando a ${
-            process.env.BACKEND_BASE_URL || `http://localhost:${PORT}`
+        `Puedes probarlo entrando a ${process.env.BACKEND_BASE_URL || `http://localhost:${PORT}`
         }`
     );
     console.log(`Clientes permitidos por CORS: ${CLIENT_URLS.join(', ')}`);
+
+    console.log("Temporal debug:\n")
+    console.log("EMAIL_USER:", process.env.EMAIL_USER);
+    console.log("EMAIL_PASSWORD existe:", !!process.env.EMAIL_PASSWORD);
 });
