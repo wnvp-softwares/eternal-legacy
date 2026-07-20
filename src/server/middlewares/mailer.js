@@ -1,26 +1,7 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 require('dotenv').config();
 
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000
-});
-
-transporter.verify((error, success) => {
-    if (error) {
-        console.error('❌ Error verificando SMTP:', error);
-    } else {
-        console.log('✅ SMTP listo para enviar correos');
-    }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * Envía códigos de seguridad por correo con el estilo institucional de Legacy.
@@ -41,13 +22,9 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
         accion = 'Tu código de verificación es:'
     } = opciones;
 
-    await transporter.verify();
-
-    console.log("✅ SMTP verificado");
-
     try {
-        const info = await transporter.sendMail({
-            from: `"Legacy" <${process.env.EMAIL_USER}>`,
+        const { data, error } = await resend.emails.send({
+            from: process.env.EMAIL_FROM,
             to: email,
             subject: asunto,
             text: `${titulo}\n\n${descripcion}\n\n${accion} ${codigo}\n\nEste código expira en unos minutos. Si no solicitaste este acceso, puedes ignorar este correo.`,
@@ -162,8 +139,8 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
     const badgeBorder = esBug ? 'rgba(220, 38, 38, 0.3)' : 'rgba(203, 161, 53, 0.35)';
 
     try {
-        const info = await transporter.sendMail({
-            from: `"Legacy App" <${process.env.EMAIL_USER}>`,
+        const { data, error } = await resend.emails.send({
+            from: process.env.EMAIL_FROM,
             to: 'legacydesarrollo@gmail.com',
             subject: `[Legacy Support] ${tipo}: ${usuario}`,
             text: `REPORTE DE USUARIO - LEGACY\n` +

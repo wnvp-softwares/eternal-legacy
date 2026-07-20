@@ -36,6 +36,7 @@
     "nodemailer": "^8.0.5",
     "nodemon": "^3.1.14",
     "react-i18next": "^17.0.9",
+    "resend": "^6.17.2",
     "sequelize": "^6.37.8"
   },
   "devDependencies": {
