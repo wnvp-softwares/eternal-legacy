@@ -11,9 +11,6 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  * @param {object} opciones - Configuración opcional del correo
  */
 const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
-    console.log('📧 Preparando envío');
-    console.log('Destino:', email);
-    console.log('Usuario SMTP:', process.env.EMAIL_USER);
 
     const {
         asunto = 'Código de Verificación para Registro',
@@ -106,12 +103,6 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
             </html>
             `
         });
-
-        console.log('✅ Correo enviado');
-        console.log('Message ID:', info.messageId);
-        console.log('Accepted:', info.accepted);
-        console.log('Rejected:', info.rejected);
-        console.log('Response:', info.response);
 
         return true;
     } catch (error) {
@@ -249,12 +240,6 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
             </html>
             `
         });
-
-        console.log('✅ Correo enviado');
-        console.log('Message ID:', info.messageId);
-        console.log('Accepted:', info.accepted);
-        console.log('Rejected:', info.rejected);
-        console.log('Response:', info.response);
 
         return true;
     } catch (error) {
