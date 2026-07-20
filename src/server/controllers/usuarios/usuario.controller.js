@@ -9,6 +9,8 @@ const DURACION_TOKEN_2FA = '10m';
 const IDIOMAS_PERMITIDOS = ['es-MX', 'es-ES', 'en-US'];
 const FORMATOS_FECHA_PERMITIDOS = ['DD/MM/AAAA', 'MM/DD/AAAA', 'AAAA-MM-DD'];
 
+const { enviarReporteFeedback } = require('../../middlewares/mailer');
+
 const esZonaHorariaValida = (zonaHoraria) => {
     if (!zonaHoraria || typeof zonaHoraria !== 'string') return false;
 
@@ -620,6 +622,42 @@ const obtenerClavePublicaUsuario = async (req, res) => {
     }
 };
 
+const enviarFeedback = async (req, res) => {
+    try {
+        const { tipo, mensaje } = req.body;
+
+        if (!mensaje || !mensaje.trim()) {
+            return res.status(400).json({ mensaje: 'El mensaje no puede estar vacío.' });
+        }
+
+        // Obtener la información del usuario desde la base de datos
+        const usuarioBD = await Usuario.findById(req.usuario.id);
+
+        if (!usuarioBD) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        }
+
+        const usuarioNombre = usuarioBD.nombreUsuario || 'Usuario Autenticado';
+        const emailUsuario = usuarioBD.email || 'Correo no registrado';
+
+        const enviado = await enviarReporteFeedback({
+            usuario: usuarioNombre,
+            emailUsuario: emailUsuario,
+            mensaje: mensaje.trim(),
+            tipo: tipo || 'Recomendación / Bug'
+        });
+
+        if (!enviado) {
+            return res.status(500).json({ mensaje: 'No se pudo enviar el correo en este momento. Inténtalo más tarde.' });
+        }
+
+        return res.status(200).json({ mensaje: '¡Gracias! Tu reporte/recomendación ha sido enviado correctamente.' });
+    } catch (error) {
+        console.error('Error en enviarFeedback:', error);
+        return res.status(500).json({ mensaje: 'Ocurrió un error al procesar la solicitud.' });
+    }
+};
+
 module.exports = {
     crearUsuario,
     loginUsuario,
@@ -631,5 +669,6 @@ module.exports = {
     toggle2FA,
     actualizarPreferencias,
     actualizarClavePublica,
-    obtenerClavePublicaUsuario
+    obtenerClavePublicaUsuario,
+    enviarFeedback
 };

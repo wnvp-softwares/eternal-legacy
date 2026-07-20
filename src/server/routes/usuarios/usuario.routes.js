@@ -12,7 +12,8 @@ const {
     toggle2FA,
     actualizarPreferencias,
     actualizarClavePublica,
-    obtenerClavePublicaUsuario
+    obtenerClavePublicaUsuario,
+    enviarFeedback
 } = require('../../controllers/usuarios/usuario.controller');
 
 const { verificarToken } = require('../../middlewares/auth.middleware');
@@ -40,5 +41,7 @@ router.put('/actualizar-preferencias', verificarToken, actualizarPreferencias);
 
 router.put('/clave-publica', verificarToken, actualizarClavePublica);
 router.get('/clave-publica/:id', verificarToken, obtenerClavePublicaUsuario);
+
+router.post('/feedback', verificarToken, enviarFeedback);
 
 module.exports = router;

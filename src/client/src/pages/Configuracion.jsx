@@ -111,6 +111,15 @@ export default function Configuracion() {
   const [reducirAnimaciones, setReducirAnimaciones] = useState(() => localStorage.getItem('reducirAnimaciones') === 'true');
   const [mensajeApariencia, setMensajeApariencia] = useState('');
 
+  // 1. Agregar estados en la parte superior de Configuracion Component
+  const [formSoporte, setFormSoporte] = useState({
+    tipo: 'Sugerencia',
+    mensaje: ''
+  });
+  const [enviandoSoporte, setEnviandoSoporte] = useState(false);
+  const [mensajeSoporte, setMensajeSoporte] = useState('');
+  const [errorSoporte, setErrorSoporte] = useState('');
+
   const token = localStorage.getItem('token');
   const zonasParaSelector = zonasHorariasDisponibles.length > 0
     ? zonasHorariasDisponibles
@@ -176,6 +185,35 @@ export default function Configuracion() {
       setErrorCuenta(error.message || 'No se pudo cargar la información.');
     } finally {
       setCargandoCuenta(false);
+    }
+  };
+
+  const enviarSoporte = async (e) => {
+    e.preventDefault();
+    if (!formSoporte.mensaje.trim()) {
+      setErrorSoporte('Por favor, escribe un comentario o descripción antes de enviar.');
+      return;
+    }
+
+    try {
+      setEnviandoSoporte(true);
+      setErrorSoporte('');
+      setMensajeSoporte('');
+
+      const data = await apiFetch('/api/usuarios/feedback', {
+        method: 'POST',
+        body: JSON.stringify({
+          tipo: formSoporte.tipo,
+          mensaje: formSoporte.mensaje
+        })
+      });
+
+      setMensajeSoporte(data.mensaje || '¡Gracias por tus comentarios!');
+      setFormSoporte({ tipo: 'Sugerencia', mensaje: '' });
+    } catch (error) {
+      setErrorSoporte(error.message || 'No se pudo enviar tu recomendación.');
+    } finally {
+      setEnviandoSoporte(false);
     }
   };
 
@@ -759,24 +797,93 @@ export default function Configuracion() {
           </>
         );
 
+      case 'soporte':
+        return (
+          <>
+            <h3 className="fuente-elegante titulo-panel fs-4">Envíanos tus recomendaciones</h3>
+            <p className="ayuda-configuracion mb-4">
+              ¿Tienes sugerencias para mejorar Legacy o encontraste un error en la plataforma? Déjanos tu mensaje.
+            </p>
+
+            {mensajeSoporte && (
+              <div className="alerta-configuracion exito">
+                <i className="bi bi-check-circle-fill"></i>
+                <span>{mensajeSoporte}</span>
+              </div>
+            )}
+            {errorSoporte && (
+              <div className="alerta-configuracion error">
+                <i className="bi bi-exclamation-triangle-fill"></i>
+                <span>{errorSoporte}</span>
+              </div>
+            )}
+
+            <form onSubmit={enviarSoporte}>
+              <div className="grupo-form">
+                <label className="label-form">Tipo de mensaje</label>
+                <select
+                  className="input-config"
+                  value={formSoporte.tipo}
+                  onChange={(e) => setFormSoporte({ ...formSoporte, tipo: e.target.value })}
+                >
+                  <option value="Sugerencia">Sugerencia / Recomendación</option>
+                  <option value="Bug">Reporte de Bug o Fallo</option>
+                  <option value="Otro">Otro comentario</option>
+                </select>
+              </div>
+
+              <div className="grupo-form">
+                <label className="label-form">Envíanos tus recomendaciones</label>
+                <textarea
+                  className="input-config"
+                  rows={5}
+                  value={formSoporte.mensaje}
+                  onChange={(e) => setFormSoporte({ ...formSoporte, mensaje: e.target.value })}
+                  placeholder="Escribe aquí lo que nos quieras recomendar o reportar..."
+                ></textarea>
+              </div>
+
+              <div className="d-flex justify-content-end mt-4">
+                <button className="boton-guardar" type="submit" disabled={enviandoSoporte}>
+                  {enviandoSoporte ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-send me-2"></i>Enviar mensaje
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </>
+        );
       default:
-        return null;
-    }
+  return null;
+}
   };
 
-  return (
-    <div className="container-fluid max-w-custom p-0">
-      <div className="layout-configuracion">
-        <aside className="menu-configuracion">
-          <button className={`item-configuracion ${seccionActiva === 'cuenta' ? 'activo' : ''}`} onClick={() => setSeccionActiva('cuenta')}><i className="bi bi-person"></i> {t('menu_cuenta')}</button>
-          <button className={`item-configuracion ${seccionActiva === 'privacidad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('privacidad')}><i className="bi bi-shield-lock"></i> {t('menu_privacidad')}</button>
-          <button className={`item-configuracion ${seccionActiva === 'notificaciones' ? 'activo' : ''}`} onClick={() => setSeccionActiva('notificaciones')}><i className="bi bi-bell"></i> {t('menu_notificaciones')}</button>
-          <button className={`item-configuracion ${seccionActiva === 'seguridad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('seguridad')}><i className="bi bi-key"></i> {t('menu_seguridad')}</button>
-          <button className={`item-configuracion ${seccionActiva === 'idioma' ? 'activo' : ''}`} onClick={() => setSeccionActiva('idioma')}><i className="bi bi-globe"></i> {t('menu_idioma')}</button>
-          <button className={`item-configuracion ${seccionActiva === 'apariencia' ? 'activo' : ''}`} onClick={() => setSeccionActiva('apariencia')}><i className="bi bi-palette"></i> {t('menu_apariencia')}</button>
-        </aside>
-        <main className="panel-configuracion">{renderContenido()}</main>
-      </div>
+return (
+  <div className="container-fluid max-w-custom p-0">
+    <div className="layout-configuracion">
+      <aside className="menu-configuracion">
+        <button className={`item-configuracion ${seccionActiva === 'cuenta' ? 'activo' : ''}`} onClick={() => setSeccionActiva('cuenta')}><i className="bi bi-person"></i> {t('menu_cuenta')}</button>
+        <button className={`item-configuracion ${seccionActiva === 'privacidad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('privacidad')}><i className="bi bi-shield-lock"></i> {t('menu_privacidad')}</button>
+        <button className={`item-configuracion ${seccionActiva === 'notificaciones' ? 'activo' : ''}`} onClick={() => setSeccionActiva('notificaciones')}><i className="bi bi-bell"></i> {t('menu_notificaciones')}</button>
+        <button className={`item-configuracion ${seccionActiva === 'seguridad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('seguridad')}><i className="bi bi-key"></i> {t('menu_seguridad')}</button>
+        <button className={`item-configuracion ${seccionActiva === 'idioma' ? 'activo' : ''}`} onClick={() => setSeccionActiva('idioma')}><i className="bi bi-globe"></i> {t('menu_idioma')}</button>
+        <button className={`item-configuracion ${seccionActiva === 'apariencia' ? 'activo' : ''}`} onClick={() => setSeccionActiva('apariencia')}><i className="bi bi-palette"></i> {t('menu_apariencia')}</button>
+        <button
+          className={`item-configuracion ${seccionActiva === 'soporte' ? 'activo' : ''}`}
+          onClick={() => setSeccionActiva('soporte')}
+        >
+          <i className="bi bi-chat-right-heart"></i> Soporte y Sugerencias
+        </button>
+      </aside>
+      <main className="panel-configuracion">{renderContenido()}</main>
     </div>
-  );
+  </div>
+);
 }
