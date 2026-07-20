@@ -1,36 +1,37 @@
-const path = require('path');
-const multer = require('multer');
+const multer = require("multer");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("./cloudinary.config");
 
 const {
-    UPLOADS_ABSOLUTE_DIR,
     MAX_UPLOAD_SIZE_BYTES
-} = require('./uploads.config');
+} = require("./uploads.config");
 
-const limpiarNombreArchivo = (nombre = '') => {
-    return String(nombre || 'archivo')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9._-]/g, '-')
-        .replace(/-+/g, '-')
-        .toLowerCase();
-};
+const storage = new CloudinaryStorage({
+    cloudinary,
+    params: async (req, file) => {
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, UPLOADS_ABSOLUTE_DIR);
-    },
+        let folder = "legacy";
+        let resource_type = "auto";
 
-    filename: (req, file, cb) => {
-        const extension = path.extname(file.originalname || '');
-        const nombreBase = path.basename(file.originalname || 'archivo', extension);
-        const nombreLimpio = limpiarNombreArchivo(nombreBase);
-        const nombreFinal = `${Date.now()}-${Math.round(Math.random() * 1E9)}-${nombreLimpio}${extension.toLowerCase()}`;
+        if (file.mimetype.startsWith("image/")) {
+            folder = "legacy/images";
+        }
 
-        cb(null, nombreFinal);
+        if (file.mimetype.startsWith("video/")) {
+            folder = "legacy/videos";
+        }
+
+        return {
+            folder,
+            resource_type,
+            use_filename: true,
+            unique_filename: true
+        };
     }
 });
 
 const upload = multer({
+
     storage,
 
     limits: {
@@ -38,15 +39,17 @@ const upload = multer({
     },
 
     fileFilter(req, file, cb) {
+
         if (
-            file.mimetype.startsWith('image/') ||
-            file.mimetype.startsWith('video/')
+            file.mimetype.startsWith("image/") ||
+            file.mimetype.startsWith("video/")
         ) {
             return cb(null, true);
         }
 
-        cb(new Error('Formato no soportado'));
+        cb(new Error("Formato no soportado"));
     }
+
 });
 
 module.exports = upload;
