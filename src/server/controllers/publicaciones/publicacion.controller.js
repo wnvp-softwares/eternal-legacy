@@ -334,16 +334,18 @@ const crearPublicacion = async (req, res) => {
         const idsMultimedia = [];
 
         if (req.file) {
-            const urlArchivo = construirRutaPublicaUpload(req.file.filename);
 
             const nuevoUpload = new Upload({
                 propietario: req.usuario.id,
-                urlArchivo,
+                urlArchivo: req.file.path,
                 formato: req.file.mimetype,
                 pesoBytes: req.file.size
             });
 
+            console.log(req.file);
+
             const uploadGuardado = await nuevoUpload.save();
+
             idsMultimedia.push(uploadGuardado._id);
         }
 
