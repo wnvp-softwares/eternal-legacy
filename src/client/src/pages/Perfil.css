@@ -1341,3 +1341,56 @@
         font-size: 0.72rem;
     }
 }
+
+/* =========================================================
+   FEED DE RECUERDOS COMPACTO
+   Mantiene el encabezado, la línea de tiempo y la galería con
+   su ancho original; solamente centra las publicaciones completas.
+   ========================================================= */
+.perfil-recuerdos-feed {
+    width: 100%;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.perfil-recuerdos-feed .tarjeta-publicacion-perfil {
+    width: 100%;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-top: 22px !important;
+    padding-bottom: 18px !important;
+    box-sizing: border-box;
+}
+
+.perfil-recuerdos-feed .tarjeta-publicacion-perfil .texto-post.historico {
+    margin-top: 13px;
+    margin-bottom: 14px;
+}
+
+.perfil-recuerdos-feed .acciones-post-perfil {
+    margin-top: 14px !important;
+    padding-top: 12px !important;
+}
+
+@media (max-width: 640px) {
+    .perfil-recuerdos-feed,
+    .perfil-recuerdos-feed .tarjeta-publicacion-perfil {
+        width: 100%;
+        max-width: none;
+    }
+
+    .perfil-recuerdos-feed .tarjeta-publicacion-perfil {
+        padding-top: 18px !important;
+        padding-bottom: 16px !important;
+    }
+
+    .perfil-recuerdos-feed .tarjeta-publicacion-perfil .texto-post.historico {
+        margin-top: 12px;
+        margin-bottom: 13px;
+    }
+}
+

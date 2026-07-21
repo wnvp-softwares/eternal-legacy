@@ -3,6 +3,8 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import ImageCropperModal from '../components/ImageCropperModal';
+import PublicacionMediaCarousel from '../components/PublicacionMediaCarousel';
+import PublicacionHeader from '../components/PublicacionHeader';
 import './Inicio.css';
 
 const obtenerId = (valor) => {
@@ -300,6 +302,34 @@ const TIPOS_PUBLICACION_CONFIG = {
 
 const EMOJIS_RAPIDOS = ['❤️', '😊', '😂', '🥹', '🙏', '🎉', '🎂', '📸', '🕊️', '✨', '🌳', '👨‍👩‍👧‍👦', '🏡', '📍', '💛', '🫶'];
 
+
+const MAX_MULTIMEDIA_PUBLICACION = 5;
+const maxUploadMbConfigurado = Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_MB || 50);
+const MAX_TOTAL_UPLOAD_MB_FRONTEND = Number.isFinite(maxUploadMbConfigurado) && maxUploadMbConfigurado > 0
+  ? maxUploadMbConfigurado
+  : 50;
+const MAX_TOTAL_UPLOAD_BYTES_FRONTEND = MAX_TOTAL_UPLOAD_MB_FRONTEND * 1024 * 1024;
+
+const crearIdMultimediaBorrador = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `media-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const esArchivoVideo = (archivo) => Boolean(archivo?.type?.startsWith('video/'));
+const esArchivoGif = (archivo) => archivo?.type === 'image/gif';
+const esArchivoImagenRecortable = (archivo) => Boolean(
+  archivo?.type?.startsWith('image/') && !esArchivoGif(archivo)
+);
+
+const revocarUrlTemporal = (url) => {
+  if (typeof url === 'string' && url.startsWith('blob:')) {
+    URL.revokeObjectURL(url);
+  }
+};
+
 const normalizarPersonaSugerida = (persona = {}) => {
   const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id) || obtenerNombreDeEntidad(persona);
   const nombre = obtenerNombreDeEntidad(persona);
@@ -470,12 +500,14 @@ export default function Inicio() {
   const [arbolAudienciaPublicacion, setArbolAudienciaPublicacion] = useState(null);
   const [etiquetasImagen, setEtiquetasImagen] = useState([]);
 
-  const [archivoAdjunto, setArchivoAdjunto] = useState(null);
-  const [vistaPrevia, setVistaPrevia] = useState('');
+  const [multimediaBorrador, setMultimediaBorrador] = useState([]);
+  const multimediaBorradorRef = useRef([]);
   const [cropperPublicacion, setCropperPublicacion] = useState({
     abierto: false,
-    archivo: null
+    archivo: null,
+    multimediaId: null
   });
+  const [publicando, setPublicando] = useState(false);
   const fileInputRef = useRef(null);
   const gifInputRef = useRef(null);
   const textareaPublicacionRef = useRef(null);
@@ -710,69 +742,204 @@ export default function Inicio() {
     return () => clearTimeout(temporizador);
   }, [busquedaPersonaPublicacion, panelHerramientaActivo, token]);
 
-  const establecerMultimediaPublicacion = (file, previewUrl = '') => {
-    if (!file) return;
+  useEffect(() => {
+    multimediaBorradorRef.current = multimediaBorrador;
+  }, [multimediaBorrador]);
 
-    if (vistaPrevia && vistaPrevia.startsWith('blob:')) {
-      URL.revokeObjectURL(vistaPrevia);
-    }
+  useEffect(() => {
+    return () => {
+      multimediaBorradorRef.current.forEach((elemento) => revocarUrlTemporal(elemento.vistaPrevia));
+      multimediaBorradorRef.current = [];
+    };
+  }, []);
 
-    setArchivoAdjunto(file);
-    setVistaPrevia(previewUrl || URL.createObjectURL(file));
-    setEtiquetasImagen([]);
-    setPanelHerramientaActivo(null);
+  const actualizarMultimediaBorrador = (nuevoValor) => {
+    setMultimediaBorrador((prev) => {
+      const siguiente = typeof nuevoValor === 'function' ? nuevoValor(prev) : nuevoValor;
+      multimediaBorradorRef.current = siguiente;
+      return siguiente;
+    });
   };
 
-  const abrirCropperPublicacion = (file) => {
+  const crearElementoMultimedia = (archivo) => ({
+    id: crearIdMultimediaBorrador(),
+    archivo,
+    vistaPrevia: URL.createObjectURL(archivo),
+    tipo: esArchivoVideo(archivo) ? 'video' : (esArchivoGif(archivo) ? 'gif' : 'imagen'),
+    esRecortable: esArchivoImagenRecortable(archivo),
+    nombre: archivo.name,
+    pesoBytes: archivo.size,
+    recortada: false
+  });
+
+  const agregarArchivosMultimedia = (archivosSeleccionados = []) => {
+    const archivos = Array.from(archivosSeleccionados).filter(Boolean);
+    if (archivos.length === 0) return;
+
+    const actuales = multimediaBorradorRef.current;
+    const tieneVideo = archivos.some(esArchivoVideo);
+    const tieneGif = archivos.some(esArchivoGif);
+    const tieneImagenComun = archivos.some(esArchivoImagenRecortable);
+
+    if ((tieneVideo || tieneGif) && (archivos.length > 1 || tieneImagenComun || actuales.length > 0)) {
+      alert('Los videos y GIF se publican de uno en uno y no se pueden mezclar con fotografías.');
+      return;
+    }
+
+    if (tieneVideo || tieneGif) {
+      const archivo = archivos[0];
+
+      if (archivo.size > MAX_TOTAL_UPLOAD_BYTES_FRONTEND) {
+        alert(`El archivo supera el límite de ${MAX_TOTAL_UPLOAD_MB_FRONTEND} MB.`);
+        return;
+      }
+
+      actualizarMultimediaBorrador([crearElementoMultimedia(archivo)]);
+      setEtiquetasImagen([]);
+      setPanelHerramientaActivo(null);
+      return;
+    }
+
+    if (actuales.some((elemento) => elemento.tipo !== 'imagen')) {
+      alert('Elimina el video o GIF actual antes de agregar fotografías.');
+      return;
+    }
+
+    const espaciosDisponibles = Math.max(0, MAX_MULTIMEDIA_PUBLICACION - actuales.length);
+    if (espaciosDisponibles === 0) {
+      alert(`Solo puedes agregar hasta ${MAX_MULTIMEDIA_PUBLICACION} fotografías.`);
+      return;
+    }
+
+    const firmasExistentes = new Set(
+      actuales.map((elemento) => `${elemento.archivo.name}-${elemento.archivo.size}-${elemento.archivo.lastModified}`)
+    );
+
+    const candidatas = archivos
+      .filter(esArchivoImagenRecortable)
+      .filter((archivo) => {
+        const firma = `${archivo.name}-${archivo.size}-${archivo.lastModified}`;
+        if (firmasExistentes.has(firma)) return false;
+        firmasExistentes.add(firma);
+        return true;
+      });
+
+    const nuevas = [];
+    let pesoAcumulado = actuales.reduce((total, elemento) => total + (elemento.pesoBytes || 0), 0);
+    let excedioPeso = false;
+
+    for (const archivo of candidatas) {
+      if (nuevas.length >= espaciosDisponibles) break;
+
+      if (pesoAcumulado + archivo.size > MAX_TOTAL_UPLOAD_BYTES_FRONTEND) {
+        excedioPeso = true;
+        continue;
+      }
+
+      nuevas.push(crearElementoMultimedia(archivo));
+      pesoAcumulado += archivo.size;
+    }
+
+    if (nuevas.length > 0) {
+      actualizarMultimediaBorrador((prev) => [...prev, ...nuevas]);
+      setPanelHerramientaActivo(null);
+    }
+
+    if (candidatas.length > espaciosDisponibles) {
+      alert(`Se agregaron las primeras ${espaciosDisponibles} fotografías disponibles. El máximo es ${MAX_MULTIMEDIA_PUBLICACION}.`);
+    } else if (excedioPeso) {
+      alert(`Algunas fotografías no se agregaron porque el conjunto supera ${MAX_TOTAL_UPLOAD_MB_FRONTEND} MB.`);
+    } else if (nuevas.length === 0) {
+      alert('No se agregaron archivos nuevos. Revisa que sean fotografías compatibles y que no estén duplicadas.');
+    }
+  };
+
+  const abrirCropperPublicacion = (elemento) => {
+    if (!elemento?.esRecortable) return;
+
     setCropperPublicacion({
       abierto: true,
-      archivo: file
+      archivo: elemento.archivo,
+      multimediaId: elemento.id
     });
   };
 
   const cerrarCropperPublicacion = () => {
     setCropperPublicacion({
       abierto: false,
-      archivo: null
+      archivo: null,
+      multimediaId: null
     });
-
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (gifInputRef.current) gifInputRef.current.value = '';
   };
 
   const confirmarCropperPublicacion = ({ archivo, vistaPrevia: previewUrl }) => {
-    establecerMultimediaPublicacion(archivo, previewUrl);
-    setCropperPublicacion({
-      abierto: false,
-      archivo: null
-    });
-  };
-
-  const manejarCambioArchivo = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const esImagenRecortable = file.type?.startsWith('image/') && file.type !== 'image/gif';
-
-    if (esImagenRecortable) {
-      abrirCropperPublicacion(file);
-      e.target.value = '';
+    if (!archivo || !cropperPublicacion.multimediaId) {
+      revocarUrlTemporal(previewUrl);
+      cerrarCropperPublicacion();
       return;
     }
 
-    establecerMultimediaPublicacion(file);
+    const elementoAnterior = multimediaBorradorRef.current.find(
+      (elemento) => elemento.id === cropperPublicacion.multimediaId
+    );
+
+    if (!elementoAnterior) {
+      revocarUrlTemporal(previewUrl);
+      cerrarCropperPublicacion();
+      return;
+    }
+
+    const nuevaVistaPrevia = previewUrl || URL.createObjectURL(archivo);
+
+    actualizarMultimediaBorrador((prev) => prev.map((elemento) => (
+      elemento.id === cropperPublicacion.multimediaId
+        ? {
+          ...elemento,
+          archivo,
+          vistaPrevia: nuevaVistaPrevia,
+          nombre: archivo.name,
+          pesoBytes: archivo.size,
+          recortada: true
+        }
+        : elemento
+    )));
+
+    setTimeout(() => revocarUrlTemporal(elementoAnterior.vistaPrevia), 0);
+    cerrarCropperPublicacion();
+  };
+
+  const manejarCambioArchivo = (e) => {
+    agregarArchivosMultimedia(e.target.files);
     e.target.value = '';
   };
 
-  const limpiarMultimedia = () => {
-    if (vistaPrevia && vistaPrevia.startsWith('blob:')) {
-      URL.revokeObjectURL(vistaPrevia);
+  const eliminarMultimedia = (multimediaId) => {
+    const actuales = multimediaBorradorRef.current;
+    const elementoEliminado = actuales.find((elemento) => elemento.id === multimediaId);
+    if (!elementoEliminado) return;
+
+    const restantes = actuales.filter((elemento) => elemento.id !== multimediaId);
+    actualizarMultimediaBorrador(restantes);
+
+    if (!restantes.some((elemento) => elemento.tipo === 'imagen')) {
+      setEtiquetasImagen([]);
+      if (panelHerramientaActivo === 'etiquetas') setPanelHerramientaActivo(null);
     }
 
-    setArchivoAdjunto(null);
-    setVistaPrevia('');
+    setTimeout(() => revocarUrlTemporal(elementoEliminado.vistaPrevia), 0);
+  };
+
+  const limpiarMultimedia = () => {
+    const elementosALimpiar = multimediaBorradorRef.current;
+    multimediaBorradorRef.current = [];
+    setMultimediaBorrador([]);
     setEtiquetasImagen([]);
-    setCropperPublicacion({ abierto: false, archivo: null });
+    setCropperPublicacion({ abierto: false, archivo: null, multimediaId: null });
+
+    setTimeout(() => {
+      elementosALimpiar.forEach((elemento) => revocarUrlTemporal(elemento.vistaPrevia));
+    }, 0);
+
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (gifInputRef.current) gifInputRef.current.value = '';
   };
@@ -906,11 +1073,19 @@ export default function Inicio() {
     setModalAbierto(true);
   };
 
-  const cerrarModalPublicacion = () => setModalAbierto(false);
+  const cerrarModalPublicacion = () => {
+    if (publicando) return;
+    setModalAbierto(false);
+  };
 
   const manejarPublicar = async () => {
-    if (!textoPublicacion.trim()) {
-      alert('Por favor, escribe un mensaje para tu publicación.');
+    if (publicando) return;
+
+    const contenidoLimpio = textoPublicacion.trim();
+    const archivosAEnviar = multimediaBorradorRef.current;
+
+    if (!contenidoLimpio && archivosAEnviar.length === 0) {
+      alert('Escribe un mensaje o agrega al menos una foto, video o GIF.');
       return;
     }
 
@@ -919,10 +1094,18 @@ export default function Inicio() {
       return;
     }
 
+    const pesoTotal = archivosAEnviar.reduce((total, elemento) => total + (elemento.pesoBytes || 0), 0);
+    if (pesoTotal > MAX_TOTAL_UPLOAD_BYTES_FRONTEND) {
+      alert(`El conjunto de archivos supera el límite de ${MAX_TOTAL_UPLOAD_MB_FRONTEND} MB.`);
+      return;
+    }
+
     try {
+      setPublicando(true);
+
       const formData = new FormData();
       formData.append('tipo', tipoPublicacion);
-      formData.append('contenido', textoPublicacion);
+      formData.append('contenido', contenidoLimpio);
       if (tipoPublicacion === 'familiar') {
         formData.append('arbolAudienciaId', arbolAudienciaPublicacion.id);
       }
@@ -933,14 +1116,14 @@ export default function Inicio() {
         formData.append('eventoRelacionado', JSON.stringify({ id: eventoRelacionadoPublicacion.id, titulo: eventoRelacionadoPublicacion.titulo, fechaInicio: eventoRelacionadoPublicacion.fechaInicio, tipoEvento: eventoRelacionadoPublicacion.tipoEvento, nombreFamilia: eventoRelacionadoPublicacion.nombreFamilia }));
       }
       if (etiquetasImagen.length > 0) formData.append('etiquetasMultimedia', JSON.stringify(etiquetasImagen.map(p => ({ id: p.id, nombre: p.nombre }))));
-      if (archivoAdjunto) formData.append('archivo', archivoAdjunto);
+      archivosAEnviar.forEach((elemento) => formData.append('archivo', elemento.archivo));
 
       const respuesta = await fetch(`${API_BASE_URL}/publicaciones/crear`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
-      const datos = await respuesta.json();
+      const datos = await respuesta.json().catch(() => ({}));
       if (respuesta.ok) {
         const publicacionCreada = {
           ...datos.publicacion,
@@ -951,17 +1134,20 @@ export default function Inicio() {
           nombreFamiliaAudienciaSnapshot: datos.publicacion?.nombreFamiliaAudienciaSnapshot || arbolAudienciaPublicacion?.nombreFamilia || '',
           etiquetasMultimedia: datos.publicacion?.etiquetasMultimedia || etiquetasImagen
         };
-        setPublicaciones([publicacionCreada, ...publicaciones]);
+        setPublicaciones((prev) => [publicacionCreada, ...prev]);
         setComentariosPorPub(prev => ({ ...prev, [datos.publicacion._id]: [] }));
         setTextoPublicacion('');
         limpiarMultimedia();
         limpiarHerramientasPublicacion();
-        cerrarModalPublicacion();
+        setModalAbierto(false);
       } else {
         alert(datos.mensaje || 'Hubo un error al publicar.');
       }
     } catch (err) {
+      console.error('Error al publicar:', err);
       alert('Error de red al intentar conectar con el servidor.');
+    } finally {
+      setPublicando(false);
     }
   };
 
@@ -1060,7 +1246,12 @@ export default function Inicio() {
   }, [textoBusqueda, token]);
 
   const configPublicacionActual = TIPOS_PUBLICACION_CONFIG[tipoPublicacion] || TIPOS_PUBLICACION_CONFIG.historico;
-  const esArchivoImagen = archivoAdjunto?.type?.startsWith('image/');
+  const hayMultimediaBorrador = multimediaBorrador.length > 0;
+  const hayImagenRecortable = multimediaBorrador.some((elemento) => elemento.tipo === 'imagen');
+  const borradorSoloTieneFotos = multimediaBorrador.length === 0 || multimediaBorrador.every((elemento) => elemento.tipo === 'imagen');
+  const puedeAgregarFotos = borradorSoloTieneFotos && multimediaBorrador.length < MAX_MULTIMEDIA_PUBLICACION;
+  const puedeAgregarGif = multimediaBorrador.length === 0;
+  const puedePublicar = textoPublicacion.trim() !== '' || hayMultimediaBorrador;
 
   const obtenerIdPersonaPerfil = (persona = {}) => {
     if (!persona) return null;
@@ -1210,11 +1401,9 @@ export default function Inicio() {
   };
 
   const renderVistaPublicacionAlbum = (pub = {}) => {
-    const urlMultimedia = obtenerUrlMultimediaPublicacion(pub.multimedia);
-
-    const tieneMultimedia = Boolean(urlMultimedia);
-
-    const esVideo = esVideoMultimediaPublicacion(pub.multimedia);
+    const tieneMultimedia = Array.isArray(pub.multimedia)
+      ? pub.multimedia.some(Boolean)
+      : Boolean(pub.multimedia);
     const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
     const autorId = obtenerIdPersonaPerfil(pub.autor) || obtenerIdPersonaPerfil(pub.usuario);
 
@@ -1250,13 +1439,13 @@ export default function Inicio() {
         )}
 
         {tieneMultimedia && (
-          <div className="album-evento-multimedia">
-            {esVideo ? <video src={urlMultimedia} controls controlsList="nodownload" /> : <img
-              src={urlMultimedia}
-              alt="Momento del evento"
-              onError={() => console.warn('No se pudo cargar multimedia del álbum:', urlMultimedia, pub.multimedia)}
-            />}
-          </div>
+          <PublicacionMediaCarousel
+            multimedia={pub.multimedia}
+            tipo={pub.tipo === 'historico' ? 'historico' : 'familiar'}
+            compacto
+            alt="Momento del evento"
+            className="album-evento-multimedia-carousel"
+          />
         )}
       </article>
     );
@@ -1420,10 +1609,10 @@ export default function Inicio() {
   };
 
   const renderEtiquetasImagenModal = () => {
-    if (!vistaPrevia || etiquetasImagen.length === 0) return null;
+    if (!hayImagenRecortable || etiquetasImagen.length === 0) return null;
     return (
       <div className="etiquetas-imagen-modal">
-        <span className="titulo-etiquetas-imagen"><i className="bi bi-person-bounding-box"></i> Etiquetas en imagen</span>
+        <span className="titulo-etiquetas-imagen"><i className="bi bi-person-bounding-box"></i> Personas etiquetadas en la publicación</span>
         <div className="chips-publicacion-modal">
           {etiquetasImagen.map(persona => (
             <span key={persona.id} className="chip-publicacion etiqueta">
@@ -1432,6 +1621,86 @@ export default function Inicio() {
             </span>
           ))}
         </div>
+      </div>
+    );
+  };
+
+  const renderEditorMultimediaBorrador = () => {
+    if (!hayMultimediaBorrador) return null;
+
+    const esArchivoUnicoEspecial = multimediaBorrador.length === 1 && multimediaBorrador[0].tipo !== 'imagen';
+
+    return (
+      <div className="editor-multimedia-publicacion mt-3">
+        <div className="editor-multimedia-encabezado">
+          <div>
+            <strong>{esArchivoUnicoEspecial ? 'Archivo adjunto' : 'Fotos de la publicación'}</strong>
+            <span>
+              {esArchivoUnicoEspecial
+                ? 'Publica un video o GIF de forma individual.'
+                : `${multimediaBorrador.length} de ${MAX_MULTIMEDIA_PUBLICACION} fotografías`}
+            </span>
+          </div>
+          {!esArchivoUnicoEspecial && (
+            <span className="editor-multimedia-contador">{multimediaBorrador.length}/{MAX_MULTIMEDIA_PUBLICACION}</span>
+          )}
+        </div>
+
+        <div className={`carrusel-borrador-publicacion ${esArchivoUnicoEspecial ? 'archivo-unico' : ''}`}>
+          {multimediaBorrador.map((elemento, indice) => (
+            <article key={elemento.id} className="tarjeta-multimedia-borrador">
+              {elemento.tipo === 'video' ? (
+                <video src={elemento.vistaPrevia} muted preload="metadata" />
+              ) : (
+                <img src={elemento.vistaPrevia} alt={`Vista previa ${indice + 1}`} />
+              )}
+
+              <div className="acciones-multimedia-borrador">
+                {elemento.esRecortable && (
+                  <button
+                    type="button"
+                    className="accion-multimedia editar"
+                    onClick={() => abrirCropperPublicacion(elemento)}
+                    disabled={publicando}
+                    aria-label={`Recortar fotografía ${indice + 1}`}
+                    title="Recortar fotografía"
+                  >
+                    <i className="bi bi-pencil-fill"></i>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="accion-multimedia eliminar"
+                  onClick={() => eliminarMultimedia(elemento.id)}
+                  disabled={publicando}
+                  aria-label={`Eliminar archivo ${indice + 1}`}
+                  title="Eliminar archivo"
+                >
+                  <i className="bi bi-x-lg"></i>
+                </button>
+              </div>
+
+              {!esArchivoUnicoEspecial && (
+                <span className="posicion-multimedia-borrador">{indice + 1}</span>
+              )}
+            </article>
+          ))}
+
+          {puedeAgregarFotos && multimediaBorrador.length > 0 && (
+            <button
+              type="button"
+              className="tarjeta-agregar-multimedia"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={publicando}
+              aria-label="Agregar más fotografías"
+            >
+              <i className="bi bi-plus-lg"></i>
+              <span>Agregar</span>
+            </button>
+          )}
+        </div>
+
+        {renderEtiquetasImagenModal()}
       </div>
     );
   };
@@ -1520,9 +1789,22 @@ export default function Inicio() {
 
       {/* MODAL DE PUBLICACIÓN */}
       {modalAbierto && (
-        <div className="modal-backdrop-custom" onClick={cerrarModalPublicacion}>
-          <div className="modal-publicacion" onClick={(e) => e.stopPropagation()}>
-            <button className="btn-cerrar-modal" onClick={cerrarModalPublicacion}><i className="bi bi-x"></i></button>
+        <div className="modal-backdrop-custom modal-backdrop-publicacion" onClick={cerrarModalPublicacion}>
+          <div
+            className={`modal-publicacion modal-publicacion-${tipoPublicacion} ${hayMultimediaBorrador ? 'modal-publicacion-con-preview' : 'modal-publicacion-sin-preview'} ${panelHerramientaActivo ? 'modal-publicacion-con-panel' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-publicacion-topbar-movil">
+              <button type="button" className="btn-cerrar-publicacion-movil" onClick={cerrarModalPublicacion} disabled={publicando} aria-label="Cerrar publicación">
+                <i className="bi bi-x-lg"></i>
+              </button>
+              <span>Nueva publicación</span>
+              <button type="button" className="btn-menu-publicacion-movil" aria-label="Más opciones">
+                <i className="bi bi-three-dots"></i>
+              </button>
+            </div>
+
+            <button className="btn-cerrar-modal btn-cerrar-modal-publicacion" onClick={cerrarModalPublicacion} disabled={publicando}><i className="bi bi-x"></i></button>
 
             <div className={`modal-cabecera modal-cabecera-unica ${tipoPublicacion}`}>
               <div className="titulo-modal-publicacion">
@@ -1590,28 +1872,24 @@ export default function Inicio() {
 
               {renderChipsHerramientas()}
 
-              {vistaPrevia && (
-                <div className="contenedor-vista-previa mt-3 position-relative text-center rounded p-2 border">
-                  <button type="button" className="btn-eliminar-preview" onClick={limpiarMultimedia} aria-label="Quitar archivo"><i className="bi bi-trash"></i></button>
-                  {archivoAdjunto?.type.startsWith('video/') ? (
-                    <video src={vistaPrevia} className="img-fluid rounded" style={{ maxHeight: '220px' }} controls />
-                  ) : (
-                    <img src={vistaPrevia} alt="Vista previa" className="img-fluid rounded vista-previa-crop" />
-                  )}
-                  {renderEtiquetasImagenModal()}
-                </div>
-              )}
+              {renderEditorMultimediaBorrador()}
 
               {renderPanelHerramienta()}
             </div>
 
             <div className="modal-pie d-flex justify-content-between align-items-center mt-3 pt-2">
               <div className="grupo-herramientas-modal">
-                <input type="file" ref={fileInputRef} onChange={manejarCambioArchivo} accept="image/*,video/*" style={{ display: 'none' }} />
+                <input type="file" ref={fileInputRef} onChange={manejarCambioArchivo} accept="image/*,video/*" multiple style={{ display: 'none' }} />
                 <input type="file" ref={gifInputRef} onChange={manejarCambioArchivo} accept="image/gif" style={{ display: 'none' }} />
 
-                <button className="btn-herramienta-modal" type="button" title={archivoAdjunto ? 'Cambiar foto o video' : 'Agregar foto o video'} onClick={() => fileInputRef.current?.click()}><i className="bi bi-image"></i></button>
-                <button className="btn-herramienta-modal" type="button" title="Agregar GIF" onClick={() => gifInputRef.current?.click()}><i className="bi bi-filetype-gif"></i></button>
+                <button
+                  className="btn-herramienta-modal"
+                  type="button"
+                  title={puedeAgregarFotos ? 'Agregar fotos o un video' : 'Alcanzaste el límite o debes eliminar el archivo actual'}
+                  disabled={publicando || !puedeAgregarFotos}
+                  onClick={() => fileInputRef.current?.click()}
+                ><i className="bi bi-image"></i></button>
+                <button className="btn-herramienta-modal" type="button" title="Agregar GIF" disabled={publicando || !puedeAgregarGif} onClick={() => gifInputRef.current?.click()}><i className="bi bi-filetype-gif"></i></button>
                 <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'emoji' ? 'activo' : ''}`} type="button" title="Agregar emoji" onClick={() => abrirPanelHerramienta('emoji')}><i className="bi bi-emoji-smile"></i></button>
                 <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'ubicacion' || ubicacionPublicacion ? 'activo' : ''}`} type="button" title="Agregar ubicación" onClick={() => abrirPanelHerramienta('ubicacion')}><i className="bi bi-geo-alt"></i></button>
 
@@ -1624,16 +1902,18 @@ export default function Inicio() {
                 <button
                   className={`btn-herramienta-modal ${panelHerramientaActivo === 'etiquetas' || etiquetasImagen.length > 0 ? 'activo' : ''}`}
                   type="button"
-                  title={vistaPrevia && esArchivoImagen ? 'Etiquetar personas en la imagen' : 'Agrega una imagen para etiquetar personas'}
-                  disabled={!vistaPrevia || !esArchivoImagen}
+                  title={hayImagenRecortable ? 'Etiquetar personas en la publicación' : 'Agrega una fotografía para etiquetar personas'}
+                  disabled={!hayImagenRecortable || publicando}
                   onClick={() => abrirPanelHerramienta('etiquetas')}
                 >
                   <i className="bi bi-person-bounding-box"></i>
                 </button>
               </div>
 
-              <button className="boton-publicar-modal" type="button" onClick={manejarPublicar} disabled={textoPublicacion.trim() === ''}>
-                {configPublicacionActual.boton}
+              <button className="boton-publicar-modal" type="button" onClick={manejarPublicar} disabled={!puedePublicar || publicando}>
+                {publicando ? (
+                  <><span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Publicando...</>
+                ) : configPublicacionActual.boton}
               </button>
             </div>
           </div>
@@ -1641,12 +1921,12 @@ export default function Inicio() {
       )}
 
       {/* CUERPO DEL MURO */}
-      <div className="row g-4 MuroContenedor">
-        <div className="col-12 col-lg-8">
+      <div className="MuroContenedor">
+        <div className="columna-feed-inicio">
 
           {textoBusqueda.trim() === '' && (
-            <div className="tarjeta shadow-sm mb-4 p-3">
-              <div className="tarjeta p-3 mb-4 shadow-sm disparador-modal d-flex align-items-center gap-3" onClick={abrirSelectorTipoPublicacion}>
+            <div className="tarjeta tarjeta-creador-inicio shadow-sm mb-4 p-3">
+              <div className="tarjeta tarjeta-disparador-inicio p-3 shadow-sm disparador-modal d-flex align-items-center gap-3" onClick={abrirSelectorTipoPublicacion}>
                 <img
                   src={obtenerUrlImagenPerfil(obtenerImagenDeEntidad(usuarioLogueado), usuarioLogueado?.nombreUsuario)}
                   alt="Mi perfil"
@@ -1710,11 +1990,9 @@ export default function Inicio() {
           {/* MAPEO DE PUBLICACIONES */}
           {publicaciones.map((pub) => {
             const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
-            const urlMultimedia = obtenerUrlMultimediaPublicacion(pub.multimedia);
-
-            const tieneMultimedia = Boolean(urlMultimedia);
-
-            const esVideo = esVideoMultimediaPublicacion(pub.multimedia);
+            const tieneMultimedia = Array.isArray(pub.multimedia)
+              ? pub.multimedia.some(Boolean)
+              : Boolean(pub.multimedia);
             const ubicacionPost = normalizarTexto(pub.ubicacionTexto || pub.ubicacion?.texto || pub.ubicacion?.direccion || '');
             const etiquetasMultimediaPost = Array.isArray(pub.etiquetasMultimedia) ? pub.etiquetasMultimedia : [];
             const eventoRelacionadoPost = obtenerEventoRelacionadoDePublicacion(pub);
@@ -1726,87 +2004,38 @@ export default function Inicio() {
 
             return (
               <div key={pub._id} className="tarjeta tarjeta-publicacion shadow-sm mb-4">
-                <div className="publicacion-header d-flex justify-content-between align-items-start mb-2">
-                  <div className="publicacion-autor d-flex gap-3 align-items-center">
-                    <img
-                      src={srcAvatarAutor}
-                      alt={nombreAutor}
-                      className="avatar-publicacion rounded-circle me-2 object-fit-cover perfil-interactivo"
-                      style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreAutor)}&background=0D1B2A&color=fff`;
-                      }}
-                      onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if ((e.key === 'Enter' || e.key === ' ') && autorId) {
-                          e.preventDefault();
-                          irAPerfil(pub.autor || pub.usuario);
-                        }
-                      }}
-                    />
-                    <div className="publicacion-autor-info">
-                      <div className="etiqueta-tipo-publicacion">
-                        <span>{pub.tipo === 'historico' ? 'RECUERDO HISTÓRICO' : 'MOMENTO FAMILIAR'}</span>
-                      </div>
-                      <div className="autor-meta-row d-flex align-items-baseline gap-2 mt-1">
-                        <p
-                          className={`nombre-autor fs-5 mb-0 ${autorId ? 'perfil-interactivo' : ''}`}
-                          onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}
-                          role={autorId ? 'button' : undefined}
-                          tabIndex={autorId ? 0 : undefined}
-                          onKeyDown={(e) => {
-                            if ((e.key === 'Enter' || e.key === ' ') && autorId) {
-                              e.preventDefault();
-                              irAPerfil(pub.autor || pub.usuario);
-                            }
-                          }}
-                        >
-                          {nombreAutor}
-                        </p>
-                        <span className="info-autor mb-0">{fechaFormateada}</span>
-                      </div>
-                      {pub.tipo === 'historico' ? (
-                        <div className="etiqueta-historica-inferior">
-                          <i className="bi bi-globe-americas text-muted" title="Público"></i>
-                          <span>{pub.etiqueta?.nombre || 'Sin Etiqueta'}</span>
-                          {pub.anio && <span className="anio-historico">• {pub.anio}</span>}
-                        </div>
-                      ) : (
-                        <div className="etiqueta-contexto-familiar">
-                          <i className="bi bi-shield-lock-fill text-muted" title="Solo Familia"></i>
-                          <span>Con {obtenerArbolAudienciaDePublicacion(pub)?.nombreFamilia || 'Familia'}</span>
-                        </div>
-                      )}
-                      {ubicacionPost && <div className="ubicacion-post-render"><i className="bi bi-geo-alt-fill"></i>{ubicacionPost}</div>}
-                      {pub.tipo !== 'historico' && eventoRelacionadoPost && renderChipEventoPublicacion(eventoRelacionadoPost)}
-                    </div>
-                  </div>
-                  <button className="boton-menu-publicacion btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
-                </div>
+                <PublicacionHeader
+                  nombre={nombreAutor}
+                  nombreUsuario={nombreAutor}
+                  avatarUrl={srcAvatarAutor}
+                  fecha={fechaFormateada}
+                  fechaISO={pub.createdAt}
+                  tipo={pub.tipo === 'historico' ? 'historico' : 'familiar'}
+                  privacidad={pub.tipo === 'historico' ? 'publico' : 'familia'}
+                  nombreFamilia={obtenerArbolAudienciaDePublicacion(pub)?.nombreFamilia || 'Familia'}
+                  etiqueta={pub.etiqueta?.nombre || ''}
+                  anio={pub.anio || ''}
+                  ubicacion={ubicacionPost}
+                  onAutorClick={autorId ? () => irAPerfil(pub.autor || pub.usuario) : undefined}
+                  onMenuClick={() => {}}
+                />
 
-                <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
+                {pub.tipo !== 'historico' && eventoRelacionadoPost && (
+                  <div className="publicacion-evento-debajo-header">
+                    {renderChipEventoPublicacion(eventoRelacionadoPost)}
+                  </div>
+                )}
+
+                {pub.contenido && (
+                  <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
+                )}
 
                 {tieneMultimedia && (
-                  <div className={pub.tipo === 'historico' ? 'contenedor-polaroid' : 'contenedor-moderno'}>
-                    <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
-                      {esVideo ? (
-                        <video src={urlMultimedia} className={pub.tipo === 'historico' ? 'imagen-post-historico w-100' : 'imagen-post-moderna w-100'} controls controlsList="nodownload" />
-                      ) : (
-                        <img
-                            src={urlMultimedia}
-                            alt="Recuerdo"
-                            className={pub.tipo === 'historico' ? 'imagen-post-historico' : 'imagen-post-moderna'}
-                            onError={() => console.warn('No se pudo cargar multimedia de la publicación:', urlMultimedia, pub.multimedia)}
-                          />
-                      )}
-                    </div>
-                    <div className={pub.tipo === 'historico' ? 'carrusel-indicadores' : 'carrusel-indicadores-moderno'}>
-                      <span className={pub.tipo === 'historico' ? 'carrusel-dot activo' : 'carrusel-dot-moderno activo'}></span>
-                    </div>
-                  </div>
+                  <PublicacionMediaCarousel
+                    multimedia={pub.multimedia}
+                    tipo={pub.tipo === 'historico' ? 'historico' : 'familiar'}
+                    alt={pub.tipo === 'historico' ? 'Recuerdo histórico' : 'Momento familiar'}
+                  />
                 )}
 
                 {etiquetasMultimediaPost.length > 0 && (
@@ -1816,7 +2045,7 @@ export default function Inicio() {
                   </div>
                 )}
 
-                <div className="acciones-post d-flex justify-content-between mt-4 pt-3 border-top">
+                <div className="acciones-post d-flex justify-content-between mt-3 pt-2 border-top">
                   <div className="d-flex gap-4">
                     <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarLike(pub._id)}>
                       <i className={`bi ${usuarioHaReaccionado(pub) ? 'bi-heart-fill text-danger' : 'bi-heart'}`}></i> {pub.reacciones?.length || 0}
@@ -1857,7 +2086,7 @@ export default function Inicio() {
         </div>
 
         {/* WIDGETS LATERALES */}
-        <div className="col-12 col-lg-4 d-none d-lg-block">
+        <div className="columna-widgets-inicio d-none d-xl-block">
           <div className="tarjeta shadow-sm mb-4">
             <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
               <h3 className="titulo-widget mb-0">Próximos Aniversarios</h3>

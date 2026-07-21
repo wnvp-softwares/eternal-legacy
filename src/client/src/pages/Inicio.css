@@ -2765,3 +2765,772 @@ video.imagen-post-moderna {
         font-size: 0.82rem;
     }
 }
+
+/* =========================================================
+   FIX: MODAL DE PUBLICACIÓN RESPONSIVO TIPO APP SOCIAL
+   - En escritorio conserva el modal centrado.
+   - En móvil abre pantalla completa tipo Facebook/Instagram.
+   - El cuerpo scrollea y el botón Publicar queda siempre visible.
+   ========================================================= */
+
+.modal-publicacion-topbar-movil {
+    display: none;
+}
+
+@media (max-width: 576px) {
+    .modal-backdrop-publicacion {
+        inset: 0;
+        width: 100%;
+        height: 100vh;
+        height: 100svh;
+        height: 100dvh;
+        padding: 0;
+        align-items: stretch;
+        justify-content: center;
+        background-color: rgba(15, 23, 42, 0.62);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion {
+        width: 100%;
+        max-width: none;
+        height: 100vh;
+        height: 100svh;
+        height: 100dvh;
+        max-height: 100vh;
+        max-height: 100svh;
+        max-height: 100dvh;
+        border-radius: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        animation: none;
+        box-shadow: none;
+        background-color: var(--fondo-tarjeta);
+    }
+
+    .modal-publicacion-topbar-movil {
+        flex: 0 0 auto;
+        min-height: 58px;
+        padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px;
+        border-bottom: 1px solid var(--borde-color);
+        background-color: var(--fondo-tarjeta);
+        display: grid;
+        grid-template-columns: 44px 1fr 44px;
+        align-items: center;
+        gap: 8px;
+        z-index: 12;
+    }
+
+    .modal-publicacion-topbar-movil span {
+        color: var(--texto-principal);
+        font-size: 1rem;
+        font-weight: 800;
+        text-align: center;
+        line-height: 1.1;
+    }
+
+    .btn-cerrar-publicacion-movil,
+    .btn-menu-publicacion-movil {
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        border: none;
+        background-color: transparent;
+        color: var(--texto-principal);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .btn-cerrar-publicacion-movil:active,
+    .btn-menu-publicacion-movil:active {
+        background-color: var(--hover-menu);
+    }
+
+    .modal-backdrop-publicacion .btn-cerrar-modal-publicacion {
+        display: none;
+    }
+
+    .modal-backdrop-publicacion .modal-cabecera-unica {
+        flex: 0 0 auto;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--borde-color);
+        background-color: var(--fondo-tarjeta);
+    }
+
+    .modal-backdrop-publicacion .titulo-modal-publicacion {
+        gap: 12px;
+        align-items: center;
+    }
+
+    .modal-backdrop-publicacion .icono-modal-publicacion {
+        width: 38px;
+        height: 38px;
+        font-size: 1.1rem;
+    }
+
+    .modal-backdrop-publicacion .titulo-modal-publicacion h4 {
+        font-size: 0.96rem !important;
+        line-height: 1.15;
+    }
+
+    .modal-backdrop-publicacion .titulo-modal-publicacion p {
+        max-width: 100%;
+        margin-top: 2px;
+        font-size: 0.76rem;
+        line-height: 1.25;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .modal-backdrop-publicacion .modal-cuerpo {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        display: block !important;
+        padding: 14px 18px 16px;
+        margin-top: 0 !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .modal-backdrop-publicacion .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .textarea-transparente {
+        min-height: 108px !important;
+        font-size: 16px !important;
+        line-height: 1.45 !important;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .textarea-transparente {
+        min-height: 74px !important;
+    }
+
+    .modal-backdrop-publicacion .contenedor-vista-previa {
+        margin-top: 12px !important;
+        padding: 8px !important;
+        border-radius: 16px !important;
+        background-color: var(--fondo-app) !important;
+    }
+
+    .modal-backdrop-publicacion .vista-previa-crop {
+        width: auto !important;
+        max-width: 100% !important;
+        height: min(32dvh, 230px) !important;
+        max-height: min(32dvh, 230px) !important;
+        aspect-ratio: 4 / 5;
+        display: block;
+        margin: 0 auto;
+        object-fit: cover;
+        object-position: center;
+        border-radius: 12px !important;
+    }
+
+    .modal-backdrop-publicacion .contenedor-vista-previa video,
+    .modal-backdrop-publicacion .contenedor-vista-previa .img-fluid {
+        max-height: min(32dvh, 230px) !important;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .modal-backdrop-publicacion .btn-eliminar-preview {
+        top: 12px;
+        right: 12px;
+        width: 36px;
+        height: 36px;
+        box-shadow: 0 10px 22px rgba(220, 38, 38, 0.22);
+    }
+
+    .modal-backdrop-publicacion .panel-herramienta-publicacion {
+        max-height: min(26dvh, 190px);
+        overflow-y: auto;
+        margin-top: 12px;
+        border-radius: 16px;
+    }
+
+    .modal-backdrop-publicacion .panel-emojis {
+        grid-template-columns: repeat(6, minmax(34px, 1fr));
+        gap: 8px;
+    }
+
+    .modal-backdrop-publicacion .modal-pie {
+        flex: 0 0 auto;
+        width: 100%;
+        margin-top: 0 !important;
+        padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+        border-top: 1px solid var(--borde-color);
+        background-color: var(--fondo-tarjeta);
+        box-shadow: 0 -12px 26px rgba(15, 23, 42, 0.08);
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        gap: 10px;
+        z-index: 14;
+    }
+
+    .modal-backdrop-publicacion .grupo-herramientas-modal {
+        width: 100%;
+        display: flex;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        gap: 10px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 2px 2px 6px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .modal-backdrop-publicacion .grupo-herramientas-modal::-webkit-scrollbar {
+        display: none;
+    }
+
+    .modal-backdrop-publicacion .btn-herramienta-modal {
+        flex: 0 0 44px;
+        width: 44px;
+        height: 44px;
+        background-color: var(--fondo-app);
+        border-color: var(--borde-color);
+        font-size: 1.05rem;
+    }
+
+    .modal-backdrop-publicacion .btn-herramienta-modal:hover:not(:disabled),
+    .modal-backdrop-publicacion .btn-herramienta-modal.activo {
+        transform: none;
+    }
+
+    .modal-backdrop-publicacion .boton-publicar-modal {
+        width: 100%;
+        min-height: 44px;
+        margin: 0 !important;
+        border-radius: 16px;
+        font-size: 0.92rem;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 10px 20px rgba(203, 161, 53, 0.18);
+    }
+
+    .modal-backdrop-publicacion .boton-publicar-modal:disabled {
+        box-shadow: none;
+    }
+
+    .modal-backdrop-publicacion .selector-audiencia-familiar {
+        margin-bottom: 12px;
+    }
+
+    .modal-backdrop-publicacion .chip-publicacion {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 380px) {
+    .modal-backdrop-publicacion .modal-cabecera-unica {
+        padding: 10px 14px;
+    }
+
+    .modal-backdrop-publicacion .modal-cuerpo {
+        padding: 12px 14px 14px;
+    }
+
+    .modal-backdrop-publicacion .titulo-modal-publicacion p {
+        -webkit-line-clamp: 1;
+    }
+
+    .modal-backdrop-publicacion .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .textarea-transparente {
+        min-height: 92px !important;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .textarea-transparente {
+        min-height: 60px !important;
+    }
+
+    .modal-backdrop-publicacion .vista-previa-crop {
+        height: min(28dvh, 205px) !important;
+        max-height: min(28dvh, 205px) !important;
+    }
+
+    .modal-backdrop-publicacion .btn-herramienta-modal {
+        flex-basis: 42px;
+        width: 42px;
+        height: 42px;
+    }
+}
+
+@media (max-height: 700px) and (max-width: 576px) {
+    .modal-backdrop-publicacion .titulo-modal-publicacion p {
+        display: none;
+    }
+
+    .modal-backdrop-publicacion .modal-cabecera-unica {
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .modal-backdrop-publicacion .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .contenedor-input-superpuesto .textarea-transparente {
+        min-height: 76px !important;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .modal-publicacion-con-preview .contenedor-input-superpuesto .textarea-transparente {
+        min-height: 54px !important;
+    }
+
+    .modal-backdrop-publicacion .vista-previa-crop {
+        height: min(24dvh, 180px) !important;
+        max-height: min(24dvh, 180px) !important;
+    }
+
+    .modal-backdrop-publicacion .panel-herramienta-publicacion {
+        max-height: 150px;
+    }
+}
+
+[data-tema="oscuro"] .modal-backdrop-publicacion .modal-publicacion-topbar-movil,
+[data-tema="oscuro"] .modal-backdrop-publicacion .modal-cabecera-unica,
+[data-tema="oscuro"] .modal-backdrop-publicacion .modal-pie {
+    background-color: var(--fondo-tarjeta);
+}
+
+[data-tema="oscuro"] .modal-backdrop-publicacion .btn-herramienta-modal {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+
+/* =========================================================
+   EDITOR MULTIMEDIA DE PUBLICACIONES (HASTA 5 FOTOGRAFÍAS)
+   ========================================================= */
+.editor-multimedia-publicacion {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    background-color: var(--fondo-app);
+}
+
+.editor-multimedia-encabezado {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 10px;
+}
+
+.editor-multimedia-encabezado > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.editor-multimedia-encabezado strong {
+    color: var(--texto-principal);
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.editor-multimedia-encabezado span {
+    color: var(--texto-secundario);
+    font-size: 0.76rem;
+    line-height: 1.3;
+}
+
+.editor-multimedia-contador {
+    flex: 0 0 auto;
+    min-width: 48px;
+    padding: 5px 9px;
+    border: 1px solid rgba(203, 161, 53, 0.28);
+    border-radius: 999px;
+    color: var(--dorado-oscuro) !important;
+    background-color: #fef8eb;
+    text-align: center;
+    font-weight: 800;
+}
+
+.carrusel-borrador-publicacion {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 2px 8px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: var(--borde-color) transparent;
+    -webkit-overflow-scrolling: touch;
+}
+
+.carrusel-borrador-publicacion::-webkit-scrollbar {
+    height: 6px;
+}
+
+.carrusel-borrador-publicacion::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background-color: var(--borde-color);
+}
+
+.tarjeta-multimedia-borrador,
+.tarjeta-agregar-multimedia {
+    flex: 0 0 150px;
+    width: 150px;
+    aspect-ratio: 4 / 5;
+    scroll-snap-align: start;
+    border-radius: 15px;
+}
+
+.tarjeta-multimedia-borrador {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--borde-color);
+    background-color: #111827;
+    box-shadow: 0 7px 18px rgba(15, 23, 42, 0.10);
+}
+
+.tarjeta-multimedia-borrador img,
+.tarjeta-multimedia-borrador video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    object-position: center;
+}
+
+.tarjeta-multimedia-borrador video {
+    object-fit: contain;
+}
+
+.acciones-multimedia-borrador {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.accion-multimedia {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background-color: rgba(15, 23, 42, 0.68);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 7px 16px rgba(15, 23, 42, 0.22);
+    cursor: pointer;
+    pointer-events: auto;
+    transition: transform 0.18s ease, background-color 0.18s ease;
+}
+
+.acciones-multimedia-borrador .eliminar:only-child {
+    margin-left: auto;
+}
+
+.accion-multimedia:hover {
+    transform: scale(1.06);
+}
+
+.accion-multimedia.editar:hover {
+    background-color: rgba(203, 161, 53, 0.94);
+}
+
+.accion-multimedia.eliminar:hover {
+    background-color: rgba(220, 38, 38, 0.95);
+}
+
+.posicion-multimedia-borrador {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 2;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background-color: rgba(15, 23, 42, 0.68);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
+.tarjeta-agregar-multimedia {
+    border: 2px dashed var(--borde-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--texto-secundario);
+    background-color: var(--fondo-tarjeta);
+    cursor: pointer;
+    transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+}
+
+.tarjeta-agregar-multimedia i {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background-color: var(--dorado);
+    font-size: 1.15rem;
+}
+
+.tarjeta-agregar-multimedia span {
+    font-size: 0.8rem;
+    font-weight: 750;
+}
+
+.tarjeta-agregar-multimedia:hover {
+    color: var(--dorado-oscuro);
+    border-color: var(--dorado);
+    background-color: #fef8eb;
+}
+
+.carrusel-borrador-publicacion.archivo-unico .tarjeta-multimedia-borrador {
+    flex-basis: min(100%, 230px);
+    width: min(100%, 230px);
+    margin-inline: auto;
+}
+
+.editor-multimedia-publicacion .etiquetas-imagen-modal {
+    margin-top: 10px;
+}
+
+.album-evento-multimedia-carousel {
+    margin-top: 10px;
+}
+
+[data-tema="oscuro"] .editor-multimedia-contador {
+    color: #fde68a !important;
+    background-color: rgba(234, 179, 8, 0.12);
+    border-color: rgba(253, 230, 138, 0.2);
+}
+
+[data-tema="oscuro"] .tarjeta-agregar-multimedia:hover {
+    color: #fde68a;
+    background-color: rgba(234, 179, 8, 0.10);
+}
+
+@media (max-width: 576px) {
+    .modal-backdrop-publicacion .editor-multimedia-publicacion {
+        margin-top: 12px !important;
+        padding: 10px;
+        border-radius: 15px;
+    }
+
+    .tarjeta-multimedia-borrador,
+    .tarjeta-agregar-multimedia {
+        flex-basis: 132px;
+        width: 132px;
+    }
+
+    .accion-multimedia {
+        width: 36px;
+        height: 36px;
+    }
+
+    .carrusel-borrador-publicacion.archivo-unico .tarjeta-multimedia-borrador {
+        flex-basis: min(70vw, 210px);
+        width: min(70vw, 210px);
+    }
+}
+
+@media (max-width: 380px) {
+    .tarjeta-multimedia-borrador,
+    .tarjeta-agregar-multimedia {
+        flex-basis: 118px;
+        width: 118px;
+    }
+
+    .editor-multimedia-encabezado span {
+        font-size: 0.72rem;
+    }
+}
+
+.accion-multimedia:disabled,
+.tarjeta-agregar-multimedia:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* =========================================================
+   FEED COMPACTO TIPO INSTAGRAM
+   - Publicaciones de hasta 600px en escritorio.
+   - Widgets laterales de hasta 330px.
+   - Sin gutters negativos de Bootstrap ni scroll horizontal.
+   - En tablet y móvil el feed conserva todo el ancho disponible.
+   ========================================================= */
+.MuroContenedor {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 !important;
+    display: grid;
+    grid-template-columns: minmax(0, 600px) minmax(280px, 330px);
+    justify-content: center;
+    align-items: start;
+    gap: 24px;
+    box-sizing: border-box;
+}
+
+.columna-feed-inicio,
+.columna-widgets-inicio {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 0 !important;
+    box-sizing: border-box;
+}
+
+.columna-feed-inicio {
+    max-width: 600px;
+}
+
+.columna-widgets-inicio {
+    max-width: 330px;
+}
+
+.tarjeta-creador-inicio,
+.tarjeta-publicacion {
+    width: 100%;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+.tarjeta-creador-inicio {
+    padding: 14px !important;
+}
+
+.tarjeta-disparador-inicio {
+    margin: 0 !important;
+}
+
+.tarjeta-publicacion {
+    padding-top: 22px;
+    padding-bottom: 18px;
+}
+
+.tarjeta-publicacion .texto-post.historico {
+    margin-top: 13px;
+    margin-bottom: 14px;
+}
+
+.tarjeta-publicacion .acciones-post {
+    margin-top: 14px !important;
+    padding-top: 12px !important;
+}
+
+@media (max-width: 1199.98px) {
+    .MuroContenedor {
+        grid-template-columns: minmax(0, 600px);
+    }
+
+    .columna-widgets-inicio {
+        display: none !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .MuroContenedor {
+        display: block;
+    }
+
+    .columna-feed-inicio,
+    .tarjeta-creador-inicio,
+    .tarjeta-publicacion {
+        width: 100%;
+        max-width: none;
+    }
+
+    .tarjeta-creador-inicio {
+        padding: 12px !important;
+    }
+
+    .tarjeta-publicacion .texto-post.historico {
+        margin-top: 12px;
+        margin-bottom: 13px;
+    }
+}
+
+/* =========================================================
+   CABECERA SOCIAL DE PUBLICACIONES
+   El diseño principal vive en PublicacionHeader.css. Estas
+   reglas solo conectan el componente con la tarjeta de Inicio.
+   ========================================================= */
+.tarjeta-publicacion > .texto-post {
+    margin-top: 14px;
+}
+
+.publicacion-evento-debajo-header {
+    margin: -4px 0 12px 54px;
+    min-width: 0;
+}
+
+.publicacion-evento-debajo-header .evento-post-render {
+    margin-top: 0;
+    max-width: 100%;
+}
+
+@media (max-width: 576px) {
+    .tarjeta-publicacion > .texto-post {
+        margin-top: 12px;
+    }
+
+    .publicacion-evento-debajo-header {
+        margin-left: 48px;
+        margin-bottom: 10px;
+    }
+}
+
+@media (max-width: 380px) {
+    .publicacion-evento-debajo-header {
+        margin-left: 0;
+    }
+}
+

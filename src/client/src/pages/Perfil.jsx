@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import ImageCropperModal from '../components/ImageCropperModal';
+import PublicacionMediaCarousel from '../components/PublicacionMediaCarousel';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Perfil.css';
 
@@ -1352,12 +1353,12 @@ export default function Perfil() {
 
         {/* PESTAÑA 1: RECUERDOS (FEED REAL) */}
         {tabActiva === 'memories' && (
-          <div className="col-12">
+          <div className="col-12 perfil-recuerdos-feed">
             {publicacionesFiltradas.length > 0 ? (
               publicacionesFiltradas.map((post) => {
                 const esHistorico = post.tipo === 'historico';
                 return (
-                  <div key={post._id} className="tarjeta shadow-sm pb-3 px-3 px-sm-4">
+                  <div key={post._id} className="tarjeta tarjeta-publicacion-perfil shadow-sm pb-3 px-3 px-sm-4">
                     <div className="d-flex justify-content-between align-items-start mb-2">
                       <div className="d-flex gap-3 align-items-center">
                         <img
@@ -1384,22 +1385,20 @@ export default function Perfil() {
                       <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
                     </div>
 
-                    <p className="texto-post historico">{post.texto || post.contenido}</p>
+                    {(post.texto || post.contenido) && (
+                      <p className="texto-post historico">{post.texto || post.contenido}</p>
+                    )}
 
                     {obtenerUrlMultimediaPublicacion(post.multimedia) && (
-                      <div className={esHistorico ? "contenedor-polaroid" : "contenedor-moderno"}>
-                        <div className="overflow-hidden" style={{ borderRadius: '2px' }}>
-                          <img
-                            src={obtenerUrlMultimediaPublicacion(post.multimedia)}
-                            alt="Archivo adjunto"
-                            className={esHistorico ? "imagen-post-historico" : "imagen-post-moderna"}
-                          />
-                        </div>
-                      </div>
+                      <PublicacionMediaCarousel
+                        multimedia={post.multimedia}
+                        tipo={esHistorico ? 'historico' : 'familiar'}
+                        alt={esHistorico ? 'Recuerdo histórico' : 'Momento familiar'}
+                      />
                     )}
 
                     {/* --- BOTONES DE INTERACCIÓN (LIKE Y COMENTARIOS) --- */}
-                    <div className="d-flex justify-content-between mt-4 pt-3 border-top">
+                    <div className="acciones-post-perfil d-flex justify-content-between mt-3 pt-2 border-top">
                       <div className="d-flex gap-4">
                         {/* Botón de Reacciones (Likes) */}
                         <button
@@ -1503,12 +1502,22 @@ export default function Perfil() {
                         {/* Bloque de Imagen (se renderiza a la derecha si existe) */}
                         {obtenerUrlMultimediaPublicacion(post.multimedia) && (
                           <div style={{ minWidth: '120px', maxWidth: '180px', width: '100%' }} className="align-self-center align-self-sm-start">
-                            <img
-                              src={obtenerUrlMultimediaPublicacion(post.multimedia)}
-                              alt="Timeline"
-                              className="img-fluid rounded"
-                              style={{ maxHeight: '120px', width: '100%', objectFit: 'cover' }}
-                            />
+                            {esVideoMultimediaPublicacion(post.multimedia) ? (
+                              <video
+                                src={obtenerUrlMultimediaPublicacion(post.multimedia)}
+                                className="img-fluid rounded"
+                                style={{ maxHeight: '120px', width: '100%', objectFit: 'cover', backgroundColor: '#111827' }}
+                                muted
+                                preload="metadata"
+                              />
+                            ) : (
+                              <img
+                                src={obtenerUrlMultimediaPublicacion(post.multimedia)}
+                                alt="Timeline"
+                                className="img-fluid rounded"
+                                style={{ maxHeight: '120px', width: '100%', objectFit: 'cover' }}
+                              />
+                            )}
                           </div>
                         )}
 
@@ -1533,31 +1542,47 @@ export default function Perfil() {
             <div className="galeria-contenedor">
               {fotosGaleria.length > 0 ? (
                 <div className="galeria-grid">
-                  {fotosGaleria.map((post) => (
-                    <div key={post._id} className="galeria-item">
-                      <img
-                        src={obtenerUrlMultimediaPublicacion(post.multimedia)}
-                        alt="Galería"
-                        className="galeria-img"
-                      />
+                  {fotosGaleria.map((post) => {
+                    const urlGaleria = obtenerUrlMultimediaPublicacion(post.multimedia);
+                    const esVideoGaleria = esVideoMultimediaPublicacion(post.multimedia);
+                    const esCarrusel = Array.isArray(post.multimedia) && post.multimedia.filter(Boolean).length > 1;
 
-                      {/* Ícono superior derecho si es carrusel (Múltiples fotos) */}
-                      {post.esCarrusel && (
-                        <i className="bi bi-images galeria-icono-multi" title="Múltiples fotos"></i>
-                      )}
+                    return (
+                      <div key={post._id} className="galeria-item">
+                        {esVideoGaleria ? (
+                          <video
+                            src={urlGaleria}
+                            className="galeria-img"
+                            muted
+                            preload="metadata"
+                          />
+                        ) : (
+                          <img
+                            src={urlGaleria}
+                            alt="Galería"
+                            className="galeria-img"
+                          />
+                        )}
 
-                      {/* Capa oscura que aparece en Hover */}
-                      <div className="galeria-overlay">
-                        <div className="galeria-estilos-texto">
-                          <i className="bi bi-heart-fill"></i> {post.reacciones?.length || 0}
-                        </div>
-                        {/* Contador de comentarios corregido para la galería */}
-                        <div className="galeria-estilos-texto">
-                          <i className="bi bi-chat-fill"></i> {comentariosPorPub[post._id]?.length ?? 0}
+                        {esCarrusel && (
+                          <i className="bi bi-images galeria-icono-multi" title="Múltiples fotos"></i>
+                        )}
+
+                        {esVideoGaleria && !esCarrusel && (
+                          <i className="bi bi-play-circle-fill galeria-icono-multi" title="Video"></i>
+                        )}
+
+                        <div className="galeria-overlay">
+                          <div className="galeria-estilos-texto">
+                            <i className="bi bi-heart-fill"></i> {post.reacciones?.length || 0}
+                          </div>
+                          <div className="galeria-estilos-texto">
+                            <i className="bi bi-chat-fill"></i> {comentariosPorPub[post._id]?.length ?? 0}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm border border-light">

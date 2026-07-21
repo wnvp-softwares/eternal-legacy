@@ -2,7 +2,12 @@ const mongoose = require('mongoose');
 const { Publicacion, Upload, Usuario, Arbol } = require('../../models/index.model');
 
 const EventoFamiliar = require('../../models/arboles/eventoFamiliar.model');
-const { construirRutaPublicaUpload } = require('../../configs/uploads.config');
+const cloudinary = require('../../configs/cloudinary.config');
+const {
+    MAX_UPLOAD_SIZE_MB,
+    MAX_PUBLICATION_MEDIA_FILES,
+    MAX_PUBLICATION_TOTAL_SIZE_BYTES
+} = require('../../configs/uploads.config');
 
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
@@ -39,6 +44,57 @@ const parseJSONSeguro = (valor, valorPorDefecto = null) => {
     } catch (error) {
         return valorPorDefecto;
     }
+};
+
+
+const obtenerArchivosSubidos = (req) => {
+    if (Array.isArray(req.files)) return req.files.filter(Boolean);
+    if (req.file) return [req.file];
+    return [];
+};
+
+const obtenerResourceTypeCloudinary = (archivo = {}) => {
+    return String(archivo.mimetype || '').startsWith('video/') ? 'video' : 'image';
+};
+
+const eliminarArchivosDeCloudinary = async (archivos = []) => {
+    const resultados = await Promise.allSettled(
+        archivos.map((archivo) => {
+            const publicId = archivo?.filename || archivo?.public_id;
+            if (!publicId) return Promise.resolve();
+
+            return cloudinary.uploader.destroy(publicId, {
+                resource_type: obtenerResourceTypeCloudinary(archivo),
+                invalidate: true
+            });
+        })
+    );
+
+    resultados.forEach((resultado) => {
+        if (resultado.status === 'rejected') {
+            console.error('❌ No se pudo limpiar un archivo de Cloudinary:', resultado.reason);
+        }
+    });
+};
+
+const limpiarCargaFallida = async ({ archivos = [], idsUploads = [] } = {}) => {
+    await Promise.allSettled([
+        eliminarArchivosDeCloudinary(archivos),
+        idsUploads.length > 0
+            ? Upload.deleteMany({ _id: { $in: idsUploads } })
+            : Promise.resolve()
+    ]);
+};
+
+const validarCombinacionMultimedia = (archivos = []) => {
+    const tieneVideo = archivos.some((archivo) => String(archivo?.mimetype || '').startsWith('video/'));
+    const tieneGif = archivos.some((archivo) => archivo?.mimetype === 'image/gif');
+
+    if ((tieneVideo || tieneGif) && archivos.length > 1) {
+        return 'Los videos y GIF se publican de uno en uno y no se pueden mezclar con fotografías.';
+    }
+
+    return null;
 };
 
 const normalizarListaPersonas = (valor) => {
@@ -292,8 +348,12 @@ const poblarConsultaPublicaciones = (consulta) => {
         .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
 };
 
-// CREAR PUBLICACIÓN CON ARCHIVO MULTIMEDIA REAL
+// CREAR PUBLICACIÓN CON HASTA 5 ARCHIVOS MULTIMEDIA
 const crearPublicacion = async (req, res) => {
+    const archivosSubidos = obtenerArchivosSubidos(req);
+    const idsMultimedia = [];
+    let publicacionGuardada = false;
+
     try {
         const {
             tipo,
@@ -306,10 +366,38 @@ const crearPublicacion = async (req, res) => {
             arbolAudienciaId
         } = req.body || {};
 
-        if (!contenido || contenido.trim() === '') {
+        const contenidoLimpio = String(contenido || '').trim();
+
+        if (!contenidoLimpio && archivosSubidos.length === 0) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
             return res.status(400).json({
-                mensaje: 'El contenido no puede estar vacío.'
+                mensaje: 'Escribe un mensaje o agrega al menos una foto, video o GIF.'
             });
+        }
+
+        if (archivosSubidos.length > MAX_PUBLICATION_MEDIA_FILES) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({
+                mensaje: `Solo puedes agregar hasta ${MAX_PUBLICATION_MEDIA_FILES} archivos por publicación.`
+            });
+        }
+
+        const pesoTotal = archivosSubidos.reduce(
+            (total, archivo) => total + (Number(archivo?.size) || 0),
+            0
+        );
+
+        if (pesoTotal > MAX_PUBLICATION_TOTAL_SIZE_BYTES) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(413).json({
+                mensaje: `El conjunto de archivos supera el límite de ${MAX_UPLOAD_SIZE_MB} MB.`
+            });
+        }
+
+        const errorCombinacion = validarCombinacionMultimedia(archivosSubidos);
+        if (errorCombinacion) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({ mensaje: errorCombinacion });
         }
 
         const tipoSeguro = tipo === 'familiar' ? 'familiar' : 'historico';
@@ -323,6 +411,7 @@ const crearPublicacion = async (req, res) => {
             });
 
             if (resultadoArbol.error) {
+                await limpiarCargaFallida({ archivos: archivosSubidos });
                 return res.status(resultadoArbol.error.status).json({
                     mensaje: resultadoArbol.error.mensaje
                 });
@@ -331,21 +420,15 @@ const crearPublicacion = async (req, res) => {
             arbolAudiencia = resultadoArbol.arbol;
         }
 
-        const idsMultimedia = [];
-
-        if (req.file) {
-
+        for (const archivo of archivosSubidos) {
             const nuevoUpload = new Upload({
                 propietario: req.usuario.id,
-                urlArchivo: req.file.path,
-                formato: req.file.mimetype,
-                pesoBytes: req.file.size
+                urlArchivo: archivo.path,
+                formato: archivo.mimetype,
+                pesoBytes: Number(archivo.size) || 0
             });
 
-            console.log(req.file);
-
             const uploadGuardado = await nuevoUpload.save();
-
             idsMultimedia.push(uploadGuardado._id);
         }
 
@@ -360,7 +443,7 @@ const crearPublicacion = async (req, res) => {
             privacidad: tipoSeguro === 'familiar' ? 'familia' : 'publico',
             arbolAudiencia: arbolAudiencia?._id || null,
             nombreFamiliaAudienciaSnapshot: arbolAudiencia ? obtenerNombreFamiliaDesdeArbol(arbolAudiencia) : '',
-            contenido: contenido.trim(),
+            contenido: contenidoLimpio,
             multimedia: idsMultimedia,
             ubicacionTexto: ubicacionTexto || '',
             menciones: normalizarListaPersonas(menciones),
@@ -371,16 +454,31 @@ const crearPublicacion = async (req, res) => {
         });
 
         await nuevaPublicacion.save();
+        publicacionGuardada = true;
 
-        const publicacionCompleta = await poblarPublicacion(nuevaPublicacion._id);
+        let publicacionCompleta = nuevaPublicacion;
 
-        res.status(201).json({
+        try {
+            publicacionCompleta = await poblarPublicacion(nuevaPublicacion._id) || nuevaPublicacion;
+        } catch (errorPopulate) {
+            console.error('⚠️ La publicación se creó, pero no se pudo poblar completamente:', errorPopulate);
+        }
+
+        return res.status(201).json({
             mensaje: 'Publicación creada con éxito',
-            publicacion: publicacionCompleta || nuevaPublicacion
+            publicacion: publicacionCompleta
         });
     } catch (error) {
         console.error('❌ Error al crear publicación:', error);
-        res.status(500).json({
+
+        if (!publicacionGuardada) {
+            await limpiarCargaFallida({
+                archivos: archivosSubidos,
+                idsUploads: idsMultimedia
+            });
+        }
+
+        return res.status(500).json({
             mensaje: 'Error interno al crear la publicación.'
         });
     }
