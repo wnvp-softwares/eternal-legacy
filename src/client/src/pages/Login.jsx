@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Login.css';
 import { API_BASE_URL } from '../config/env';
+import { sincronizarLlavesE2EConCuenta } from '../utils/e2eCrypto';
 
 const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
 
@@ -60,6 +61,22 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
 
   const prepararAnimacionEntradaArbol = () => {
     sessionStorage.removeItem(CLAVE_ANIMACION_CONEXIONES_ARBOL);
+  };
+
+  const prepararCifradoDespuesLogin = async (tokenSesion, usuarioSesion = null) => {
+    try {
+      if (!tokenSesion || !formulario.password) return;
+
+      await sincronizarLlavesE2EConCuenta({
+        token: tokenSesion,
+        apiBaseUrl: API_BASE_URL,
+        password: formulario.password,
+        userId: usuarioSesion?.id || usuarioSesion?._id || null
+      });
+    } catch (error) {
+      console.error('No se pudo sincronizar el cifrado E2E:', error);
+      // No bloqueamos el login. Si falla, Mensajes pedirá volver a iniciar sesión para sincronizar.
+    }
   };
 
   const manejarCambio = (e) => {
@@ -133,6 +150,8 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         // Guardamos el token y los datos esenciales del usuario en el navegador
         localStorage.setItem('token', datos.token);
         localStorage.setItem('usuario', JSON.stringify(datos.usuario));
+
+        await prepararCifradoDespuesLogin(datos.token, datos.usuario);
 
         prepararAnimacionEntradaArbol();
         navigate(rutaInicial, { replace: true });
@@ -235,6 +254,8 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
       // Guardamos la sesión iniciada después de validar el código
       localStorage.setItem('token', datos.token);
       localStorage.setItem('usuario', JSON.stringify(datos.usuario));
+
+      await prepararCifradoDespuesLogin(datos.token, datos.usuario);
 
       prepararAnimacionEntradaArbol();
       navigate(rutaInicial, { replace: true });

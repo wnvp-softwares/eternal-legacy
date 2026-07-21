@@ -12,6 +12,8 @@ const {
     toggle2FA,
     actualizarPreferencias,
     actualizarClavePublica,
+    obtenerConfiguracionE2E,
+    actualizarConfiguracionE2E,
     obtenerClavePublicaUsuario,
     enviarFeedback
 } = require('../../controllers/usuarios/usuario.controller');
@@ -40,6 +42,8 @@ router.patch('/toggle-2fa', verificarToken, toggle2FA);
 router.put('/actualizar-preferencias', verificarToken, actualizarPreferencias);
 
 router.put('/clave-publica', verificarToken, actualizarClavePublica);
+router.get('/e2e-config', verificarToken, obtenerConfiguracionE2E);
+router.put('/e2e-config', verificarToken, actualizarConfiguracionE2E);
 router.get('/clave-publica/:id', verificarToken, obtenerClavePublicaUsuario);
 
 router.post('/feedback', verificarToken, enviarFeedback);

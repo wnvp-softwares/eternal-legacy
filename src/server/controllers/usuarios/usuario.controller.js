@@ -666,10 +666,99 @@ const actualizarPreferencias = async (req, res) => {
 const actualizarClavePublica = async (req, res) => {
     try {
         const { publicKey } = req.body;
-        await Usuario.findByIdAndUpdate(req.usuario.id, { publicKey });
+
+        if (!publicKey || typeof publicKey !== 'string') {
+            return res.status(400).json({ mensaje: 'La clave pública no es válida.' });
+        }
+
+        const usuario = await Usuario.findById(req.usuario.id)
+            .select('publicKey encryptedPrivateKey');
+
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        }
+
+        // Compatibilidad con clientes anteriores: si ya existe una configuración E2E sincronizada,
+        // no reemplazamos la publicKey desde otro dispositivo porque rompería mensajes entre equipos.
+        if (usuario.encryptedPrivateKey && usuario.publicKey && usuario.publicKey !== publicKey) {
+            return res.status(409).json({
+                mensaje: 'La cuenta ya tiene una configuración de cifrado sincronizada. Vuelve a iniciar sesión para actualizar este dispositivo.'
+            });
+        }
+
+        usuario.publicKey = publicKey;
+        await usuario.save();
+
         res.status(200).json({ mensaje: 'Clave pública actualizada correctamente.' });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error al guardar la clave pública.' });
+    }
+};
+
+const obtenerConfiguracionE2E = async (req, res) => {
+    try {
+        const usuario = await Usuario.findById(req.usuario.id)
+            .select('publicKey encryptedPrivateKey e2eSalt e2eIv e2eConfigUpdatedAt');
+
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        }
+
+        res.status(200).json({
+            publicKey: usuario.publicKey || null,
+            encryptedPrivateKey: usuario.encryptedPrivateKey || null,
+            e2eSalt: usuario.e2eSalt || null,
+            e2eIv: usuario.e2eIv || null,
+            e2eConfigUpdatedAt: usuario.e2eConfigUpdatedAt || null
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener configuración E2E:', error);
+        res.status(500).json({ mensaje: 'Error al obtener la configuración de cifrado.' });
+    }
+};
+
+const actualizarConfiguracionE2E = async (req, res) => {
+    try {
+        const { publicKey, encryptedPrivateKey, e2eSalt, e2eIv } = req.body || {};
+
+        if (
+            !publicKey ||
+            !encryptedPrivateKey ||
+            !e2eSalt ||
+            !e2eIv ||
+            typeof publicKey !== 'string' ||
+            typeof encryptedPrivateKey !== 'string' ||
+            typeof e2eSalt !== 'string' ||
+            typeof e2eIv !== 'string'
+        ) {
+            return res.status(400).json({
+                mensaje: 'La configuración de cifrado está incompleta.'
+            });
+        }
+
+        const usuario = await Usuario.findById(req.usuario.id)
+            .select('publicKey encryptedPrivateKey e2eSalt e2eIv e2eConfigUpdatedAt');
+
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        }
+
+        usuario.publicKey = publicKey;
+        usuario.encryptedPrivateKey = encryptedPrivateKey;
+        usuario.e2eSalt = e2eSalt;
+        usuario.e2eIv = e2eIv;
+        usuario.e2eConfigUpdatedAt = new Date();
+
+        await usuario.save();
+
+        res.status(200).json({
+            mensaje: 'Configuración de cifrado E2E guardada correctamente.',
+            publicKey: usuario.publicKey,
+            e2eConfigUpdatedAt: usuario.e2eConfigUpdatedAt
+        });
+    } catch (error) {
+        console.error('❌ Error al actualizar configuración E2E:', error);
+        res.status(500).json({ mensaje: 'Error al guardar la configuración de cifrado.' });
     }
 };
 
@@ -730,6 +819,8 @@ module.exports = {
     toggle2FA,
     actualizarPreferencias,
     actualizarClavePublica,
+    obtenerConfiguracionE2E,
+    actualizarConfiguracionE2E,
     obtenerClavePublicaUsuario,
     enviarFeedback
 };

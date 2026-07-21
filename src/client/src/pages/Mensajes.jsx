@@ -29,28 +29,25 @@ export default function Mensajes() {
   const token = localStorage.getItem('token');
 
   // 1. Inicializar Claves E2E
+  // IMPORTANTE: ya no reemplazamos la llave pública cada vez que se abre Mensajes.
+  // Las llaves se sincronizan al iniciar sesión para que celular y computadora usen la misma llave de cuenta.
   useEffect(() => {
     const inicializarE2E = async () => {
       try {
-        const { publicKeyJWK } = await obtenerOGenerarLlavesE2E();
-        setMiPublicKey(publicKeyJWK);
+        const usuarioLocal = JSON.parse(localStorage.getItem('usuario') || '{}');
+        const { publicKeyJWK } = await obtenerOGenerarLlavesE2E({
+          token,
+          apiBaseUrl: API_BASE_URL,
+          userId: usuarioLocal.id || usuarioLocal._id || null
+        });
 
-        if (token) {
-          await fetch(`${API_BASE_URL}/usuarios/clave-publica`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ publicKey: publicKeyJWK })
-          });
-        }
+        setMiPublicKey(publicKeyJWK);
       } catch (err) {
         console.error('Error al inicializar cifrado E2E:', err);
       }
     };
 
-    inicializarE2E();
+    if (token) inicializarE2E();
   }, [token]);
 
   // 2. Cargar lista de contactos permitidos (Mapeo Defensivo)
@@ -158,7 +155,7 @@ export default function Mensajes() {
     if (!mensajeTexto.trim() || !contactoId || !miPublicKey) return;
 
     if (!chatSeleccionado.publicKey) {
-      alert('El usuario seleccionado aún no ha configurado su clave pública de cifrado E2E.');
+      alert('El usuario seleccionado aún no ha configurado su cifrado. Pídele que cierre sesión, vuelva a iniciar sesión y abra Mensajes una vez.');
       return;
     }
 

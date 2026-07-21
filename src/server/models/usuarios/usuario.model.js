@@ -70,6 +70,25 @@ const usuarioSchema = new mongoose.Schema({
     publicKey: {
         type: String,
         default: null
+    },
+
+    // Respaldo cifrado de la llave privada E2E para usar la misma cuenta en varios dispositivos.
+    // La llave privada NO se guarda en texto plano; llega cifrada desde el navegador.
+    encryptedPrivateKey: {
+        type: String,
+        default: null
+    },
+    e2eSalt: {
+        type: String,
+        default: null
+    },
+    e2eIv: {
+        type: String,
+        default: null
+    },
+    e2eConfigUpdatedAt: {
+        type: Date,
+        default: null
     }
 }, { timestamps: true });
 
