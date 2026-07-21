@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
+import ImageCropperModal from '../components/ImageCropperModal';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Perfil.css';
 
@@ -351,6 +352,11 @@ export default function Perfil() {
 
   const [archivoPortada, setArchivoPortada] = useState(null);
   const [vistaPreviaPortada, setVistaPreviaPortada] = useState('');
+  const [cropperPerfil, setCropperPerfil] = useState({
+    abierto: false,
+    archivo: null,
+    tipo: null
+  });
 
   const [tabActiva, setTabActiva] = useState('memories');
   const [etiquetaSeleccionada, setEtiquetaSeleccionada] = useState(null);
@@ -567,20 +573,70 @@ export default function Perfil() {
     setEdicionAbierta(!edicionAbierta);
   };
 
-  const manejarCambioPerfil = (e) => {
-    const archivo = e.target.files[0];
-    if (archivo) {
+  const abrirCropperPerfil = (archivo, tipo) => {
+    if (!archivo) return;
+
+    setCropperPerfil({
+      abierto: true,
+      archivo,
+      tipo
+    });
+  };
+
+  const cerrarCropperPerfil = () => {
+    setCropperPerfil({
+      abierto: false,
+      archivo: null,
+      tipo: null
+    });
+
+    if (fileInputPerfilRef.current) fileInputPerfilRef.current.value = '';
+    if (fileInputPortadaRef.current) fileInputPortadaRef.current.value = '';
+  };
+
+  const confirmarCropperPerfil = ({ archivo, vistaPrevia }) => {
+    if (!archivo) return;
+
+    if (cropperPerfil.tipo === 'perfil') {
+      if (vistaPreviaPerfil && vistaPreviaPerfil.startsWith('blob:')) {
+        URL.revokeObjectURL(vistaPreviaPerfil);
+      }
       setArchivoPerfil(archivo);
-      setVistaPreviaPerfil(URL.createObjectURL(archivo));
+      setVistaPreviaPerfil(vistaPrevia || URL.createObjectURL(archivo));
     }
+
+    if (cropperPerfil.tipo === 'portada') {
+      if (vistaPreviaPortada && vistaPreviaPortada.startsWith('blob:')) {
+        URL.revokeObjectURL(vistaPreviaPortada);
+      }
+      setArchivoPortada(archivo);
+      setVistaPreviaPortada(vistaPrevia || URL.createObjectURL(archivo));
+    }
+
+    setCropperPerfil({
+      abierto: false,
+      archivo: null,
+      tipo: null
+    });
+
+    if (fileInputPerfilRef.current) fileInputPerfilRef.current.value = '';
+    if (fileInputPortadaRef.current) fileInputPortadaRef.current.value = '';
+  };
+
+  const manejarCambioPerfil = (e) => {
+    const archivo = e.target.files?.[0];
+    if (archivo) {
+      abrirCropperPerfil(archivo, 'perfil');
+    }
+    e.target.value = '';
   };
 
   const manejarCambioPortada = (e) => {
-    const archivo = e.target.files[0];
+    const archivo = e.target.files?.[0];
     if (archivo) {
-      setArchivoPortada(archivo);
-      setVistaPreviaPortada(URL.createObjectURL(archivo));
+      abrirCropperPerfil(archivo, 'portada');
     }
+    e.target.value = '';
   };
 
   const guardarPerfil = async () => {
@@ -895,8 +951,25 @@ export default function Perfil() {
   const urlImagenPerfil = obtenerUrlImagenUsuario(usuarioPerfil?.imagenPerfil) || urlAvatar;
   const urlImagenPortada = obtenerUrlImagenUsuario(usuarioPerfil?.imagenPortada) || 'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200';
 
+  const cropperPerfilEsPortada = cropperPerfil.tipo === 'portada';
+
   return (
     <div className="container-fluid max-w-custom p-0">
+      <ImageCropperModal
+        abierto={cropperPerfil.abierto}
+        archivo={cropperPerfil.archivo}
+        titulo={cropperPerfilEsPortada ? 'Ajustar foto de portada' : 'Ajustar foto de perfil'}
+        descripcion={cropperPerfilEsPortada
+          ? 'Mueve la imagen y ajusta el zoom para elegir el encuadre horizontal de tu portada.'
+          : 'Mueve la imagen y ajusta el zoom para elegir cómo se verá tu foto de perfil.'}
+        aspectRatio={cropperPerfilEsPortada ? 8 / 3 : 1}
+        forma={cropperPerfilEsPortada ? 'rect' : 'circle'}
+        outputWidth={cropperPerfilEsPortada ? 1600 : 900}
+        outputHeight={cropperPerfilEsPortada ? 600 : 900}
+        sufijoArchivo={cropperPerfilEsPortada ? 'portada' : 'perfil'}
+        onCancelar={cerrarCropperPerfil}
+        onConfirmar={confirmarCropperPerfil}
+      />
 
       {/* =========================================
           MODAL DE EDICIÓN DE PERFIL (ESTILO X)
@@ -1268,13 +1341,6 @@ export default function Perfil() {
                             src={obtenerUrlMultimediaPublicacion(post.multimedia)}
                             alt="Archivo adjunto"
                             className={esHistorico ? "imagen-post-historico" : "imagen-post-moderna"}
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              maxHeight: '500px',
-                              objectFit: 'contain',
-                              backgroundColor: '#f8f9fa'
-                            }}
                           />
                         </div>
                       </div>

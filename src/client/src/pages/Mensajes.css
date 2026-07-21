@@ -453,3 +453,125 @@
     color: #a0a0a0;
     /* Gris para el enviado simple */
 }
+
+/* =========================================================
+   AJUSTE RESPONSIVE FINAL: TIPOGRAFÍA MÓVIL
+   Reduce ligeramente las fuentes en móviles sin provocar zoom
+   automático en inputs de Android/iOS.
+   ========================================================= */
+@media (max-width: 576px) {
+    body {
+        font-size: 14.75px;
+    }
+
+    h1,
+    .h1,
+    .titulo-seccion {
+        font-size: clamp(1.55rem, 7.5vw, 2rem) !important;
+        line-height: 1.08;
+        letter-spacing: -0.035em;
+    }
+
+    h2,
+    .h2,
+    .titulo-panel,
+    .titulo-widget,
+    .titulo-mensajes,
+    .titulo-configuracion,
+    .titulo-edicion-x {
+        font-size: clamp(1.25rem, 6vw, 1.6rem) !important;
+        line-height: 1.12;
+        letter-spacing: -0.025em;
+    }
+
+    h3,
+    .h3 {
+        font-size: clamp(1.08rem, 5.2vw, 1.35rem) !important;
+        line-height: 1.15;
+    }
+
+    p,
+    span,
+    label,
+    .texto-post,
+    .bio-perfil,
+    .datos-extra-perfil,
+    .texto-notificacion,
+    .nombre-chat,
+    .nombre-autor,
+    .nombre-conexion,
+    .nombre-sugerencia,
+    .item-configuracion,
+    .boton-accion-arbol,
+    .interruptor-edicion,
+    .tab-red,
+    .tab-perfil {
+        line-height: 1.35;
+    }
+
+    .texto-post,
+    .bio-perfil,
+    .datos-extra-perfil,
+    .texto-notificacion,
+    .nombre-chat,
+    .nombre-autor,
+    .nombre-conexion,
+    .nombre-sugerencia,
+    .item-configuracion,
+    .boton-accion-arbol,
+    .interruptor-edicion {
+        font-size: 0.9rem;
+    }
+
+    small,
+    .small,
+    .usuario-tag,
+    .info-autor,
+    .tiempo-chat,
+    .tiempo-notificacion,
+    .texto-previo,
+    .relacion-conexion,
+    .relacion-badge,
+    .info-autor,
+    .ayuda-configuracion {
+        font-size: 0.78rem;
+    }
+
+    button,
+    .btn {
+        font-size: 0.86rem;
+    }
+
+    input,
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    body {
+        font-size: 14px;
+    }
+
+    h1,
+    .h1,
+    .titulo-seccion {
+        font-size: clamp(1.42rem, 7.2vw, 1.75rem) !important;
+    }
+
+    h2,
+    .h2,
+    .titulo-panel,
+    .titulo-widget,
+    .titulo-mensajes,
+    .titulo-configuracion,
+    .titulo-edicion-x {
+        font-size: clamp(1.15rem, 5.8vw, 1.45rem) !important;
+    }
+
+    button,
+    .btn {
+        font-size: 0.82rem;
+    }
+}

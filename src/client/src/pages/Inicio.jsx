@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
+import ImageCropperModal from '../components/ImageCropperModal';
 import './Inicio.css';
 
 const obtenerId = (valor) => {
@@ -471,6 +472,10 @@ export default function Inicio() {
 
   const [archivoAdjunto, setArchivoAdjunto] = useState(null);
   const [vistaPrevia, setVistaPrevia] = useState('');
+  const [cropperPublicacion, setCropperPublicacion] = useState({
+    abierto: false,
+    archivo: null
+  });
   const fileInputRef = useRef(null);
   const gifInputRef = useRef(null);
   const textareaPublicacionRef = useRef(null);
@@ -705,20 +710,69 @@ export default function Inicio() {
     return () => clearTimeout(temporizador);
   }, [busquedaPersonaPublicacion, panelHerramientaActivo, token]);
 
-  const manejarCambioArchivo = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setArchivoAdjunto(file);
-      setVistaPrevia(URL.createObjectURL(file));
-      setEtiquetasImagen([]);
-      setPanelHerramientaActivo(null);
+  const establecerMultimediaPublicacion = (file, previewUrl = '') => {
+    if (!file) return;
+
+    if (vistaPrevia && vistaPrevia.startsWith('blob:')) {
+      URL.revokeObjectURL(vistaPrevia);
     }
+
+    setArchivoAdjunto(file);
+    setVistaPrevia(previewUrl || URL.createObjectURL(file));
+    setEtiquetasImagen([]);
+    setPanelHerramientaActivo(null);
+  };
+
+  const abrirCropperPublicacion = (file) => {
+    setCropperPublicacion({
+      abierto: true,
+      archivo: file
+    });
+  };
+
+  const cerrarCropperPublicacion = () => {
+    setCropperPublicacion({
+      abierto: false,
+      archivo: null
+    });
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (gifInputRef.current) gifInputRef.current.value = '';
+  };
+
+  const confirmarCropperPublicacion = ({ archivo, vistaPrevia: previewUrl }) => {
+    establecerMultimediaPublicacion(archivo, previewUrl);
+    setCropperPublicacion({
+      abierto: false,
+      archivo: null
+    });
+  };
+
+  const manejarCambioArchivo = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const esImagenRecortable = file.type?.startsWith('image/') && file.type !== 'image/gif';
+
+    if (esImagenRecortable) {
+      abrirCropperPublicacion(file);
+      e.target.value = '';
+      return;
+    }
+
+    establecerMultimediaPublicacion(file);
+    e.target.value = '';
   };
 
   const limpiarMultimedia = () => {
+    if (vistaPrevia && vistaPrevia.startsWith('blob:')) {
+      URL.revokeObjectURL(vistaPrevia);
+    }
+
     setArchivoAdjunto(null);
     setVistaPrevia('');
     setEtiquetasImagen([]);
+    setCropperPublicacion({ abierto: false, archivo: null });
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (gifInputRef.current) gifInputRef.current.value = '';
   };
@@ -1384,6 +1438,19 @@ export default function Inicio() {
 
   return (
     <div className="container-fluid max-w-custom p-0">
+      <ImageCropperModal
+        abierto={cropperPublicacion.abierto}
+        archivo={cropperPublicacion.archivo}
+        titulo="Ajustar imagen de publicación"
+        descripcion="Mueve la imagen y ajusta el zoom para elegir cómo se verá en tu publicación."
+        aspectRatio={4 / 5}
+        forma="rect"
+        outputWidth={1080}
+        outputHeight={1350}
+        sufijoArchivo="publicacion"
+        onCancelar={cerrarCropperPublicacion}
+        onConfirmar={confirmarCropperPublicacion}
+      />
 
       {/* SELECTOR DE TIPO DE PUBLICACIÓN */}
       {selectorTipoAbierto && (

@@ -923,3 +923,272 @@
         font-size: 1.8rem;
     }
 }
+
+/* =========================================================
+   FIX FINAL: CROP CONSISTENTE EN PUBLICACIONES DE PERFIL
+   Usa el mismo render 4:5 que Inicio para que la imagen no se
+   muestre con fondo gris ni se recorte diferente en PC/móvil.
+   ========================================================= */
+.contenedor-polaroid > .overflow-hidden,
+.contenedor-moderno > .overflow-hidden {
+    width: min(100%, 560px);
+    aspect-ratio: 4 / 5;
+    margin: 0 auto;
+    background-color: var(--fondo-app, #f8fafc);
+}
+
+.contenedor-moderno {
+    width: min(100%, 560px);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.contenedor-polaroid .imagen-post-historico,
+.contenedor-moderno .imagen-post-moderna,
+.contenedor-polaroid video.imagen-post-historico,
+.contenedor-moderno video.imagen-post-moderna {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    object-fit: cover !important;
+    object-position: center !important;
+    display: block;
+    background-color: var(--fondo-app, #f8fafc) !important;
+}
+
+@media (max-width: 576px) {
+    .contenedor-polaroid > .overflow-hidden,
+    .contenedor-moderno > .overflow-hidden,
+    .contenedor-moderno {
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
+/* =========================================================
+   AJUSTE RESPONSIVE FINAL: TIPOGRAFÍA MÓVIL
+   Reduce ligeramente las fuentes en móviles sin provocar zoom
+   automático en inputs de Android/iOS.
+   ========================================================= */
+@media (max-width: 576px) {
+    body {
+        font-size: 14.75px;
+    }
+
+    h1,
+    .h1,
+    .titulo-seccion {
+        font-size: clamp(1.55rem, 7.5vw, 2rem) !important;
+        line-height: 1.08;
+        letter-spacing: -0.035em;
+    }
+
+    h2,
+    .h2,
+    .titulo-panel,
+    .titulo-widget,
+    .titulo-mensajes,
+    .titulo-configuracion,
+    .titulo-edicion-x {
+        font-size: clamp(1.25rem, 6vw, 1.6rem) !important;
+        line-height: 1.12;
+        letter-spacing: -0.025em;
+    }
+
+    h3,
+    .h3 {
+        font-size: clamp(1.08rem, 5.2vw, 1.35rem) !important;
+        line-height: 1.15;
+    }
+
+    p,
+    span,
+    label,
+    .texto-post,
+    .bio-perfil,
+    .datos-extra-perfil,
+    .texto-notificacion,
+    .nombre-chat,
+    .nombre-autor,
+    .nombre-conexion,
+    .nombre-sugerencia,
+    .item-configuracion,
+    .boton-accion-arbol,
+    .interruptor-edicion,
+    .tab-red,
+    .tab-perfil {
+        line-height: 1.35;
+    }
+
+    .texto-post,
+    .bio-perfil,
+    .datos-extra-perfil,
+    .texto-notificacion,
+    .nombre-chat,
+    .nombre-autor,
+    .nombre-conexion,
+    .nombre-sugerencia,
+    .item-configuracion,
+    .boton-accion-arbol,
+    .interruptor-edicion {
+        font-size: 0.9rem;
+    }
+
+    small,
+    .small,
+    .usuario-tag,
+    .info-autor,
+    .tiempo-chat,
+    .tiempo-notificacion,
+    .texto-previo,
+    .relacion-conexion,
+    .relacion-badge,
+    .info-autor,
+    .ayuda-configuracion {
+        font-size: 0.78rem;
+    }
+
+    button,
+    .btn {
+        font-size: 0.86rem;
+    }
+
+    input,
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    body {
+        font-size: 14px;
+    }
+
+    h1,
+    .h1,
+    .titulo-seccion {
+        font-size: clamp(1.42rem, 7.2vw, 1.75rem) !important;
+    }
+
+    h2,
+    .h2,
+    .titulo-panel,
+    .titulo-widget,
+    .titulo-mensajes,
+    .titulo-configuracion,
+    .titulo-edicion-x {
+        font-size: clamp(1.15rem, 5.8vw, 1.45rem) !important;
+    }
+
+    button,
+    .btn {
+        font-size: 0.82rem;
+    }
+}
+
+/* =========================================================
+   FIX FINAL: BOTONES DE PERFIL MÁS COMPACTOS EN MÓVIL
+   Evita que "Siguiendo" y "Agregar a familia" ocupen media
+   pantalla en celulares.
+   ========================================================= */
+@media (max-width: 576px) {
+    .fila-superior-info {
+        gap: 8px !important;
+        align-items: flex-end !important;
+    }
+
+    .foto-perfil-grande {
+        width: 96px !important;
+        height: 96px !important;
+        flex: 0 0 96px !important;
+    }
+
+    .fila-superior-info > .boton-relacion-perfil {
+        flex: 1 1 calc(100% - 112px) !important;
+        width: auto !important;
+        max-width: 190px !important;
+        min-height: 38px !important;
+        height: 38px !important;
+        padding: 6px 14px !important;
+        border-radius: 999px !important;
+        font-size: 0.82rem !important;
+        line-height: 1.1 !important;
+        white-space: nowrap !important;
+        margin-bottom: 7px !important;
+    }
+
+    .fila-superior-info > .acciones-familia-perfil {
+        flex: 0 1 auto !important;
+        width: auto !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        display: flex !important;
+        justify-content: flex-start !important;
+    }
+
+    .acciones-familia-perfil > .btn {
+        width: auto !important;
+        max-width: 210px !important;
+        min-height: 36px !important;
+        height: 36px !important;
+        padding: 6px 16px !important;
+        border-radius: 999px !important;
+        font-size: 0.8rem !important;
+        line-height: 1.1 !important;
+        white-space: nowrap !important;
+    }
+
+    .nombre-perfil {
+        font-size: clamp(1.55rem, 7.2vw, 2.05rem) !important;
+        line-height: 1.06 !important;
+        letter-spacing: -0.04em;
+    }
+
+    .usuario-tag {
+        font-size: 0.84rem !important;
+        margin-bottom: 12px !important;
+    }
+
+    .bio-perfil {
+        font-size: 0.9rem !important;
+    }
+
+    .datos-extra-perfil {
+        font-size: 0.8rem !important;
+        gap: 8px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .foto-perfil-grande {
+        width: 88px !important;
+        height: 88px !important;
+        flex-basis: 88px !important;
+    }
+
+    .fila-superior-info {
+        margin-top: -44px !important;
+    }
+
+    .fila-superior-info > .boton-relacion-perfil {
+        max-width: 165px !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        padding: 5px 12px !important;
+        font-size: 0.76rem !important;
+    }
+
+    .acciones-familia-perfil > .btn {
+        max-width: 180px !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        padding: 5px 12px !important;
+        font-size: 0.75rem !important;
+    }
+
+    .nombre-perfil {
+        font-size: 1.5rem !important;
+    }
+}
