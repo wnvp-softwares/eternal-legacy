@@ -1,55 +1,66 @@
+const { google } = require('googleapis');
 require('dotenv').config();
 
+// Cliente OAuth2 de Google
+const oAuth2Client = new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+    'https://developers.google.com/oauthplayground'
+);
+
+oAuth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
+
 /**
- * Helper para enviar correos consumiendo la API REST de Brevo vía HTTPS.
- * Soluciona el timeout en Render al evitar el uso de puertos SMTP (465/587).
+ * Convierte el mensaje a formato MIME base64url compatible con la API de Gmail.
  */
-const enviarCorreoBrevo = async ({ to, subject, htmlContent, textContent, senderName = 'Legacy', senderEmail }) => {
-    const apiKey = process.env.BREVO_API_KEY || process.env.EMAIL_PASSWORD;
-    const remitente = senderEmail || process.env.EMAIL_USER || 'legacydesarrollo@gmail.com';
+function crearEmailBase64({ to, subject, htmlContent, textContent, senderName = 'Legacy' }) {
+    const from = process.env.EMAIL_USER || 'legacydesarrollo@gmail.com';
+    const str = [
+        `From: "${senderName}" <${from}>`,
+        `To: ${to}`,
+        `Subject: =?utf-8?B?${Buffer.from(subject).toString('base64')}?=`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=utf-8',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        htmlContent || textContent
+    ].join('\n');
 
-    if (!apiKey) {
-        throw new Error('Falta la clave API de Brevo. Asegúrate de configurar BREVO_API_KEY en tus variables de entorno.');
+    return Buffer.from(str)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+/**
+ * Envia el correo directamente utilizando la API REST HTTPS de Gmail.
+ */
+const enviarCorreoGmailAPI = async ({ to, subject, htmlContent, textContent, senderName }) => {
+    try {
+        const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+        const rawMessage = crearEmailBase64({ to, subject, htmlContent, textContent, senderName });
+
+        const res = await gmail.users.messages.send({
+            userId: 'me',
+            requestBody: {
+                raw: rawMessage
+            }
+        });
+
+        return res.data;
+    } catch (error) {
+        console.error('❌ Error en Gmail API REST:', error.message);
+        throw error;
     }
-
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-            'accept': 'application/json',
-            'api-key': apiKey,
-            'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-            sender: {
-                name: senderName,
-                email: remitente
-            },
-            to: [{ email: to }],
-            subject: subject,
-            htmlContent: htmlContent,
-            textContent: textContent
-        })
-    });
-
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Error API Brevo (${response.status}): ${JSON.stringify(errorData)}`);
-    }
-
-    return await response.json();
 };
 
 /**
  * Envía códigos de seguridad por correo con el estilo institucional de Legacy.
- *
- * @param {string} email - Destino
- * @param {string} codigo - Código de 6 dígitos
- * @param {object} opciones - Configuración opcional del correo
  */
 const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
-    console.log('📧 Preparando envío vía Brevo API');
+    console.log('📧 Preparando envío vía Gmail API REST');
     console.log('Destino:', email);
-    console.log('Remitente:', process.env.EMAIL_USER || 'legacydesarrollo@gmail.com');
 
     const {
         asunto = 'Código de Verificación para Registro',
@@ -72,10 +83,7 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f8; padding: 30px 10px;">
             <tr>
                 <td align="center">
-                    <!-- Contenedor Principal -->
                     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
-                        
-                        <!-- Cabecera con Azul Marino e Inserción Dorada -->
                         <tr>
                             <td align="center" style="background-color: #0D1B2A; padding: 32px 20px; border-bottom: 3px solid #CBA135;">
                                 <h1 style="margin: 0; color: #ffffff; font-family: 'Playfair Display', Georgia, serif; font-size: 26px; font-weight: 700; letter-spacing: 2px;">
@@ -86,19 +94,14 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
                                 </p>
                             </td>
                         </tr>
-
-                        <!-- Cuerpo del Mensaje -->
                         <tr>
                             <td style="padding: 36px 32px; text-align: center;">
                                 <h2 style="margin: 0 0 12px 0; color: #0D1B2A; font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 700;">
                                     ${titulo}
                                 </h2>
-                                
                                 <p style="margin: 0 0 24px 0; color: #475569; font-size: 15px; line-height: 1.6;">
                                     ${descripcion}
                                 </p>
-
-                                <!-- Caja Resaltada con el Código -->
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
                                     <tr>
                                         <td align="center">
@@ -113,15 +116,11 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
                                         </td>
                                     </tr>
                                 </table>
-
-                                <!-- Nota de Expiración -->
                                 <p style="margin: 24px 0 0 0; color: #64748b; font-size: 13px; line-height: 1.5;">
                                     Este código expira en pocos minutos.<br>Si no solicitaste este acceso, puedes ignorar este correo de forma segura.
                                 </p>
                             </td>
                         </tr>
-
-                        <!-- Pie de Página -->
                         <tr>
                             <td style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #f1f5f9;">
                                 <p style="margin: 0; color: #94a3b8; font-size: 12px;">
@@ -129,7 +128,6 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
                                 </p>
                             </td>
                         </tr>
-
                     </table>
                 </td>
             </tr>
@@ -139,7 +137,7 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
     `;
 
     try {
-        const respuesta = await enviarCorreoBrevo({
+        const respuesta = await enviarCorreoGmailAPI({
             to: email,
             subject: asunto,
             htmlContent: htmlContent,
@@ -147,29 +145,21 @@ const enviarCodigoVerificacion = async (email, codigo, opciones = {}) => {
             senderName: 'Legacy'
         });
 
-        console.log('✅ Correo enviado con éxito');
-        console.log('Message ID:', respuesta.messageId || respuesta);
-
+        console.log('✅ Correo enviado con éxito vía Gmail API');
+        console.log('ID:', respuesta.id);
         return true;
     } catch (error) {
-        console.error('Error al enviar el correo:', error.message);
+        console.error('Error al enviar el correo con Gmail API:', error);
         return false;
     }
 };
 
 /**
- * Envía sugerencias, reportes de errores y comentarios al correo de soporte con estilo institucional.
- *
- * @param {object} datos
- * @param {string} datos.usuario - Nombre de usuario que envía
- * @param {string} datos.emailUsuario - Correo del usuario
- * @param {string} datos.mensaje - Contenido del reporte/sugerencia
- * @param {string} [datos.tipo='Recomendación'] - Tipo de mensaje (Sugerencia, Bug, etc.)
+ * Envía sugerencias, reportes de errores y comentarios al correo de soporte.
  */
 const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'Recomendación' }) => {
     const fechaHora = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
 
-    // Determinar estilo dinámico según el tipo de mensaje (Rojo para bugs, Dorado/Marrón para sugerencias)
     const esBug = tipo.toLowerCase().includes('bug') || tipo.toLowerCase().includes('fallo');
     const badgeColor = esBug ? '#dc2626' : '#8c6b18';
     const badgeBg = esBug ? '#fef2f2' : '#fef8eb';
@@ -199,10 +189,7 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f8; padding: 30px 10px;">
             <tr>
                 <td align="center">
-                    <!-- Contenedor Principal -->
                     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 580px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
-                        
-                        <!-- Cabecera con Azul Marino e Inserción Dorada -->
                         <tr>
                             <td align="center" style="background-color: #0D1B2A; padding: 32px 20px; border-bottom: 3px solid #CBA135;">
                                 <h1 style="margin: 0; color: #ffffff; font-family: 'Playfair Display', Georgia, serif; font-size: 26px; font-weight: 700; letter-spacing: 2px;">
@@ -213,15 +200,11 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
                                 </p>
                             </td>
                         </tr>
-
-                        <!-- Cuerpo del Mensaje -->
                         <tr>
                             <td style="padding: 32px 28px; text-align: left;">
                                 <h2 style="margin: 0 0 18px 0; color: #0D1B2A; font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 700; text-align: center;">
                                     Nuevo Comentario Recibido
                                 </h2>
-                                
-                                <!-- Tarjeta de Detalles del Remitente -->
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 24px; padding: 16px 20px;">
                                     <tr>
                                         <td style="padding: 6px 0;">
@@ -250,22 +233,17 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
                                         </td>
                                     </tr>
                                 </table>
-
-                                <!-- Caja del Mensaje del Usuario -->
                                 <div style="margin-bottom: 8px;">
                                     <span style="color: #0D1B2A; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
                                         Mensaje / Detalles:
                                     </span>
                                 </div>
                                 <div style="background-color: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #CBA135; border-radius: 8px; padding: 18px; color: #1e293b; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${mensaje}</div>
-
                                 <p style="margin: 24px 0 0 0; color: #64748b; font-size: 12px; text-align: center; line-height: 1.5;">
                                     Este mensaje fue enviado automáticamente desde la sección de Configuración de Legacy.
                                 </p>
                             </td>
                         </tr>
-
-                        <!-- Pie de Página -->
                         <tr>
                             <td style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #f1f5f9;">
                                 <p style="margin: 0; color: #94a3b8; font-size: 12px;">
@@ -273,7 +251,6 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
                                 </p>
                             </td>
                         </tr>
-
                     </table>
                 </td>
             </tr>
@@ -283,25 +260,23 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
     `;
 
     try {
-        const respuesta = await enviarCorreoBrevo({
-            to: 'legacydesarrollo@gmail.com',
+        const respuesta = await enviarCorreoGmailAPI({
+            to: process.env.EMAIL_USER || 'legacydesarrollo@gmail.com',
             subject: `[Legacy Support] ${tipo}: ${usuario}`,
             htmlContent: htmlContent,
             textContent: textContent,
             senderName: 'Legacy App'
         });
 
-        console.log('✅ Correo de feedback/bug enviado con éxito');
-        console.log('Message ID:', respuesta.messageId || respuesta);
-
+        console.log('✅ Correo de feedback enviado con éxito vía Gmail API');
+        console.log('ID:', respuesta.id);
         return true;
     } catch (error) {
-        console.error('Error al enviar el correo de feedback/bug:', error.message);
+        console.error('Error al enviar el correo de feedback con Gmail API:', error);
         return false;
     }
 };
 
-// Se exportan ambas funciones manteniendo compatibilidad total de importación
 module.exports = enviarCodigoVerificacion;
 module.exports.enviarCodigoVerificacion = enviarCodigoVerificacion;
 module.exports.enviarReporteFeedback = enviarReporteFeedback;
