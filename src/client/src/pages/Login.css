@@ -106,3 +106,70 @@ body {
 .animacion-formulario {
     animation: aparecerSuave 0.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
+
+
+/* =========================================
+   AJUSTE RESPONSIVE: CÓDIGO DE VERIFICACIÓN
+   ========================================= */
+.login-verificacion {
+    width: 100%;
+}
+
+.codigo-verificacion-contenedor {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 360px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.input-codigo-verificacion {
+    width: 100% !important;
+    min-width: 0;
+    height: auto;
+    aspect-ratio: 1 / 1.15;
+    max-height: 4.5rem;
+    border-radius: 0.75rem;
+    font-size: 1.65rem !important;
+    line-height: 1;
+}
+
+.input-codigo-verificacion:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+@media (max-width: 420px) {
+    .codigo-verificacion-contenedor {
+        gap: 0.4rem;
+        max-width: 100%;
+    }
+
+    .input-codigo-verificacion {
+        aspect-ratio: 1 / 1.08;
+        font-size: 1.35rem !important;
+        border-radius: 0.65rem;
+    }
+}
+
+@media (max-width: 340px) {
+    .contenedor-login .w-100.mx-auto {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    .login-verificacion .bi-envelope-check {
+        font-size: 3rem !important;
+    }
+
+    .codigo-verificacion-contenedor {
+        gap: 0.3rem;
+    }
+
+    .input-codigo-verificacion {
+        font-size: 1.15rem !important;
+        border-radius: 0.55rem;
+    }
+}

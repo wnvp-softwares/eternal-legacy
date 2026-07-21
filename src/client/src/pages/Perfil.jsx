@@ -268,6 +268,30 @@ const obtenerUrlMultimediaPublicacion = (multimedia) => {
   return normalizarRutaMultimedia(ruta);
 };
 
+const obtenerUrlImagenUsuario = (imagen) => {
+  return obtenerUrlMultimediaPublicacion(imagen);
+};
+
+const normalizarUsuarioPerfil = (usuario = {}, usuarioFallback = {}) => {
+  const usuarioSeguro = usuario && typeof usuario === 'object' ? usuario : {};
+  const fallbackSeguro = usuarioFallback && typeof usuarioFallback === 'object' ? usuarioFallback : {};
+
+  return {
+    ...fallbackSeguro,
+    ...usuarioSeguro,
+    id: usuarioSeguro.id || usuarioSeguro._id || fallbackSeguro.id || fallbackSeguro._id || null,
+    _id: usuarioSeguro._id || usuarioSeguro.id || fallbackSeguro._id || fallbackSeguro.id || null,
+    imagenPerfil:
+      obtenerUrlImagenUsuario(usuarioSeguro.imagenPerfil) ||
+      obtenerUrlImagenUsuario(fallbackSeguro.imagenPerfil) ||
+      null,
+    imagenPortada:
+      obtenerUrlImagenUsuario(usuarioSeguro.imagenPortada) ||
+      obtenerUrlImagenUsuario(fallbackSeguro.imagenPortada) ||
+      null
+  };
+};
+
 const obtenerFormatoMultimediaPublicacion = (multimedia) => {
   const archivo = obtenerPrimerArchivoMultimedia(multimedia);
 
@@ -465,11 +489,19 @@ export default function Perfil() {
 
         setPerfilBd(datosPerfil.perfil);
 
-        // Guardamos la información del usuario dueño de este perfil
+        // Guardamos la información fresca del usuario dueño de este perfil.
+        // Importante: para mi propio perfil usamos la respuesta del backend, no solo localStorage,
+        // porque ahí llegan la foto y la portada actualizadas.
+        const usuarioNormalizadoPerfil = normalizarUsuarioPerfil(
+          datosPerfil.usuario,
+          esMiPerfil ? usuarioLogueado : {}
+        );
+
+        setUsuarioPerfil(usuarioNormalizadoPerfil);
+
         if (esMiPerfil) {
-          setUsuarioPerfil(usuarioLogueado);
+          localStorage.setItem('usuario', JSON.stringify(usuarioNormalizadoPerfil));
         } else {
-          setUsuarioPerfil(datosPerfil.usuario);
           setEstaSiguiendo(datosPerfil.siguiendo || false);
           // 🌟 Nuevos mapeos:
           setSonAmigos(datosPerfil.sonAmigos || false);
@@ -484,8 +516,8 @@ export default function Perfil() {
         // Cambiamos el filtro para que use las publicaciones del dueño del perfil actual
         const targetId = esMiPerfil ? (usuarioLogueado?.id || usuarioLogueado?._id) : id;
         const misPublicaciones = listaPosts.filter(post => {
-          const autorId = post.autor?._id || post.autor;
-          return autorId === targetId;
+          const autorId = post.autor?._id || post.autor?.id || post.autor;
+          return String(autorId) === String(targetId);
         });
 
         setPublicaciones(misPublicaciones);
@@ -513,9 +545,11 @@ export default function Perfil() {
         ? new Date(perfilBd.fechaNacimiento).toISOString().split('T')[0]
         : '';
 
+      const usuarioBaseEdicion = usuarioPerfil || usuarioLogueado || {};
+
       setFormEdicion({
-        nombreUsuario: usuarioLogueado?.nombreUsuario || '',
-        email: usuarioLogueado?.email || '',
+        nombreUsuario: usuarioBaseEdicion?.nombreUsuario || '',
+        email: usuarioBaseEdicion?.email || '',
         biografia: perfilBd?.biografia || '',
         fechaNacimiento: fechaFormateada,
         genero: perfilBd?.genero || '',
@@ -525,8 +559,8 @@ export default function Perfil() {
         intereses: interesesTexto
       });
 
-      setVistaPreviaPerfil(usuarioLogueado?.imagenPerfil || '');
-      setVistaPreviaPortada(usuarioLogueado?.imagenPortada || '');
+      setVistaPreviaPerfil(obtenerUrlImagenUsuario(usuarioBaseEdicion?.imagenPerfil) || '');
+      setVistaPreviaPortada(obtenerUrlImagenUsuario(usuarioBaseEdicion?.imagenPortada) || '');
       setArchivoPerfil(null);
       setArchivoPortada(null);
     }
@@ -578,11 +612,15 @@ export default function Perfil() {
 
       setPerfilBd(datosBD.perfil || { ...perfilBd, ...cuerpoEnvio });
 
-      let usuarioActualizadoLocal = {
-        ...usuarioLogueado,
-        nombreUsuario: datosBD.usuario?.nombreUsuario || usuarioLogueado.nombreUsuario,
-        email: datosBD.usuario?.email || usuarioLogueado.email
-      };
+      let usuarioActualizadoLocal = normalizarUsuarioPerfil(
+        {
+          ...(usuarioPerfil || {}),
+          ...(datosBD.usuario || {}),
+          nombreUsuario: datosBD.usuario?.nombreUsuario || formEdicion.nombreUsuario || usuarioPerfil?.nombreUsuario || usuarioLogueado?.nombreUsuario,
+          email: datosBD.usuario?.email || formEdicion.email || usuarioPerfil?.email || usuarioLogueado?.email
+        },
+        usuarioLogueado
+      );
 
       const subirArchivoAlServidor = async (archivo) => {
         const formData = new FormData();
@@ -618,33 +656,31 @@ export default function Perfil() {
 
         if (resImagenes.ok) {
           const datosImg = await resImagenes.json();
-          const usuarioBackend = datosImg.usuario;
+          const usuarioBackend = datosImg.usuario || {};
 
-          const nuevaUrlPerfil = usuarioBackend.imagenPerfil?.urlArchivo
-            ? resolverUrlBackend(usuarioBackend.imagenPerfil.urlArchivo)
-            : usuarioLogueado?.imagenPerfil;
-
-          const nuevaUrlPortada = usuarioBackend.imagenPortada?.urlArchivo
-            ? resolverUrlBackend(usuarioBackend.imagenPortada.urlArchivo)
-            : usuarioLogueado?.imagenPortada;
-
-          usuarioActualizadoLocal = {
-            ...usuarioActualizadoLocal,
-            imagenPerfil: nuevaUrlPerfil,
-            imagenPortada: nuevaUrlPortada
-          };
+          usuarioActualizadoLocal = normalizarUsuarioPerfil(
+            {
+              ...usuarioActualizadoLocal,
+              ...usuarioBackend
+            },
+            usuarioActualizadoLocal
+          );
         } else {
           alert('Las imágenes se subieron, pero hubo un problema al vincularlas.');
         }
       }
 
       localStorage.setItem('usuario', JSON.stringify(usuarioActualizadoLocal));
+      setUsuarioPerfil(usuarioActualizadoLocal);
 
       if (vistaPreviaPerfil && vistaPreviaPerfil.startsWith('blob:')) URL.revokeObjectURL(vistaPreviaPerfil);
       if (vistaPreviaPortada && vistaPreviaPortada.startsWith('blob:')) URL.revokeObjectURL(vistaPreviaPortada);
 
+      setArchivoPerfil(null);
+      setArchivoPortada(null);
+      setVistaPreviaPerfil('');
+      setVistaPreviaPortada('');
       setEdicionAbierta(false);
-      window.location.reload();
 
     } catch (error) {
       console.error('❌ Error completo en el proceso de guardado:', error);
@@ -854,7 +890,10 @@ export default function Perfil() {
     );
   }
 
-  const urlAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(usuarioLogueado?.nombreUsuario || 'Usuario')}&background=0D1B2A&color=fff`;
+  const nombreAvatar = usuarioPerfil?.nombreUsuario || usuarioLogueado?.nombreUsuario || 'Usuario';
+  const urlAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreAvatar)}&background=0D1B2A&color=fff`;
+  const urlImagenPerfil = obtenerUrlImagenUsuario(usuarioPerfil?.imagenPerfil) || urlAvatar;
+  const urlImagenPortada = obtenerUrlImagenUsuario(usuarioPerfil?.imagenPortada) || 'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200';
 
   return (
     <div className="container-fluid max-w-custom p-0">
@@ -1006,7 +1045,7 @@ export default function Perfil() {
       <div className="cabecera-perfil shadow-sm">
         <div className="portada-contenedor">
           <img
-            src={usuarioPerfil?.imagenPortada || "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1200"}
+            src={urlImagenPortada}
             alt="Portada"
             className="portada-perfil"
           />
@@ -1014,7 +1053,7 @@ export default function Perfil() {
 
         <div className="info-usuario-container">
           <div className="fila-superior-info">
-            <img src={usuarioPerfil?.imagenPerfil || urlAvatar} alt="Perfil" className="foto-perfil-grande" />
+            <img src={urlImagenPerfil} alt="Perfil" className="foto-perfil-grande" />
 
             {/* CONDICIONAL: Botón de edición si es mi perfil, botón de Seguir/Siguiendo si es ajeno */}
             {esMiPerfil ? (

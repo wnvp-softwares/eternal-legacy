@@ -275,7 +275,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
 
   } else if (paso === 'verificacion') {
     contenidoDerecha = (
-      <div className="animacion-formulario">
+      <div className="animacion-formulario login-verificacion">
         <div className="text-center mb-4">
           <i className="bi bi-envelope-check mb-3 d-block" style={{ fontSize: '4rem', color: '#d9b34c' }}></i>
           <h2 className="fuente-elegante fw-bold fs-2 mb-2" style={{ color: '#0D1B2A' }}>{tituloVerificacion}</h2>
@@ -292,14 +292,16 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
             </div>
           )}
 
-          <div className="d-flex justify-content-between gap-2 mb-4 mt-4">
+          <div className="codigo-verificacion-contenedor mb-4 mt-4">
             {codigo.map((dato, index) => (
               <input
                 key={index}
                 type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete={index === 0 ? 'one-time-code' : 'off'}
                 maxLength="1"
-                className="form-control text-center fw-bold fs-3 p-0 input-personalizado"
-                style={{ width: '3.5rem', height: '4.5rem', borderRadius: '0.75rem' }}
+                className="form-control text-center fw-bold p-0 input-personalizado input-codigo-verificacion"
                 value={dato}
                 onChange={(e) => manejarCambioCodigo(e.target, index)}
                 onKeyDown={(e) => manejarRetroceso(e, index)}
@@ -463,7 +465,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         <div className="col-12 col-lg-6 d-flex flex-column bg-white shadow-lg">
 
           <div className="d-flex align-items-center gap-2 mt-5 ms-5 mb-5 d-lg-none" style={{ color: '#0D1B2A' }}>
-            <i className="bi bi-infinity fs-1texto-dorado fs-1"></i>
+            <i className="bi bi-infinity texto-dorado fs-1"></i>
             <span className="fuente-elegante fw-bold fs-3">Legacy</span>
           </div>
 

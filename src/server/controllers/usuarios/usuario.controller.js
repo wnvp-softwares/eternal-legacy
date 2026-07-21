@@ -45,13 +45,72 @@ const crearTokenTemporal2FA = (usuarioId) => {
     );
 };
 
-const formatearUsuarioSesion = (usuario) => ({
+const quitarBarraFinal = (valor = '') => String(valor || '').replace(/\/+$/, '');
+
+const obtenerBaseUrlBackend = (req) => {
+    return quitarBarraFinal(
+        process.env.BACKEND_BASE_URL ||
+        `${req.protocol}://${req.get('host')}` ||
+        'http://localhost:3000'
+    );
+};
+
+const resolverUrlArchivo = (archivo, req) => {
+    if (!archivo) return null;
+
+    let ruta = '';
+
+    if (typeof archivo === 'string') {
+        ruta = archivo;
+    } else if (typeof archivo === 'object') {
+        ruta =
+            archivo.urlArchivo ||
+            archivo.secure_url ||
+            archivo.url ||
+            archivo.path ||
+            archivo.ruta ||
+            archivo.location ||
+            archivo.filename ||
+            '';
+    }
+
+    if (!ruta || typeof ruta !== 'string') return null;
+
+    ruta = ruta.trim().replace(/\\/g, '/');
+
+    if (!ruta || ruta === 'undefined' || ruta === 'null' || ruta === '[object Object]') {
+        return null;
+    }
+
+    if (
+        ruta.startsWith('http://') ||
+        ruta.startsWith('https://') ||
+        ruta.startsWith('data:') ||
+        ruta.startsWith('blob:')
+    ) {
+        return ruta;
+    }
+
+    const indiceUploads = ruta.lastIndexOf('/uploads/');
+    if (indiceUploads >= 0) {
+        ruta = ruta.slice(indiceUploads);
+    }
+
+    if (!ruta.startsWith('/')) {
+        ruta = `/${ruta}`;
+    }
+
+    return `${obtenerBaseUrlBackend(req)}${ruta}`;
+};
+
+const formatearUsuarioSesion = (usuario, req) => ({
     id: usuario._id,
+    _id: usuario._id,
     nombreUsuario: usuario.nombreUsuario,
     email: usuario.email,
 
-    imagenPerfil: usuario.imagenPerfil?.urlArchivo || null,
-    imagenPortada: usuario.imagenPortada?.urlArchivo || null,
+    imagenPerfil: resolverUrlArchivo(usuario.imagenPerfil, req),
+    imagenPortada: resolverUrlArchivo(usuario.imagenPortada, req),
 
     informacionPerfil: usuario.informacionPerfil,
 
@@ -237,7 +296,7 @@ const verificarCodigo = async (req, res) => {
 
         res.status(200).json({
             mensaje: 'Cuenta verificada correctamente.',
-            usuario: formatearUsuarioSesion(usuarioActualizado),
+            usuario: formatearUsuarioSesion(usuarioActualizado, req),
             token
         });
     } catch (error) {
@@ -310,7 +369,7 @@ const loginUsuario = async (req, res) => {
 
         res.status(200).json({
             mensaje: 'Inicio de sesión exitoso.',
-            usuario: formatearUsuarioSesion(usuarioActualizado),
+            usuario: formatearUsuarioSesion(usuarioActualizado, req),
             token
         });
     } catch (error) {
@@ -401,7 +460,7 @@ const verificarCodigo2FALogin = async (req, res) => {
 
         res.status(200).json({
             mensaje: 'Verificación completada. Inicio de sesión exitoso.',
-            usuario: formatearUsuarioSesion(usuarioActualizado),
+            usuario: formatearUsuarioSesion(usuarioActualizado, req),
             token
         });
     } catch (error) {
@@ -426,7 +485,9 @@ const actualizarFotoPerfil = async (req, res) => {
             req.usuario.id,
             { imagenPerfil: uploadId },
             { new: true }
-        ).populate('imagenPerfil');
+        )
+            .populate('imagenPerfil')
+            .populate('imagenPortada');
 
         if (!usuarioActualizado) {
             return res.status(404).json({
@@ -436,7 +497,7 @@ const actualizarFotoPerfil = async (req, res) => {
 
         res.status(200).json({
             mensaje: '¡Foto de perfil actualizada con éxito!',
-            usuario: usuarioActualizado
+            usuario: formatearUsuarioSesion(usuarioActualizado, req)
         });
     } catch (error) {
         console.error('❌ Error al actualizar foto:', error);
@@ -482,7 +543,7 @@ const actualizarImagenesPerfil = async (req, res) => {
 
         res.status(200).json({
             mensaje: '¡Imágenes de perfil actualizadas con éxito!',
-            usuario: usuarioActualizado
+            usuario: formatearUsuarioSesion(usuarioActualizado, req)
         });
     } catch (error) {
         console.error('❌ Error al actualizar imágenes de perfil:', error);
@@ -594,7 +655,7 @@ const actualizarPreferencias = async (req, res) => {
                 zonaHoraria: usuario.zonaHoraria,
                 formatoFecha: usuario.formatoFecha
             },
-            usuario: formatearUsuarioSesion(usuario)
+            usuario: formatearUsuarioSesion(usuario, req)
         });
     } catch (error) {
         console.error('❌ Error en actualizarPreferencias:', error);

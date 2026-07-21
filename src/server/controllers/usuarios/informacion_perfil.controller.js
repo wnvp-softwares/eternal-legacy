@@ -1,10 +1,70 @@
 const { Usuario, InformacionPerfil, Seguidor, Familia } = require('../../models/index.model');
 
-const formatearUsuarioCuenta = (usuario) => ({
+const quitarBarraFinal = (valor = '') => String(valor || '').replace(/\/+$/, '');
+
+const obtenerBaseUrlBackend = (req) => {
+    return quitarBarraFinal(
+        process.env.BACKEND_BASE_URL ||
+        `${req.protocol}://${req.get('host')}` ||
+        'http://localhost:3000'
+    );
+};
+
+const resolverUrlArchivo = (archivo, req) => {
+    if (!archivo) return null;
+
+    let ruta = '';
+
+    if (typeof archivo === 'string') {
+        ruta = archivo;
+    } else if (typeof archivo === 'object') {
+        ruta =
+            archivo.urlArchivo ||
+            archivo.secure_url ||
+            archivo.url ||
+            archivo.path ||
+            archivo.ruta ||
+            archivo.location ||
+            archivo.filename ||
+            '';
+    }
+
+    if (!ruta || typeof ruta !== 'string') return null;
+
+    ruta = ruta.trim().replace(/\\/g, '/');
+
+    if (!ruta || ruta === 'undefined' || ruta === 'null' || ruta === '[object Object]') {
+        return null;
+    }
+
+    if (
+        ruta.startsWith('http://') ||
+        ruta.startsWith('https://') ||
+        ruta.startsWith('data:') ||
+        ruta.startsWith('blob:')
+    ) {
+        return ruta;
+    }
+
+    const indiceUploads = ruta.lastIndexOf('/uploads/');
+    if (indiceUploads >= 0) {
+        ruta = ruta.slice(indiceUploads);
+    }
+
+    if (!ruta.startsWith('/')) {
+        ruta = `/${ruta}`;
+    }
+
+    return `${obtenerBaseUrlBackend(req)}${ruta}`;
+};
+
+const formatearUsuarioCuenta = (usuario, req) => ({
     id: usuario._id,
+    _id: usuario._id,
     nombreUsuario: usuario.nombreUsuario,
     email: usuario.email,
-    imagenPerfil: usuario.imagenPerfil || null,
+    imagenPerfil: resolverUrlArchivo(usuario.imagenPerfil, req),
+    imagenPortada: resolverUrlArchivo(usuario.imagenPortada, req),
     informacionPerfil: usuario.informacionPerfil || null,
     twoFactorEnabled: Boolean(usuario.twoFactorEnabled),
     idioma: usuario.idioma || 'es-MX',
@@ -42,7 +102,11 @@ const obtenerMiPerfil = async (req, res) => {
             })
             .populate({
                 path: 'imagenPerfil',
-                select: 'urlArchivo'
+                select: 'urlArchivo secure_url url path ruta location filename'
+            })
+            .populate({
+                path: 'imagenPortada',
+                select: 'urlArchivo secure_url url path ruta location filename'
             });
 
         if (!usuario) {
@@ -58,13 +122,17 @@ const obtenerMiPerfil = async (req, res) => {
                 })
                 .populate({
                     path: 'imagenPerfil',
-                    select: 'urlArchivo'
+                    select: 'urlArchivo secure_url url path ruta location filename'
+                })
+                .populate({
+                    path: 'imagenPortada',
+                    select: 'urlArchivo secure_url url path ruta location filename'
                 });
         }
 
         res.status(200).json({
             mensaje: 'Perfil recuperado con éxito',
-            usuario: formatearUsuarioCuenta(usuario),
+            usuario: formatearUsuarioCuenta(usuario, req),
             perfil: usuario.informacionPerfil
         });
     } catch (error) {
@@ -190,12 +258,16 @@ const actualizarMiPerfil = async (req, res) => {
         const usuarioActualizado = await Usuario.findById(usuario._id)
             .populate({
                 path: 'imagenPerfil',
-                select: 'urlArchivo'
+                select: 'urlArchivo secure_url url path ruta location filename'
+            })
+            .populate({
+                path: 'imagenPortada',
+                select: 'urlArchivo secure_url url path ruta location filename'
             });
 
         res.status(200).json({
             mensaje: '¡Perfil actualizado con éxito!',
-            usuario: formatearUsuarioCuenta(usuarioActualizado),
+            usuario: formatearUsuarioCuenta(usuarioActualizado, req),
             perfil: perfilActualizado
         });
 
@@ -211,8 +283,8 @@ const obtenerPerfilPorId = async (req, res) => {
 
         let usuario = await Usuario.findById(id)
             .populate({ path: 'informacionPerfil' })
-            .populate({ path: 'imagenPerfil', select: 'urlArchivo' })
-            .populate({ path: 'imagenPortada', select: 'urlArchivo' });
+            .populate({ path: 'imagenPerfil', select: 'urlArchivo secure_url url path ruta location filename' })
+            .populate({ path: 'imagenPortada', select: 'urlArchivo secure_url url path ruta location filename' });
 
         if (!usuario) {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
@@ -233,13 +305,7 @@ const obtenerPerfilPorId = async (req, res) => {
 
         res.status(200).json({
             mensaje: 'Perfil recuperado con éxito',
-            usuario: {
-                id: usuario._id,
-                nombreUsuario: usuario.nombreUsuario,
-                email: usuario.email,
-                imagenPerfil: usuario.imagenPerfil?.urlArchivo ? `http://localhost:3000${usuario.imagenPerfil.urlArchivo}` : null,
-                imagenPortada: usuario.imagenPortada?.urlArchivo ? `http://localhost:3000${usuario.imagenPortada.urlArchivo}` : null
-            },
+            usuario: formatearUsuarioCuenta(usuario, req),
             perfil: usuario.informacionPerfil,
             siguiendo: !!loSigo,
             sonAmigos, // 🌟 True si se siguen mutuamente
