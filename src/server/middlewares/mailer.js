@@ -1,16 +1,18 @@
 const nodemailer = require('nodemailer');
-require('dotenv').config();
 const dns = require('dns');
-
-dns.setDefaultResultOrder('ipv4first');
+require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
+    port: 465,
+    secure: true,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
+    },
+    // 👇 Esto obliga al socket a resolver ÚNICAMENTE IPv4
+    lookup: (hostname, options, callback) => {
+        return dns.lookup(hostname, { family: 4 }, callback);
     },
     connectionTimeout: 10000,
     greetingTimeout: 10000,
