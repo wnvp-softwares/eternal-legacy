@@ -368,6 +368,7 @@ export default function Perfil() {
 
   // --- ESTADOS PARA EL MODAL DE EDICIÓN DE PERFIL (ESTILO X) ---
   const [edicionAbierta, setEdicionAbierta] = useState(false);
+  const [guardandoPerfil, setGuardandoPerfil] = useState(false);
   const [formEdicion, setFormEdicion] = useState({
     nombreUsuario: '',
     email: '',
@@ -640,6 +641,10 @@ export default function Perfil() {
   };
 
   const guardarPerfil = async () => {
+    if (guardandoPerfil) return;
+
+    setGuardandoPerfil(true);
+
     try {
       const interesesArray = formEdicion.intereses
         ? formEdicion.intereses.split(',').map(i => i.trim()).filter(i => i !== '')
@@ -742,6 +747,8 @@ export default function Perfil() {
       console.error('❌ Error completo en el proceso de guardado:', error);
       alert('Ocurrió un problema al procesar la actualización del perfil.');
       setEdicionAbierta(false);
+    } finally {
+      setGuardandoPerfil(false);
     }
   };
 
@@ -975,17 +982,40 @@ export default function Perfil() {
           MODAL DE EDICIÓN DE PERFIL (ESTILO X)
           ========================================= */}
       {edicionAbierta && (
-        <div className="modal-backdrop-edicion" onClick={() => setEdicionAbierta(false)}>
-          <div className="modal-edicion-x" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`modal-backdrop-edicion ${guardandoPerfil ? 'guardando-activo' : ''}`}
+          onClick={() => {
+            if (!guardandoPerfil) setEdicionAbierta(false);
+          }}
+        >
+          <div
+            className={`modal-edicion-x ${guardandoPerfil ? 'guardando' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+            aria-busy={guardandoPerfil}
+          >
 
             {/* Cabecera del Modal */}
             <div className="modal-cabecera-x">
-              <button className="btn-cerrar-x" onClick={() => setEdicionAbierta(false)}>
+              <button
+                className="btn-cerrar-x"
+                onClick={() => {
+                  if (!guardandoPerfil) setEdicionAbierta(false);
+                }}
+                disabled={guardandoPerfil}
+                aria-label="Cerrar edición de perfil"
+              >
                 <i className="bi bi-x"></i>
               </button>
               <h2 className="titulo-edicion-x m-0">Editar perfil</h2>
-              <button className="btn-guardar-x" onClick={guardarPerfil}>
-                Guardar
+              <button className="btn-guardar-x" onClick={guardarPerfil} disabled={guardandoPerfil}>
+                {guardandoPerfil ? (
+                  <>
+                    <span className="spinner-guardar-mini" aria-hidden="true"></span>
+                    Guardando
+                  </>
+                ) : (
+                  'Guardar'
+                )}
               </button>
             </div>
 
@@ -1000,7 +1030,13 @@ export default function Perfil() {
                   className="portada-edicion-img"
                 />
                 {/* Al hacer clic en la cámara, disparamos el clic del input oculto */}
-                <div className="camara-icono-x" title="Cambiar Portada" onClick={() => fileInputPortadaRef.current.click()}>
+                <div
+                  className={`camara-icono-x ${guardandoPerfil ? 'deshabilitado' : ''}`}
+                  title="Cambiar Portada"
+                  onClick={() => {
+                    if (!guardandoPerfil) fileInputPortadaRef.current.click();
+                  }}
+                >
                   <i className="bi bi-camera"></i>
                 </div>
                 <input
@@ -1019,7 +1055,13 @@ export default function Perfil() {
                   className="foto-perfil-edicion-img"
                 />
                 {/* Al hacer clic en la cámara, disparamos el clic del input oculto */}
-                <div className="camara-icono-x" title="Cambiar Foto de Perfil" onClick={() => fileInputPerfilRef.current.click()}>
+                <div
+                  className={`camara-icono-x ${guardandoPerfil ? 'deshabilitado' : ''}`}
+                  title="Cambiar Foto de Perfil"
+                  onClick={() => {
+                    if (!guardandoPerfil) fileInputPerfilRef.current.click();
+                  }}
+                >
                   <i className="bi bi-camera"></i>
                 </div>
                 <input
@@ -1106,6 +1148,16 @@ export default function Perfil() {
 
               </div>
             </div>
+
+            {guardandoPerfil && (
+              <div className="guardando-perfil-barra" role="status" aria-live="polite">
+                <span className="spinner-guardando-dorado" aria-hidden="true"></span>
+                <div className="guardando-perfil-textos">
+                  <strong>Guardando</strong>
+                  <small>Actualizando tu perfil y tus imágenes...</small>
+                </div>
+              </div>
+            )}
 
           </div>
         </div>
