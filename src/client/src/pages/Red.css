@@ -401,3 +401,152 @@
     box-shadow: 0 8px 18px rgba(203, 161, 53, 0.25);
     transform: translateY(-2px);
 }
+
+/* =========================================
+   FIX RESPONSIVO GLOBAL: RED + CROPS
+   ========================================= */
+.foto-conexion,
+.foto-sugerencia,
+.tarjeta-conexion img,
+.tarjeta-sugerencia img {
+    object-fit: cover;
+    object-position: center;
+    flex-shrink: 0;
+}
+
+.nombre-conexion,
+.nombre-sugerencia {
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+@media (max-width: 576px) {
+    .max-w-custom {
+        width: 100%;
+        max-width: 100%;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .cabecera-red {
+        gap: 18px;
+        margin-bottom: 20px;
+    }
+
+    .titulo-seccion {
+        font-size: clamp(2rem, 10vw, 2.6rem);
+        line-height: 1.05;
+    }
+
+    .cabecera-red p,
+    .cabecera-red .text-muted {
+        font-size: 0.95rem;
+        line-height: 1.35;
+    }
+
+    .buscador-red {
+        max-width: 100%;
+    }
+
+    .input-buscar-red {
+        min-height: 50px;
+        font-size: 0.95rem;
+    }
+
+    .tabs-red-container {
+        margin-left: -16px;
+        margin-right: -16px;
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 10px;
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+    }
+
+    .tabs-red {
+        gap: 10px;
+    }
+
+    .tab-red {
+        flex: 0 0 auto;
+        min-width: 132px;
+        justify-content: center;
+        padding: 10px 18px;
+        font-size: 0.92rem;
+        scroll-snap-align: start;
+    }
+
+    .grid-red {
+        --bs-gutter-y: 1rem;
+    }
+
+    .tarjeta-conexion {
+        max-width: 100%;
+        border-radius: 24px;
+        padding: 24px 18px;
+        min-height: auto;
+    }
+
+    .foto-conexion {
+        width: 82px;
+        height: 82px;
+        margin-bottom: 14px;
+    }
+
+    .nombre-conexion {
+        font-size: 1.08rem;
+        line-height: 1.25;
+        max-width: 100%;
+    }
+
+    .relacion-conexion {
+        font-size: 0.82rem;
+        line-height: 1.35;
+    }
+
+    .tarjeta-sugerencia {
+        align-items: center;
+        padding: 14px;
+        border-radius: 18px;
+    }
+
+    .foto-sugerencia {
+        width: 64px;
+        height: 64px;
+    }
+
+    .acciones-sugerencia {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .btn-ver-perfil {
+        min-height: 44px;
+    }
+}
+
+@media (max-width: 340px) {
+    .max-w-custom {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .tabs-red-container {
+        margin-left: -12px;
+        margin-right: -12px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .tab-red {
+        min-width: 118px;
+        padding-left: 14px;
+        padding-right: 14px;
+        font-size: 0.86rem;
+    }
+
+    .tarjeta-conexion {
+        padding: 22px 14px;
+    }
+}

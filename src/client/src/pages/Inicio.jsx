@@ -1529,7 +1529,7 @@ export default function Inicio() {
                   {archivoAdjunto?.type.startsWith('video/') ? (
                     <video src={vistaPrevia} className="img-fluid rounded" style={{ maxHeight: '220px' }} controls />
                   ) : (
-                    <img src={vistaPrevia} alt="Vista previa" className="img-fluid rounded" style={{ maxHeight: '220px', objectFit: 'contain' }} />
+                    <img src={vistaPrevia} alt="Vista previa" className="img-fluid rounded vista-previa-crop" />
                   )}
                   {renderEtiquetasImagenModal()}
                 </div>
@@ -1658,13 +1658,13 @@ export default function Inicio() {
             const srcAvatarAutor = obtenerUrlImagenPerfil(imagenAutor, nombreAutor);
 
             return (
-              <div key={pub._id} className="tarjeta shadow-sm mb-4">
-                <div className="d-flex justify-content-between align-items-start mb-2">
-                  <div className="d-flex gap-3 align-items-center">
+              <div key={pub._id} className="tarjeta tarjeta-publicacion shadow-sm mb-4">
+                <div className="publicacion-header d-flex justify-content-between align-items-start mb-2">
+                  <div className="publicacion-autor d-flex gap-3 align-items-center">
                     <img
                       src={srcAvatarAutor}
                       alt={nombreAutor}
-                      className="rounded-circle me-2 object-fit-cover perfil-interactivo"
+                      className="avatar-publicacion rounded-circle me-2 object-fit-cover perfil-interactivo"
                       style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
                       onError={(e) => {
                         e.target.onerror = null;
@@ -1680,11 +1680,11 @@ export default function Inicio() {
                         }
                       }}
                     />
-                    <div>
+                    <div className="publicacion-autor-info">
                       <div className="etiqueta-tipo-publicacion">
                         <span>{pub.tipo === 'historico' ? 'RECUERDO HISTÓRICO' : 'MOMENTO FAMILIAR'}</span>
                       </div>
-                      <div className="d-flex align-items-baseline gap-2 mt-1">
+                      <div className="autor-meta-row d-flex align-items-baseline gap-2 mt-1">
                         <p
                           className={`nombre-autor fs-5 mb-0 ${autorId ? 'perfil-interactivo' : ''}`}
                           onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}
@@ -1717,7 +1717,7 @@ export default function Inicio() {
                       {pub.tipo !== 'historico' && eventoRelacionadoPost && renderChipEventoPublicacion(eventoRelacionadoPost)}
                     </div>
                   </div>
-                  <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
+                  <button className="boton-menu-publicacion btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
                 </div>
 
                 <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
@@ -1749,7 +1749,7 @@ export default function Inicio() {
                   </div>
                 )}
 
-                <div className="d-flex justify-content-between mt-4 pt-3 border-top">
+                <div className="acciones-post d-flex justify-content-between mt-4 pt-3 border-top">
                   <div className="d-flex gap-4">
                     <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarLike(pub._id)}>
                       <i className={`bi ${usuarioHaReaccionado(pub) ? 'bi-heart-fill text-danger' : 'bi-heart'}`}></i> {pub.reacciones?.length || 0}

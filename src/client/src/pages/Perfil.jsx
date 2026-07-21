@@ -1053,7 +1053,7 @@ export default function Perfil() {
 
         <div className="info-usuario-container">
           <div className="fila-superior-info">
-            <img src={urlImagenPerfil} alt="Perfil" className="foto-perfil-grande" />
+            <img src={urlImagenPerfil} alt="Perfil" className="foto-perfil-grande imagen-crop-perfil" />
 
             {/* CONDICIONAL: Botón de edición si es mi perfil, botón de Seguir/Siguiendo si es ajeno */}
             {esMiPerfil ? (
@@ -1062,7 +1062,7 @@ export default function Perfil() {
               </button>
             ) : (
               <button
-                className={`btn rounded-pill px-4 fw-bold ${estaSiguiendo ? 'btn-outline-secondary' : 'btn-warning'}`}
+                className={`btn boton-relacion-perfil rounded-pill px-4 fw-bold ${estaSiguiendo ? 'btn-outline-secondary' : 'btn-warning'}`}
                 onClick={manejarToggleSeguir}
                 style={{ transition: 'all 0.2s ease' }}
               >
@@ -1072,7 +1072,7 @@ export default function Perfil() {
             )}
             {/* Si NO es mi perfil y además son AMIGOS (seguidores mutuos), evaluamos el estado familiar */}
             {!esMiPerfil && sonAmigos && (
-              <div className="ms-2 d-inline-block">
+              <div className="acciones-familia-perfil ms-2 d-inline-block">
                 {estadoFamilia === null && (
                   <button
                     className="btn btn-outline-warning rounded-pill fw-bold"
@@ -1105,7 +1105,7 @@ export default function Perfil() {
 
           {/* Desplegable interactivo para elegir el parentesco */}
           {mostrarSelectorFamilia && (
-            <div className="card p-3 mt-2 shadow-sm border-warning" style={{ maxWidth: '350px' }}>
+            <div className="card selector-parentesco-card p-3 mt-2 shadow-sm border-warning">
               <label className="form-label fw-bold text-dark mb-2">¿Qué parentesco tienes con este usuario?</label>
               <div className="d-flex gap-2">
                 <select

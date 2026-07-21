@@ -733,3 +733,193 @@
 .texto-post {
     white-space: pre-line;
 }
+
+/* =========================================
+   FIX RESPONSIVO GLOBAL: PERFIL + CROPS
+   ========================================= */
+.portada-perfil,
+.portada-edicion-img,
+.foto-perfil-grande,
+.foto-perfil-edicion-img,
+.foto-perfil-post,
+.imagen-post-historico,
+.imagen-post-moderna,
+.galeria-item img,
+.imagen-crop-perfil {
+    object-fit: cover;
+    object-position: center;
+}
+
+.selector-parentesco-card {
+    max-width: 350px;
+}
+
+@media (max-width: 576px) {
+    .max-w-custom {
+        width: 100%;
+        max-width: 100%;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .cabecera-perfil {
+        border-radius: 20px;
+        margin-left: 0;
+        margin-right: 0;
+        overflow: hidden;
+    }
+
+    .portada-perfil {
+        height: clamp(180px, 48vw, 230px);
+        border-radius: 0;
+    }
+
+    .info-usuario-container {
+        padding: 0 16px 16px 16px;
+    }
+
+    .fila-superior-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-end;
+        margin-top: -54px;
+        margin-bottom: 14px;
+    }
+
+    .foto-perfil-grande {
+        width: 108px;
+        height: 108px;
+        flex: 0 0 108px;
+        border-width: 4px;
+    }
+
+    .fila-superior-info > .boton-editar-perfil {
+        margin-left: auto;
+        margin-bottom: 10px;
+        flex: 0 0 42px;
+    }
+
+    .fila-superior-info > .boton-relacion-perfil,
+    .fila-superior-info > .acciones-familia-perfil {
+        flex: 1 1 118px;
+        margin-left: 0 !important;
+        margin-bottom: 8px;
+        min-width: 0;
+    }
+
+    .fila-superior-info > .boton-relacion-perfil,
+    .acciones-familia-perfil > .btn {
+        width: 100%;
+        min-height: 44px;
+        padding: 8px 10px !important;
+        font-size: 0.9rem;
+        white-space: normal;
+        line-height: 1.2;
+    }
+
+    .selector-parentesco-card {
+        max-width: 100% !important;
+        width: 100%;
+        border-radius: 16px;
+    }
+
+    .selector-parentesco-card .d-flex {
+        flex-wrap: wrap;
+    }
+
+    .selector-parentesco-card .form-select {
+        flex: 1 1 100%;
+    }
+
+    .selector-parentesco-card .btn {
+        flex: 1 1 0;
+    }
+
+    .nombre-perfil {
+        font-size: clamp(1.9rem, 9vw, 2.7rem);
+        line-height: 1.05;
+        overflow-wrap: anywhere;
+    }
+
+    .usuario-tag,
+    .bio-perfil {
+        font-size: 0.95rem;
+        overflow-wrap: anywhere;
+    }
+
+    .datos-extra-perfil {
+        gap: 10px;
+        font-size: 0.85rem;
+    }
+
+    .datos-extra-perfil span {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .intereses-perfil-contenedor {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .tabs-perfil {
+        margin-left: -16px;
+        margin-right: -16px;
+        padding: 0 16px;
+        gap: 8px;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .tab-perfil {
+        flex: 0 0 auto;
+        padding: 14px 12px;
+        font-size: 0.88rem;
+    }
+
+    .tarjeta {
+        border-radius: 18px;
+        padding: 18px 16px !important;
+        overflow: hidden;
+    }
+
+    .imagen-post-historico,
+    .imagen-post-moderna {
+        width: 100%;
+        aspect-ratio: 4 / 5;
+        max-height: min(72vh, 520px);
+    }
+
+    .modal-edicion-x {
+        width: calc(100vw - 18px);
+        max-height: calc(100dvh - 18px);
+        border-radius: 20px;
+    }
+
+    .portada-edicion-container {
+        height: clamp(150px, 45vw, 200px);
+    }
+}
+
+@media (max-width: 340px) {
+    .info-usuario-container {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .foto-perfil-grande {
+        width: 96px;
+        height: 96px;
+        flex-basis: 96px;
+    }
+
+    .fila-superior-info {
+        margin-top: -48px;
+    }
+
+    .nombre-perfil {
+        font-size: 1.8rem;
+    }
+}
