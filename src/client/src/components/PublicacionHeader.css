@@ -55,15 +55,17 @@
   min-width: 0;
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   column-gap: 5px;
-  row-gap: 1px;
   line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .legacy-publicacion-nombre {
-  min-width: 0;
-  max-width: min(100%, 260px);
+  flex: 0 1 auto;
+  min-width: 48px;
+  max-width: min(52%, 260px);
   color: var(--texto-principal);
   font-size: 0.98rem;
   font-weight: 750;
@@ -86,16 +88,29 @@
 }
 
 .legacy-publicacion-handle {
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 190px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .legacy-publicacion-fecha {
+  flex: none;
   white-space: nowrap;
-  cursor: help;
+}
+
+.legacy-publicacion-separador {
+  flex: none;
+  margin: 0 4px;
+}
+
+.legacy-publicacion-meta {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .legacy-publicacion-contexto {
@@ -279,7 +294,8 @@
   }
 
   .legacy-publicacion-nombre {
-    max-width: min(100%, 190px);
+    min-width: 42px;
+    max-width: 48%;
     font-size: 0.94rem;
   }
 
@@ -290,7 +306,7 @@
   }
 
   .legacy-publicacion-handle {
-    max-width: 145px;
+    max-width: none;
   }
 
   .legacy-publicacion-contexto {
@@ -334,8 +350,12 @@
   }
 
   .legacy-publicacion-nombre {
-    flex-basis: 100%;
-    max-width: 100%;
+    min-width: 38px;
+    max-width: 46%;
+  }
+
+  .legacy-publicacion-tiempo {
+    gap: 4px;
   }
 
   .legacy-publicacion-insignia {
@@ -345,6 +365,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .legacy-publicacion-menu,
   .legacy-publicacion-insignia-imagen,
   .legacy-publicacion-insignia-tooltip {

@@ -155,35 +155,31 @@ export default function PublicacionHeader({
 
       <div className="legacy-publicacion-identidad">
         <div className="legacy-publicacion-identidad-linea">
-          <span
-            className={`legacy-publicacion-nombre ${esAutorInteractivo ? 'interactivo' : ''}`}
-            onClick={esAutorInteractivo ? onAutorClick : undefined}
-            onKeyDown={manejarTecladoAutor}
-            role={esAutorInteractivo ? 'button' : undefined}
-            tabIndex={esAutorInteractivo ? 0 : undefined}
-            title={nombre}
-          >
+          <span className="legacy-publicacion-nombre">
             {nombre}
           </span>
 
-          {handle && (
-            <span className="legacy-publicacion-handle" title={handle}>
-              {handle}
-            </span>
-          )}
+          <div className="legacy-publicacion-meta">
+            {handle && (
+              <span className="legacy-publicacion-handle">
+                {handle}
+              </span>
+            )}
 
-          {fechaCompacta && (
-            <>
-              <span className="legacy-publicacion-separador" aria-hidden="true">·</span>
-              <time
-                className="legacy-publicacion-fecha"
-                dateTime={fechaISO || undefined}
-                title={fecha}
-              >
-                {fechaCompacta}
-              </time>
-            </>
-          )}
+            {fechaCompacta && (
+              <>
+                <span className="legacy-publicacion-separador">·</span>
+
+                <time
+                  className="legacy-publicacion-fecha"
+                  dateTime={fechaISO || undefined}
+                  title={fecha}
+                >
+                  {fechaCompacta}
+                </time>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="legacy-publicacion-contexto">
