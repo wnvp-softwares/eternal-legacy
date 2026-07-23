@@ -1383,6 +1383,112 @@ export default function Inicio() {
     }
   };
 
+  // 1. Normalización de nombre de entidad soportando nickname y apodo
+  const obtenerNombreDeEntidad = (entidad, fallback = 'Familiar') => {
+    if (!entidad) return fallback;
+    if (typeof entidad === 'string') return entidad;
+    return normalizarTexto(
+      entidad.nombreUsuario ||
+      entidad.nickname ||
+      entidad.apodo ||
+      entidad.nombre ||
+      entidad.nombreCompleto ||
+      entidad.usuario?.nombreUsuario ||
+      entidad.usuario?.nickname ||
+      entidad.usuario?.nombre ||
+      entidad.id?.nombreUsuario ||
+      fallback
+    );
+  };
+
+  // 2. Normalización de persona sugerida con propiedad nickname
+  const normalizarPersonaSugerida = (persona = {}) => {
+    const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id) || obtenerNombreDeEntidad(persona);
+    const nombre = obtenerNombreDeEntidad(persona);
+    const nickname = normalizarTexto(
+      persona.nickname ||
+      persona.apodo ||
+      persona.nombreUsuario ||
+      persona.usuario?.nickname ||
+      persona.usuario?.apodo ||
+      persona.usuario?.nombreUsuario ||
+      ''
+    );
+    const imagen = obtenerImagenDeEntidad(persona);
+
+    return {
+      ...persona,
+      id,
+      nombre,
+      nickname,
+      imagen
+    };
+  };
+
+  // 3. Búsqueda de persona mencionada comparando por nombre de perfil, nickname y usuario
+  const buscarPersonaPorMencion = (textoMencion = '', menciones = []) => {
+    if (!Array.isArray(menciones) || menciones.length === 0) return null;
+    const mencionNormalizada = normalizarHandleMencion(textoMencion);
+
+    return menciones.find((persona) => {
+      const posiblesNombres = [
+        persona.nickname,
+        persona.apodo,
+        persona.nombre,
+        persona.nombreUsuario,
+        persona.nombreCompleto,
+        persona.usuario?.nickname,
+        persona.usuario?.apodo,
+        persona.usuario?.nombreUsuario,
+        persona.usuario?.nombre,
+        persona.id?.nombreUsuario
+      ].filter(Boolean);
+
+      return posiblesNombres.some(nombre => normalizarHandleMencion(nombre) === mencionNormalizada);
+    }) || null;
+  };
+
+  // 4. Inserción de mención privilegiando nickname si existe, o el nombre de perfil sin espacios
+  const seleccionarPersonaPublicacion = (personaOriginal) => {
+    const persona = normalizarPersonaSugerida(personaOriginal);
+    if (panelHerramientaActivo === 'etiquetas') {
+      setEtiquetasImagen(prev => {
+        const yaExiste = prev.some(item => String(item.id) === String(persona.id));
+        return yaExiste ? prev : [...prev, persona];
+      });
+      setBusquedaPersonaPublicacion('');
+      setSugerenciasPersonasPublicacion([]);
+      return;
+    }
+
+    const textarea = textareaPublicacionRef.current;
+    const cursor = textarea?.selectionStart ?? textoPublicacion.length;
+    const mencionActiva = detectarMencionActiva(textoPublicacion, cursor);
+
+    // Usa el nickname si está disponible; de lo contrario usa el nombre de perfil adaptado
+    const identificador = (persona.nickname || persona.nombre).replace(/\s+/g, '_');
+    const textoMencion = `@${identificador} `;
+
+    if (mencionActiva) {
+      const antes = textoPublicacion.slice(0, mencionActiva.inicio);
+      const despues = textoPublicacion.slice(cursor);
+      const nuevoTexto = `${antes}${textoMencion}${despues}`;
+      const nuevaPosicion = antes.length + textoMencion.length;
+      setTextoPublicacion(nuevoTexto);
+      setTimeout(() => { textarea?.focus(); textarea?.setSelectionRange(nuevaPosicion, nuevaPosicion); }, 0);
+    } else {
+      insertarTextoEnPublicacion(textoMencion);
+    }
+
+    setMencionesPublicacion(prev => {
+      const yaExiste = prev.some(item => String(item.id) === String(persona.id));
+      return yaExiste ? prev : [...prev, persona];
+    });
+
+    setBusquedaPersonaPublicacion('');
+    setPanelHerramientaActivo(null);
+  };
+
   const abrirAlbumEvento = (evento) => { cargarPublicacionesDeEvento(evento); };
 
   const renderChipEventoPublicacion = (evento) => {
@@ -1585,21 +1691,42 @@ export default function Inicio() {
         <div className="panel-herramienta-publicacion panel-personas-publicacion">
           <div className="input-ubicacion-publicacion">
             <i className={`bi ${esEtiquetar ? 'bi-person-bounding-box' : 'bi-at'}`}></i>
-            <input type="text" value={busquedaPersonaPublicacion} onChange={(e) => setBusquedaPersonaPublicacion(e.target.value)} placeholder={esEtiquetar ? 'Buscar persona para etiquetar...' : 'Buscar persona para mencionar...'} autoFocus />
+            <input
+              type="text"
+              value={busquedaPersonaPublicacion}
+              onChange={(e) => setBusquedaPersonaPublicacion(e.target.value)}
+              placeholder={esEtiquetar ? 'Buscar persona para etiquetar...' : 'Buscar persona o @nickname...'}
+              autoFocus
+            />
           </div>
 
           <div className="lista-sugerencias-publicacion">
             {cargandoSugerenciasPublicacion ? (
-              <div className="estado-sugerencias-publicacion"><span className="spinner-border spinner-border-sm me-2"></span>Buscando personas...</div>
+              <div className="estado-sugerencias-publicacion">
+                <span className="spinner-border spinner-border-sm me-2"></span>Buscando personas...
+              </div>
             ) : sugerenciasPersonasPublicacion.length > 0 ? (
               sugerenciasPersonasPublicacion.map(persona => (
-                <button key={persona.id} type="button" className="persona-sugerida-publicacion" onClick={() => seleccionarPersonaPublicacion(persona)}>
+                <button
+                  key={persona.id}
+                  type="button"
+                  className="persona-sugerida-publicacion"
+                  onClick={() => seleccionarPersonaPublicacion(persona)}
+                >
                   <img src={obtenerUrlImagenPerfil(persona.imagen, persona.nombre)} alt={persona.nombre} />
-                  <div><strong>{persona.nombre}</strong><small>{esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}</small></div>
+                  <div>
+                    <strong>{persona.nombre}</strong>
+                    <small>
+                      {persona.nickname ? `@${persona.nickname} • ` : ''}
+                      {esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}
+                    </small>
+                  </div>
                 </button>
               ))
             ) : (
-              <div className="estado-sugerencias-publicacion">{busquedaPersonaPublicacion.trim() ? 'No se encontraron personas.' : 'Escribe un nombre para buscar.'}</div>
+              <div className="estado-sugerencias-publicacion">
+                {busquedaPersonaPublicacion.trim() ? 'No se encontraron personas.' : 'Escribe un nombre o nickname para buscar.'}
+              </div>
             )}
           </div>
         </div>
@@ -1996,7 +2123,7 @@ export default function Inicio() {
             const ubicacionPost = normalizarTexto(pub.ubicacionTexto || pub.ubicacion?.texto || pub.ubicacion?.direccion || '');
             const etiquetasMultimediaPost = Array.isArray(pub.etiquetasMultimedia) ? pub.etiquetasMultimedia : [];
             const eventoRelacionadoPost = obtenerEventoRelacionadoDePublicacion(pub);
-            
+
             const autorId = obtenerIdPersonaPerfil(pub.autor) || obtenerIdPersonaPerfil(pub.usuario);
             const imagenAutor = obtenerImagenDeEntidad(pub.autor) || obtenerImagenDeEntidad(pub.usuario);
             const nombreAutor = obtenerNombreDeEntidad(pub.autor) || obtenerNombreDeEntidad(pub.usuario, 'Familiar');
@@ -2017,7 +2144,7 @@ export default function Inicio() {
                   anio={pub.anio || ''}
                   ubicacion={ubicacionPost}
                   onAutorClick={autorId ? () => irAPerfil(pub.autor || pub.usuario) : undefined}
-                  onMenuClick={() => {}}
+                  onMenuClick={() => { }}
                 />
 
                 {pub.tipo !== 'historico' && eventoRelacionadoPost && (

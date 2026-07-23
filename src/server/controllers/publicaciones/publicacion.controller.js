@@ -107,6 +107,7 @@ const normalizarListaPersonas = (valor) => {
             const id = obtenerIdSeguro(persona);
             const nombre = String(
                 persona?.nombre ||
+                persona?.nickname ||
                 persona?.nombreUsuario ||
                 persona?.nombreCompleto ||
                 ''
