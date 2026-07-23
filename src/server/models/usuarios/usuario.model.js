@@ -6,6 +6,13 @@ const usuarioSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
+    nickname: {
+        type: String,
+        unique: true,
+        sparse: true,
+        trim: true,
+        lowercase: true
+    },
     email: {
         type: String,
         required: true,

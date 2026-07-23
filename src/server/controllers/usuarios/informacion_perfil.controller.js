@@ -62,6 +62,7 @@ const formatearUsuarioCuenta = (usuario, req) => ({
     id: usuario._id,
     _id: usuario._id,
     nombreUsuario: usuario.nombreUsuario,
+    nickname: usuario.nickname || null, // 🌟 Incluir nickname
     email: usuario.email,
     imagenPerfil: resolverUrlArchivo(usuario.imagenPerfil, req),
     imagenPortada: resolverUrlArchivo(usuario.imagenPortada, req),
@@ -154,6 +155,7 @@ const actualizarMiPerfil = async (req, res) => {
 
         const {
             nombreUsuario,
+            nickname, // 🌟 Recibir nickname
             email,
             biografia,
             fechaNacimiento,
@@ -163,6 +165,38 @@ const actualizarMiPerfil = async (req, res) => {
             ocupacionEducacion,
             intereses
         } = req.body;
+
+        // 🌟 Validación de unicidad para Nickname (@user-nickname)
+        if (nickname !== undefined) {
+            const nicknameLimpio = nickname.trim().replace(/^@/, '').toLowerCase();
+
+            if (!nicknameLimpio) {
+                return res.status(400).json({
+                    mensaje: 'El nombre de perfil (@nickname) no puede estar vacío.'
+                });
+            }
+
+            // Validar formato (solo letras, números, guiones y guiones bajos)
+            const regexNickname = /^[a-zA-Z0-9_.-]+$/;
+            if (!regexNickname.test(nicknameLimpio)) {
+                return res.status(400).json({
+                    mensaje: 'El nombre de perfil solo puede contener letras, números, guiones y guiones bajos.'
+                });
+            }
+
+            const nicknameExistente = await Usuario.findOne({
+                nickname: nicknameLimpio,
+                _id: { $ne: usuario._id }
+            });
+
+            if (nicknameExistente) {
+                return res.status(400).json({
+                    mensaje: `El nombre de perfil @${nicknameLimpio} ya está en uso por otro usuario.`
+                });
+            }
+
+            usuario.nickname = nicknameLimpio;
+        }
 
         if (nombreUsuario !== undefined) {
             const nombreLimpio = nombreUsuario.trim();

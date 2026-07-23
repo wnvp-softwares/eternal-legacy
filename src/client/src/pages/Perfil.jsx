@@ -372,6 +372,7 @@ export default function Perfil() {
   const [guardandoPerfil, setGuardandoPerfil] = useState(false);
   const [formEdicion, setFormEdicion] = useState({
     nombreUsuario: '',
+    nickname: '', // 🌟 Campo para @nickname
     email: '',
     biografia: '',
     fechaNacimiento: '',
@@ -557,6 +558,8 @@ export default function Perfil() {
 
       setFormEdicion({
         nombreUsuario: usuarioBaseEdicion?.nombreUsuario || '',
+        // 🌟 Valor por defecto si aún no tiene nickname configurado
+        nickname: usuarioBaseEdicion?.nickname || usuarioBaseEdicion?.nombreUsuario?.toLowerCase().replace(/\s+/g, '_') || '',
         email: usuarioBaseEdicion?.email || '',
         biografia: perfilBd?.biografia || '',
         fechaNacimiento: fechaFormateada,
@@ -679,6 +682,7 @@ export default function Perfil() {
           ...(usuarioPerfil || {}),
           ...(datosBD.usuario || {}),
           nombreUsuario: datosBD.usuario?.nombreUsuario || formEdicion.nombreUsuario || usuarioPerfil?.nombreUsuario || usuarioLogueado?.nombreUsuario,
+          nickname: datosBD.usuario?.nickname || formEdicion.nickname || usuarioPerfil?.nickname, // 🌟 Actualizar localmente
           email: datosBD.usuario?.email || formEdicion.email || usuarioPerfil?.email || usuarioLogueado?.email
         },
         usuarioLogueado
@@ -1078,6 +1082,24 @@ export default function Perfil() {
               <div className="formulario-edicion-x">
 
                 <div className="grupo-input-x">
+                  <label className="label-input-x">Nombre de perfil (@etiqueta)</label>
+                  <div className="input-group">
+                    <span className="input-group-text bg-dark text-muted border-secondary fw-bold">@</span>
+                    <input
+                      type="text"
+                      className="form-control input-x"
+                      value={formEdicion.nickname}
+                      onChange={(e) => {
+                        // Sanitizado en tiempo real: remover espacios y el símbolo @ sobrante
+                        const valorFormat = e.target.value.replace(/^@/, '').replace(/\s+/g, '_');
+                        setFormEdicion({ ...formEdicion, nickname: valorFormat });
+                      }}
+                      placeholder="ej_usuario"
+                    />
+                  </div>
+                </div>
+
+                <div className="grupo-input-x">
                   <label className="label-input-x">Biografía</label>
                   <textarea
                     className="form-control textarea-x"
@@ -1266,7 +1288,9 @@ export default function Perfil() {
           )}
 
           <h2 className="fuente-elegante fw-bold nombre-perfil">{usuarioPerfil?.nombreUsuario || 'Usuario'}</h2>
-          <p className="usuario-tag">@{usuarioPerfil?.nombreUsuario?.toLowerCase().replace(/\s+/g, '') || 'sin_usuario'}</p>
+          <p className="usuario-tag">
+            @{usuarioPerfil?.nickname || usuarioPerfil?.nombreUsuario?.toLowerCase().replace(/\s+/g, '') || 'sin_usuario'}
+          </p>
           <p className="bio-perfil">{perfilBd?.biografia || 'Sin biografía aún.'}</p>
 
           <div className="datos-extra-perfil">

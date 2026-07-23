@@ -107,6 +107,7 @@ const formatearUsuarioSesion = (usuario, req) => ({
     id: usuario._id,
     _id: usuario._id,
     nombreUsuario: usuario.nombreUsuario,
+    nickname: usuario.nickname || null, // 🌟 Incluir nickname
     email: usuario.email,
 
     imagenPerfil: resolverUrlArchivo(usuario.imagenPerfil, req),
