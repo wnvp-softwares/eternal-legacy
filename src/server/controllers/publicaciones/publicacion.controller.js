@@ -99,28 +99,80 @@ const validarCombinacionMultimedia = (archivos = []) => {
     return null;
 };
 
-const normalizarListaPersonas = (valor) => {
-    const lista = parseJSONSeguro(valor, []);
+const normalizarHandleMencion = (valor = '', { minusculas = false } = {}) => {
+    let handle = String(valor || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/^@+/, '')
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^A-Za-z0-9._-]/g, '')
+        .replace(/_+/g, '_')
+        .replace(/^[_\-.]+|[_\-.]+$/g, '');
 
+    if (minusculas) handle = handle.toLowerCase();
+    return handle;
+};
+
+const normalizarTextoBusqueda = (valor = '') => String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+const construirListaPersonas = async (valor, { incluirHandle = false } = {}) => {
+    const lista = parseJSONSeguro(valor, []);
     if (!Array.isArray(lista)) return [];
 
-    return lista
-        .map((persona) => {
-            const id = obtenerIdSeguro(persona);
-            const nombre = String(
-                persona?.nombre ||
-                persona?.nickname ||
-                persona?.nombreUsuario ||
-                persona?.nombreCompleto ||
-                ''
-            ).trim();
+    const ids = Array.from(new Set(
+        lista.map(obtenerIdSeguro).filter(esObjectIdValido).map(String)
+    ));
 
-            return {
-                usuario: esObjectIdValido(id) ? id : null,
-                nombre
-            };
-        })
-        .filter((persona) => persona.usuario || persona.nombre);
+    const usuarios = ids.length > 0
+        ? await Usuario.find({ _id: { $in: ids } }).select('_id nombreUsuario nickname')
+        : [];
+    const usuariosPorId = new Map(usuarios.map(usuario => [String(usuario._id), usuario]));
+    const clavesUsadas = new Set();
+    const resultado = [];
+
+    for (const persona of lista) {
+        const id = obtenerIdSeguro(persona);
+        const usuario = id ? usuariosPorId.get(String(id)) : null;
+        const nombre = String(
+            usuario?.nombreUsuario ||
+            persona?.nombre ||
+            persona?.nombreUsuario ||
+            persona?.nombreCompleto ||
+            persona?.nickname ||
+            ''
+        ).trim();
+
+        const handle = normalizarHandleMencion(
+            usuario?.nickname ||
+            persona?.nickname ||
+            usuario?.nombreUsuario ||
+            persona?.nombreUsuario ||
+            nombre
+        );
+
+        // Si llegó un ID, debe corresponder a un usuario real; no se aceptan referencias inventadas.
+        if (id && esObjectIdValido(id) && !usuario) continue;
+        if (!usuario && !nombre) continue;
+
+        const clave = usuario
+            ? `usuario:${usuario._id}`
+            : `handle:${normalizarHandleMencion(handle || nombre, { minusculas: true })}`;
+        if (clavesUsadas.has(clave)) continue;
+        clavesUsadas.add(clave);
+
+        resultado.push({
+            usuario: usuario?._id || null,
+            nombre,
+            ...(incluirHandle ? { handle } : {})
+        });
+    }
+
+    return resultado;
 };
 
 
@@ -386,16 +438,16 @@ const poblarPublicacion = async (publicacionId) => {
     return Publicacion.findById(publicacionId)
         .populate({
             path: 'autor',
-            select: 'nombreUsuario email imagenPerfil',
+            select: 'nombreUsuario nickname email imagenPerfil',
             populate: {
                 path: 'imagenPerfil'
             }
         })
         .populate('multimedia')
-        .populate('menciones.usuario', 'nombreUsuario email imagenPerfil')
-        .populate('etiquetasMultimedia.usuario', 'nombreUsuario email imagenPerfil')
+        .populate('menciones.usuario', 'nombreUsuario nickname email imagenPerfil')
+        .populate('etiquetasMultimedia.usuario', 'nombreUsuario nickname email imagenPerfil')
         .populate('personasRelacionadas.nodo', 'nombre usuario origen')
-        .populate('personasRelacionadas.usuario', 'nombreUsuario email imagenPerfil')
+        .populate('personasRelacionadas.usuario', 'nombreUsuario nickname email imagenPerfil')
         .populate('eventoRelacionado.evento')
         .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
         .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
@@ -405,16 +457,16 @@ const poblarConsultaPublicaciones = (consulta) => {
     return consulta
         .populate({
             path: 'autor',
-            select: 'nombreUsuario email imagenPerfil',
+            select: 'nombreUsuario nickname email imagenPerfil',
             populate: {
                 path: 'imagenPerfil'
             }
         })
         .populate('multimedia')
-        .populate('menciones.usuario', 'nombreUsuario email imagenPerfil')
-        .populate('etiquetasMultimedia.usuario', 'nombreUsuario email imagenPerfil')
+        .populate('menciones.usuario', 'nombreUsuario nickname email imagenPerfil')
+        .populate('etiquetasMultimedia.usuario', 'nombreUsuario nickname email imagenPerfil')
         .populate('personasRelacionadas.nodo', 'nombre usuario origen')
-        .populate('personasRelacionadas.usuario', 'nombreUsuario email imagenPerfil')
+        .populate('personasRelacionadas.usuario', 'nombreUsuario nickname email imagenPerfil')
         .populate('eventoRelacionado.evento')
         .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
         .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
@@ -530,6 +582,11 @@ const crearPublicacion = async (req, res) => {
             eventoRelacionado
         });
 
+        const [mencionesNormalizadas, etiquetasMultimediaNormalizadas] = await Promise.all([
+            construirListaPersonas(menciones, { incluirHandle: true }),
+            construirListaPersonas(etiquetasMultimedia)
+        ]);
+
         const nuevaPublicacion = new Publicacion({
             autor: req.usuario.id,
             tipo: tipoSeguro,
@@ -540,8 +597,8 @@ const crearPublicacion = async (req, res) => {
             fechaMomento: fechaMomentoNormalizada || null,
             multimedia: idsMultimedia,
             ubicacionTexto: ubicacionTexto || '',
-            menciones: normalizarListaPersonas(menciones),
-            etiquetasMultimedia: normalizarListaPersonas(etiquetasMultimedia),
+            menciones: mencionesNormalizadas,
+            etiquetasMultimedia: etiquetasMultimediaNormalizadas,
             personasRelacionadas: personasRelacionadasNormalizadas,
             eventoRelacionado: eventoNormalizado,
             reacciones: [],
@@ -609,19 +666,29 @@ const buscarTodo = async (req, res) => {
             });
         }
 
-        const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        const querySinArroba = query.replace(/^@+/, '').trim();
+        if (!querySinArroba) {
+            return res.status(200).json({ personas: [], publicaciones: [] });
+        }
+
+        const queryComoNombre = querySinArroba.replace(/_+/g, ' ').trim();
+        const escaparRegex = (valor) => valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regexDirecto = new RegExp(escaparRegex(querySinArroba), 'i');
+        const regexNombre = new RegExp(escaparRegex(queryComoNombre), 'i');
         const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(req.usuario.id);
 
-        const [personas, publicaciones] = await Promise.all([
+        const [personasEncontradas, publicaciones] = await Promise.all([
             Usuario.find({
                 $or: [
-                    { nombreUsuario: regex },
-                    { email: regex }
+                    { nickname: regexDirecto },
+                    { nombreUsuario: regexDirecto },
+                    { nombreUsuario: regexNombre },
+                    { email: regexDirecto }
                 ]
             })
-                .select('nombreUsuario email imagenPerfil')
+                .select('nombreUsuario nickname email imagenPerfil')
                 .populate('imagenPerfil')
-                .limit(10),
+                .limit(30),
 
             poblarConsultaPublicaciones(
                 Publicacion.find({
@@ -629,12 +696,12 @@ const buscarTodo = async (req, res) => {
                         filtroVisibilidad,
                         {
                             $or: [
-                                { contenido: regex },
-                                { ubicacionTexto: regex },
-                                { tipo: regex },
-                                { nombreFamiliaAudienciaSnapshot: regex },
-                                { 'eventoRelacionado.tituloSnapshot': regex },
-                                { 'eventoRelacionado.nombreFamiliaSnapshot': regex }
+                                { contenido: regexDirecto },
+                                { ubicacionTexto: regexDirecto },
+                                { tipo: regexDirecto },
+                                { nombreFamiliaAudienciaSnapshot: regexDirecto },
+                                { 'eventoRelacionado.tituloSnapshot': regexDirecto },
+                                { 'eventoRelacionado.nombreFamiliaSnapshot': regexDirecto }
                             ]
                         }
                     ]
@@ -643,6 +710,31 @@ const buscarTodo = async (req, res) => {
                     .limit(20)
             )
         ]);
+
+        const queryHandle = normalizarHandleMencion(querySinArroba, { minusculas: true });
+        const queryNombreNormalizado = normalizarTextoBusqueda(queryComoNombre);
+        const puntuarPersona = (persona) => {
+            const nickname = normalizarHandleMencion(persona.nickname, { minusculas: true });
+            const nombre = normalizarTextoBusqueda(persona.nombreUsuario);
+            const email = normalizarTextoBusqueda(persona.email);
+
+            if (nickname && nickname === queryHandle) return 0;
+            if (nickname && nickname.startsWith(queryHandle)) return 1;
+            if (nickname && nickname.includes(queryHandle)) return 2;
+            if (nombre === queryNombreNormalizado) return 3;
+            if (nombre.startsWith(queryNombreNormalizado)) return 4;
+            if (nombre.includes(queryNombreNormalizado)) return 5;
+            if (email === normalizarTextoBusqueda(querySinArroba)) return 6;
+            return 7;
+        };
+
+        const personas = personasEncontradas
+            .sort((a, b) => {
+                const diferencia = puntuarPersona(a) - puntuarPersona(b);
+                if (diferencia !== 0) return diferencia;
+                return String(a.nombreUsuario || '').localeCompare(String(b.nombreUsuario || ''), 'es');
+            })
+            .slice(0, 10);
 
         res.status(200).json({
             personas,

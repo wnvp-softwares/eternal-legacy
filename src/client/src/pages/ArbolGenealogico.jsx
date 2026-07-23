@@ -135,6 +135,21 @@ const revocarUrlTemporalMomentoArbol = (url) => {
   if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url);
 };
 
+const normalizarHandleMencionArbol = (valor = '', { minusculas = false } = {}) => {
+  let handle = String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^@+/, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Za-z0-9._-]/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^[_\-.]+|[_\-.]+$/g, '');
+
+  if (minusculas) handle = handle.toLowerCase();
+  return handle;
+};
+
 const obtenerImagenPersonaMomentoArbol = (persona = {}) => (
   persona.imagenPerfil ||
   persona.fotoPerfil ||
@@ -149,20 +164,26 @@ const obtenerImagenPersonaMomentoArbol = (persona = {}) => (
 const normalizarPersonaMomentoArbol = (persona = {}) => {
   const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id);
   const nicknameCrudo = normalizarTexto(
-    persona.nickname || persona.nombreUsuario || persona.usuario?.nickname || persona.usuario?.nombreUsuario || ''
-  ).replace(/^@+/, '');
-  const nombreReal = normalizarTexto(
-    persona.nombreCompleto || persona.nombre || persona.usuario?.nombreCompleto || persona.usuario?.nombre || ''
+    persona.nickname || persona.usuario?.nickname || persona.id?.nickname || ''
   );
-  const nombre = nombreReal || nicknameCrudo || 'Familiar';
+  const nombreUsuario = normalizarTexto(
+    persona.nombreUsuario || persona.usuario?.nombreUsuario || persona.id?.nombreUsuario || ''
+  );
+  const nombreReal = normalizarTexto(
+    persona.nombreCompleto || persona.nombre || persona.usuario?.nombreCompleto || persona.usuario?.nombre || nombreUsuario || ''
+  );
+  const nicknameLimpio = normalizarHandleMencionArbol(nicknameCrudo, { minusculas: true });
+  const handle = nicknameLimpio || normalizarHandleMencionArbol(nombreUsuario || nombreReal);
+  const nombre = nombreReal || nombreUsuario || nicknameLimpio || 'Familiar';
 
   return {
     ...persona,
     id,
     nombre,
     nombreReal: nombreReal || nombre,
-    nickname: nicknameCrudo ? `@${nicknameCrudo}` : '',
-    nombreUsuario: nicknameCrudo,
+    nombreUsuario: nombreUsuario || nombre,
+    nickname: nicknameLimpio ? `@${nicknameLimpio}` : '',
+    handle,
     imagen: obtenerImagenPersonaMomentoArbol(persona)
   };
 };
@@ -1689,7 +1710,7 @@ export default function ArbolGenealogico() {
 
   const detectarMencionPublicacionArbol = (texto, cursor) => {
     const previo = texto.slice(0, cursor);
-    const coincidencia = previo.match(/(^|\s)@([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]{0,40})$/);
+    const coincidencia = previo.match(/(^|\s)@([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]{0,80})$/);
     if (!coincidencia) return null;
     return { query: coincidencia[2] || '', inicio: previo.length - coincidencia[2].length - 1 };
   };
@@ -1736,8 +1757,11 @@ export default function ArbolGenealogico() {
     const textarea = textareaPublicacionArbolRef.current;
     const cursor = textarea?.selectionStart ?? textoPublicacionArbol.length;
     const mencion = detectarMencionPublicacionArbol(textoPublicacionArbol, cursor);
-    const handle = persona.nombreUsuario ? `@${persona.nombreUsuario}` : `@${persona.nombre.replace(/\s+/g, '_')}`;
-    const textoMencion = `${handle} `;
+    const handle = persona.handle || normalizarHandleMencionArbol(
+      persona.nickname || persona.nombreUsuario || persona.nombreReal || persona.nombre
+    );
+    if (!handle) return;
+    const textoMencion = `@${handle} `;
 
     if (mencion) {
       const antes = textoPublicacionArbol.slice(0, mencion.inicio);
@@ -1815,7 +1839,8 @@ export default function ArbolGenealogico() {
           id: persona.id,
           nombre: persona.nombreReal || persona.nombre,
           nickname: persona.nickname,
-          nombreUsuario: persona.nombreUsuario
+          nombreUsuario: persona.nombreUsuario,
+          handle: persona.handle || normalizarHandleMencionArbol(persona.nickname || persona.nombreUsuario || persona.nombreReal || persona.nombre)
         }))));
       }
       if (etiquetasImagenPublicacionArbol.length > 0) {

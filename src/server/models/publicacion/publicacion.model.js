@@ -10,6 +10,12 @@ const mencionSchema = new mongoose.Schema({
         type: String,
         trim: true,
         default: ''
+    },
+    // Handle exacto usado dentro del texto, sin el símbolo @.
+    handle: {
+        type: String,
+        trim: true,
+        default: ''
     }
 }, { _id: false });
 

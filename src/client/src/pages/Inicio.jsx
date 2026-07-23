@@ -342,16 +342,35 @@ const revocarUrlTemporal = (url) => {
   }
 };
 
-// --- NORMALIZACIÓN MEJORADA CON SOPORTE PARA NICKNAME Y NOMBRE REAL ---
+const normalizarHandleMencion = (valor = '', { minusculas = false } = {}) => {
+  let handle = String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^@+/, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Za-z0-9._-]/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^[_\-.]+|[_\-.]+$/g, '');
+
+  if (minusculas) handle = handle.toLowerCase();
+  return handle;
+};
+
+// Conserva separados el nickname único y el nombre visible del perfil.
 const normalizarPersonaSugerida = (persona = {}) => {
   const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id) || obtenerNombreDeEntidad(persona);
-  
+
   const nicknameRaw = normalizarTexto(
     persona.nickname ||
-    persona.nombreUsuario ||
     persona.usuario?.nickname ||
-    persona.usuario?.nombreUsuario ||
     persona.id?.nickname ||
+    ''
+  );
+
+  const nombreUsuarioRaw = normalizarTexto(
+    persona.nombreUsuario ||
+    persona.usuario?.nombreUsuario ||
     persona.id?.nombreUsuario ||
     ''
   );
@@ -363,12 +382,14 @@ const normalizarPersonaSugerida = (persona = {}) => {
     persona.usuario?.nombre ||
     persona.id?.nombreCompleto ||
     persona.id?.nombre ||
+    nombreUsuarioRaw ||
     ''
   );
 
-  const nombre = nombreRealRaw || nicknameRaw || 'Familiar';
-  const nickname = nicknameRaw ? (nicknameRaw.startsWith('@') ? nicknameRaw : `@${nicknameRaw}`) : '';
-  const nombreUsuario = nicknameRaw.replace(/^@/, '');
+  const nicknameLimpio = normalizarHandleMencion(nicknameRaw, { minusculas: true });
+  const handleNombre = normalizarHandleMencion(nombreUsuarioRaw || nombreRealRaw);
+  const handle = nicknameLimpio || handleNombre;
+  const nombre = nombreRealRaw || nombreUsuarioRaw || nicknameLimpio || 'Familiar';
   const imagen = obtenerImagenDeEntidad(persona);
 
   return {
@@ -376,8 +397,9 @@ const normalizarPersonaSugerida = (persona = {}) => {
     id,
     nombre,
     nombreReal: nombreRealRaw || nombre,
-    nickname,
-    nombreUsuario,
+    nombreUsuario: nombreUsuarioRaw || nombre,
+    nickname: nicknameLimpio ? `@${nicknameLimpio}` : '',
+    handle,
     imagen
   };
 };
@@ -1059,7 +1081,7 @@ export default function Inicio() {
 
   const detectarMencionActiva = (valor, cursor) => {
     const textoPrevio = valor.slice(0, cursor);
-    const coincidencia = textoPrevio.match(/(^|\s)@([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]{0,40})$/);
+    const coincidencia = textoPrevio.match(/(^|\s)@([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]{0,80})$/);
     if (!coincidencia) return null;
     return { query: coincidencia[2] || '', inicio: textoPrevio.length - coincidencia[2].length - 1, prefijo: coincidencia[1] || '' };
   };
@@ -1105,7 +1127,7 @@ export default function Inicio() {
   // --- SELECCIÓN DE PERSONA SOPORTANDO NICKNAME Y NOMBRE REAL ---
   const seleccionarPersonaPublicacion = (personaOriginal) => {
     const persona = normalizarPersonaSugerida(personaOriginal);
-    
+
     if (panelHerramientaActivo === 'etiquetas') {
       setEtiquetasImagen(prev => {
         const yaExiste = prev.some(item => String(item.id) === String(persona.id));
@@ -1120,12 +1142,12 @@ export default function Inicio() {
     const cursor = textarea?.selectionStart ?? textoPublicacion.length;
     const mencionActiva = detectarMencionActiva(textoPublicacion, cursor);
 
-    // Preferir nickname si existe; de lo contrario, usar nombre real sin espacios
-    const handleTag = persona.nombreUsuario 
-      ? `@${persona.nombreUsuario}`
-      : `@${(persona.nombreReal || persona.nombre).replace(/\s+/g, '_')}`;
-      
-    const textoMencion = `${handleTag} `;
+    // El nickname único tiene prioridad. Si no existe, el nombre visible se convierte a @Nombre_Usuario.
+    const handle = persona.handle || normalizarHandleMencion(
+      persona.nickname || persona.nombreUsuario || persona.nombreReal || persona.nombre
+    );
+    if (!handle) return;
+    const textoMencion = `@${handle} `;
 
     if (mencionActiva) {
       const antes = textoPublicacion.slice(0, mencionActiva.inicio);
@@ -1231,7 +1253,8 @@ export default function Inicio() {
             id: p.id,
             nombre: p.nombreReal || p.nombre,
             nickname: p.nickname,
-            nombreUsuario: p.nombreUsuario
+            nombreUsuario: p.nombreUsuario,
+            handle: p.handle || normalizarHandleMencion(p.nickname || p.nombreUsuario || p.nombreReal || p.nombre)
           }))
         ));
       }
@@ -1415,31 +1438,37 @@ export default function Inicio() {
     navigate(`/perfil/${personaId}`);
   };
 
-  const normalizarHandleMencion = (valor = '') => {
-    return String(valor || '').replace(/^@/, '').replace(/\s+/g, '_').trim().toLowerCase();
-  };
-
-  // --- BÚSQUEDA DE PERSONA COINCIDIENDO POR NICKNAME O NOMBRE REAL ---
+  // Resuelve primero el handle guardado y el nickname; después acepta el nombre de perfil normalizado.
   const buscarPersonaPorMencion = (textoMencion = '', menciones = []) => {
     if (!Array.isArray(menciones) || menciones.length === 0) return null;
-    const mencionNormalizada = normalizarHandleMencion(textoMencion);
+    const mencionNormalizada = normalizarHandleMencion(textoMencion, { minusculas: true });
 
     return menciones.find((persona) => {
-      const posiblesNombres = [
+      const handlesPrioritarios = [
+        persona.handle,
         persona.nickname,
+        persona.usuario?.nickname,
+        persona.id?.nickname
+      ].filter(Boolean);
+
+      if (handlesPrioritarios.some(valor => (
+        normalizarHandleMencion(valor, { minusculas: true }) === mencionNormalizada
+      ))) return true;
+
+      const nombresCompatibles = [
         persona.nombreUsuario,
         persona.nombreReal,
         persona.nombre,
         persona.nombreCompleto,
-        persona.usuario?.nickname,
         persona.usuario?.nombreUsuario,
         persona.usuario?.nombre,
         persona.usuario?.nombreCompleto,
-        persona.id?.nombreUsuario,
-        persona.id?.nickname
+        persona.id?.nombreUsuario
       ].filter(Boolean);
 
-      return posiblesNombres.some(nombre => normalizarHandleMencion(nombre) === mencionNormalizada);
+      return nombresCompatibles.some(valor => (
+        normalizarHandleMencion(valor, { minusculas: true }) === mencionNormalizada
+      ));
     }) || null;
   };
 
