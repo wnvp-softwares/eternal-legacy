@@ -1076,6 +1076,18 @@ const ConectorDinamico = ({ yIn, salidas, modoEliminar, alEliminarLinea }) => {
 };
 
 export default function ArbolGenealogico() {
+  const [modalCarruselAbierto, setModalCarruselAbierto] = useState(false);
+  const [fotosCarrusel, setFotosCarrusel] = useState([]);
+  const [indiceFotoCarrusel, setIndiceFotoCarrusel] = useState(0);
+  const [personaCarruselNombre, setPersonaCarruselNombre] = useState('');
+
+  const abrirCarruselFotos = (fotosNormalizadas, indexSeleccionado, nombrePersona) => {
+    setFotosCarrusel(fotosNormalizadas);
+    setIndiceFotoCarrusel(indexSeleccionado);
+    setPersonaCarruselNombre(nombrePersona);
+    setModalCarruselAbierto(true);
+  };
+
   const { idioma, zonaHoraria, formatoFecha } = usePreferencias();
   const preferenciasRegion = useMemo(() => ({
     idioma: idioma || 'es-MX',
@@ -1240,6 +1252,46 @@ export default function ArbolGenealogico() {
     establecerCambiosPendientes(prev => [...prev, cambio]);
   };
 
+  const handleAgregarFotosAGaleria = async (e) => {
+    const archivos = Array.from(e.target.files || []);
+    if (archivos.length === 0) return;
+
+    const nuevasFotos = await Promise.all(
+      archivos.map(async (archivo) => {
+        const dataUrl = await leerArchivoComoDataUrl(archivo);
+        return {
+          id: Math.random().toString(36).substr(2, 9),
+          url: dataUrl,
+          fechaCaptura: new Date().toISOString().split('T')[0],
+          fechaPublicacion: new Date().toISOString(),
+          quienesAparecen: '',
+          lugar: '',
+          descripcion: ''
+        };
+      })
+    );
+
+    setFormularioPerfilSinCuenta((prev) => ({
+      ...prev,
+      fotosGaleria: [...prev.fotosGaleria, ...nuevasFotos]
+    }));
+  };
+
+  const handleActualizarMetadatoFoto = (index, campo, valor) => {
+    setFormularioPerfilSinCuenta((prev) => {
+      const copia = [...prev.fotosGaleria];
+      copia[index] = { ...copia[index], [campo]: valor };
+      return { ...prev, fotosGaleria: copia };
+    });
+  };
+
+  const handleEliminarFotoGaleria = (index) => {
+    setFormularioPerfilSinCuenta((prev) => ({
+      ...prev,
+      fotosGaleria: prev.fotosGaleria.filter((_, i) => i !== index)
+    }));
+  };
+  
   const hayCambiosPendientes = () => cambiosPendientes.length > 0;
 
   const obtenerNombreArchivoExportacion = () => {

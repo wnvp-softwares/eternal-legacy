@@ -33,6 +33,32 @@ const obtenerIniciales = (nombre = '') => {
     return `${partes[0][0]}${partes[1][0]}`.toUpperCase();
 };
 
+const normalizarFotosServidor = (fotos = []) => {
+    if (!Array.isArray(fotos)) return [];
+
+    return fotos.map(foto => {
+        if (typeof foto === 'string') {
+            return {
+                url: foto,
+                fechaCaptura: new Date(),
+                fechaPublicacion: new Date(),
+                quienesAparecen: '',
+                lugar: '',
+                descripcion: ''
+            };
+        }
+
+        return {
+            url: foto.url || foto.urlArchivo || '',
+            fechaCaptura: foto.fechaCaptura ? new Date(foto.fechaCaptura) : new Date(),
+            fechaPublicacion: foto.fechaPublicacion ? new Date(foto.fechaPublicacion) : new Date(),
+            quienesAparecen: foto.quienesAparecen || '',
+            lugar: foto.lugar || '',
+            descripcion: foto.descripcion || ''
+        };
+    }).filter(f => Boolean(f.url));
+};
+
 const usuarioPuedeVerArbol = (arbol, usuarioId) => {
     if (!arbol || !usuarioId) return false;
 
@@ -235,27 +261,20 @@ const crearPerfilSinCuenta = async (req, res) => {
             });
         }
 
-        const arbol = await Arbol.findOne({
-            _id: arbolId,
-            activo: true
-        });
+        const arbol = await Arbol.findOne({ _id: arbolId, activo: true });
 
         if (!arbol) {
             return res.status(404).json({ mensaje: 'Árbol no encontrado' });
         }
 
-        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
-            return res.status(403).json({
-                mensaje: 'No tienes permiso para crear nodos en este árbol.'
-            });
-        }
+        const fotosProcesadas = normalizarFotosServidor(fotos);
 
         const nuevoNodo = await Nodo.create({
             arbol: arbolId,
             usuario: null,
             creadoPor: req.usuario.id,
             nombre,
-            iniciales: iniciales || obtenerIniciales(nombre),
+            iniciales,
             colorFondo,
             colorTexto,
             fechaNacimiento,
@@ -268,7 +287,7 @@ const crearPerfilSinCuenta = async (req, res) => {
             origen: 'perfil_sin_cuenta',
             generacion,
             fila,
-            fotos,
+            fotos: fotosProcesadas,
             biografia,
             perfilPrivado,
             visible: true
@@ -288,19 +307,10 @@ const actualizarNodo = async (req, res) => {
     try {
         const { arbolId, nodoId } = req.params;
 
-        const arbol = await Arbol.findOne({
-            _id: arbolId,
-            activo: true
-        });
+        const arbol = await Arbol.findOne({ _id: arbolId, activo: true });
 
         if (!arbol) {
             return res.status(404).json({ mensaje: 'Árbol no encontrado' });
-        }
-
-        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
-            return res.status(403).json({
-                mensaje: 'No tienes permiso para editar este árbol.'
-            });
         }
 
         const nodo = await Nodo.findOne({
@@ -327,7 +337,6 @@ const actualizarNodo = async (req, res) => {
             'estado',
             'generacion',
             'fila',
-            'fotos',
             'biografia',
             'perfilPrivado'
         ];
@@ -338,8 +347,8 @@ const actualizarNodo = async (req, res) => {
             }
         });
 
-        if (req.body.nombre && !req.body.iniciales) {
-            nodo.iniciales = obtenerIniciales(req.body.nombre);
+        if (req.body.fotos !== undefined) {
+            nodo.fotos = normalizarFotosServidor(req.body.fotos);
         }
 
         await nodo.save();

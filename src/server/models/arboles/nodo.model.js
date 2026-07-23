@@ -96,9 +96,16 @@ const nodoSchema = new mongoose.Schema({
         required: true
     },
 
-    fotos: [{
-        type: String
-    }],
+    fotos: [
+        {
+            url: { type: String, required: true },
+            fechaCaptura: { type: Date, required: true },
+            fechaPublicacion: { type: Date, default: Date.now, required: true },
+            quienesAparecen: { type: String, default: '' },
+            lugar: { type: String, default: '' },
+            descripcion: { type: String, default: '' }
+        }
+    ],
 
     biografia: {
         type: String,
