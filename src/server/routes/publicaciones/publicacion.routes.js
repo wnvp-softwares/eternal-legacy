@@ -15,6 +15,7 @@ const {
     obtenerPublicaciones,
     buscarTodo,
     obtenerPublicacionesPorEvento,
+    obtenerMomentosFamiliaresPorNodo,
     reaccionarPublicacion
 } = require('../../controllers/publicaciones/publicacion.controller');
 
@@ -79,6 +80,9 @@ router.get('/muro', verificarToken, obtenerPublicaciones);
 
 // Ruta para obtener publicaciones relacionadas a un evento familiar.
 router.get('/evento/:eventoId', verificarToken, obtenerPublicacionesPorEvento);
+
+// Momentos Familiares fotográficos de una persona concreta del árbol.
+router.get('/arbol/:arbolId/nodo/:nodoId/momentos-familiares', verificarToken, obtenerMomentosFamiliaresPorNodo);
 
 // Ruta para dar me gusta / reaccionar.
 router.post('/:id/reaccionar', verificarToken, reaccionarPublicacion);

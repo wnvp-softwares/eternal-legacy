@@ -1,4 +1,5 @@
 const { Arbol, Nodo, Hilo, InvitacionFamiliar } = require('../../models/index.model');
+const { construirRutaPublicaUpload } = require('../../configs/uploads.config');
 
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
@@ -60,6 +61,201 @@ const usuarioPuedeEditarArbol = (arbol, usuarioId) => {
     return admins.some(adminId => sonMismoId(adminId, usuarioId));
 };
 
+const obtenerUrlArchivoSubido = (archivo) => {
+    if (!archivo) return null;
+
+    const candidatos = [
+        archivo.secure_url,
+        archivo.location,
+        archivo.path,
+        archivo.url
+    ];
+
+    const urlDirecta = candidatos.find(valor =>
+        typeof valor === 'string' && /^https?:\/\//i.test(valor.trim())
+    );
+
+    if (urlDirecta) return urlDirecta.trim();
+
+    if (archivo.filename) {
+        return construirRutaPublicaUpload(archivo.filename);
+    }
+
+    return null;
+};
+
+const normalizarFecha = (valor, valorPorDefecto = null) => {
+    if (!valor) return valorPorDefecto;
+
+    const fecha = new Date(valor);
+    return Number.isNaN(fecha.getTime()) ? valorPorDefecto : fecha;
+};
+
+const normalizarFotoNodo = (foto) => {
+    const url = typeof foto === 'string'
+        ? foto.trim()
+        : String(foto?.url || foto?.urlArchivo || '').trim();
+
+    if (!url || url.startsWith('data:') || url.startsWith('blob:')) {
+        return null;
+    }
+
+    return {
+        url,
+        fechaSubida: normalizarFecha(foto?.fechaSubida, new Date()),
+        fechaReal: normalizarFecha(foto?.fechaReal, null),
+        personas: String(foto?.personas || '').trim(),
+        lugar: String(foto?.lugar || '').trim(),
+        descripcion: String(foto?.descripcion || '').trim(),
+        // Las fotos antiguas sin este campo se consideran fotografías de galería.
+        esFotoPerfil: foto?.esFotoPerfil === true
+    };
+};
+
+const normalizarFotosNodo = (fotos = []) => {
+    if (!Array.isArray(fotos)) return [];
+
+    let yaExisteFotoPerfil = false;
+
+    return fotos
+        .map(normalizarFotoNodo)
+        .filter(Boolean)
+        .map((foto) => {
+            const conservarComoPerfil = foto.esFotoPerfil === true && !yaExisteFotoPerfil;
+
+            if (conservarComoPerfil) {
+                yaExisteFotoPerfil = true;
+            }
+
+            return {
+                ...foto,
+                esFotoPerfil: conservarComoPerfil
+            };
+        });
+};
+
+const convertirEntero = (valor) => {
+    if (valor === null || valor === undefined || valor === '') return null;
+
+    const numero = Number(valor);
+    return Number.isInteger(numero) ? numero : null;
+};
+
+const validarFila = (fila) => {
+    const filaNormalizada = convertirEntero(fila);
+
+    if (filaNormalizada === null || filaNormalizada < 0) {
+        return {
+            error: 'La fila debe ser un número entero mayor o igual a cero.'
+        };
+    }
+
+    return { valor: filaNormalizada };
+};
+
+const desplazarGeneracionesArbol = async (arbolId, desplazamiento) => {
+    const cantidad = Number(desplazamiento);
+
+    if (!Number.isInteger(cantidad) || cantidad <= 0) return 0;
+
+    await Nodo.updateMany(
+        { arbol: arbolId },
+        { $inc: { generacion: cantidad } }
+    );
+
+    return cantidad;
+};
+
+const normalizarGeneracionesPersistidas = async (arbolId) => {
+    const primerNodo = await Nodo.findOne({ arbol: arbolId })
+        .sort({ generacion: 1 })
+        .select('generacion')
+        .lean();
+
+    const menorGeneracion = Number(primerNodo?.generacion);
+
+    if (!Number.isFinite(menorGeneracion) || menorGeneracion >= 0) {
+        return 0;
+    }
+
+    return desplazarGeneracionesArbol(arbolId, Math.abs(Math.trunc(menorGeneracion)));
+};
+
+const prepararGeneracionParaGuardar = async ({ arbolId, generacion }) => {
+    const generacionNormalizada = convertirEntero(generacion);
+
+    if (generacionNormalizada === null) {
+        return {
+            error: 'La generación debe ser un número entero.'
+        };
+    }
+
+    if (generacionNormalizada >= 0) {
+        return { valor: generacionNormalizada };
+    }
+
+    // Compatibilidad defensiva: si un cliente antiguo envía -1 para nuevos ancestros,
+    // recorremos el árbol completo y guardamos al nuevo nodo en la generación cero.
+    await desplazarGeneracionesArbol(arbolId, Math.abs(generacionNormalizada));
+
+    return {
+        valor: 0,
+        arbolDesplazado: true
+    };
+};
+
+const subirFotoNodo = async (req, res) => {
+    try {
+        const { arbolId } = req.params;
+
+        const arbol = await Arbol.findOne({
+            _id: arbolId,
+            activo: true
+        });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
+        }
+
+        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para subir fotografías a este árbol.'
+            });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({
+                mensaje: 'Selecciona una fotografía para subir.'
+            });
+        }
+
+        if (!String(req.file.mimetype || '').startsWith('image/')) {
+            return res.status(400).json({
+                mensaje: 'El archivo seleccionado no es una imagen válida.'
+            });
+        }
+
+        const url = obtenerUrlArchivoSubido(req.file);
+
+        if (!url) {
+            return res.status(500).json({
+                mensaje: 'La imagen se recibió, pero no fue posible obtener su URL pública.'
+            });
+        }
+
+        return res.status(201).json({
+            mensaje: 'Fotografía subida correctamente.',
+            url,
+            fechaSubida: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('❌ Error al subir fotografía del nodo:', error);
+        return res.status(500).json({
+            mensaje: error.message || 'Error interno al subir la fotografía.'
+        });
+    }
+};
+
 const obtenerNodosPorArbol = async (req, res) => {
     try {
         const { arbolId } = req.params;
@@ -78,6 +274,9 @@ const obtenerNodosPorArbol = async (req, res) => {
                 mensaje: 'No tienes permiso para ver los nodos de este árbol.'
             });
         }
+
+        // Repara automáticamente árboles antiguos que todavía tengan generaciones negativas.
+        await normalizarGeneracionesPersistidas(arbolId);
 
         const nodos = await Nodo.find({
             arbol: arbolId,
@@ -128,6 +327,8 @@ const obtenerDetalleNodo = async (req, res) => {
                 mensaje: 'No tienes permiso para ver este nodo.'
             });
         }
+
+        await normalizarGeneracionesPersistidas(arbolId);
 
         const nodo = await Nodo.findOne({
             _id: nodoId,
@@ -250,17 +451,24 @@ const crearPerfilSinCuenta = async (req, res) => {
             });
         }
 
-        const fotosFormateadas = (Array.isArray(fotos) ? fotos : []).map(f => {
-            if (typeof f === 'string') return { url: f, fechaSubida: new Date() };
-            return {
-                url: f.url,
-                fechaSubida: f.fechaSubida || new Date(),
-                fechaReal: f.fechaReal ? new Date(f.fechaReal) : null,
-                personas: f.personas || '',
-                lugar: f.lugar || '',
-                descripcion: f.descripcion || ''
-            };
+        await normalizarGeneracionesPersistidas(arbolId);
+
+        const resultadoGeneracion = await prepararGeneracionParaGuardar({
+            arbolId,
+            generacion
         });
+
+        if (resultadoGeneracion.error) {
+            return res.status(400).json({ mensaje: resultadoGeneracion.error });
+        }
+
+        const resultadoFila = validarFila(fila);
+
+        if (resultadoFila.error) {
+            return res.status(400).json({ mensaje: resultadoFila.error });
+        }
+
+        const fotosFormateadas = normalizarFotosNodo(fotos);
 
         const nuevoNodo = await Nodo.create({
             arbol: arbolId,
@@ -278,8 +486,8 @@ const crearPerfilSinCuenta = async (req, res) => {
             tipo,
             estado,
             origen: 'perfil_sin_cuenta',
-            generacion,
-            fila,
+            generacion: resultadoGeneracion.valor,
+            fila: resultadoFila.valor,
             fotos: fotosFormateadas,
             biografia,
             perfilPrivado,
@@ -315,6 +523,8 @@ const actualizarNodo = async (req, res) => {
             });
         }
 
+        await normalizarGeneracionesPersistidas(arbolId);
+
         const nodo = await Nodo.findOne({
             _id: nodoId,
             arbol: arbolId,
@@ -337,34 +547,48 @@ const actualizarNodo = async (req, res) => {
             'edad',
             'tipo',
             'estado',
-            'generacion',
-            'fila',
-            'fotos',
             'biografia',
             'perfilPrivado'
         ];
 
         camposPermitidos.forEach(campo => {
             if (req.body[campo] !== undefined) {
-                if (req.body.fotos && Array.isArray(req.body.fotos)) {
-                    nodo.fotos = req.body.fotos.map(foto => {
-                        if (typeof foto === 'string') {
-                            return { url: foto, fechaSubida: new Date() };
-                        }
-                        return {
-                            url: foto.url,
-                            fechaSubida: foto.fechaSubida ? new Date(foto.fechaSubida) : new Date(),
-                            fechaReal: foto.fechaReal ? new Date(foto.fechaReal) : null,
-                            personas: foto.personas || '',
-                            lugar: foto.lugar || '',
-                            descripcion: foto.descripcion || ''
-                        };
-                    });
-                } else {
-                    nodo[campo] = req.body[campo];
-                }
+                nodo[campo] = req.body[campo];
             }
         });
+
+        if (req.body.generacion !== undefined) {
+            const resultadoGeneracion = await prepararGeneracionParaGuardar({
+                arbolId,
+                generacion: req.body.generacion
+            });
+
+            if (resultadoGeneracion.error) {
+                return res.status(400).json({ mensaje: resultadoGeneracion.error });
+            }
+
+            nodo.generacion = resultadoGeneracion.valor;
+        }
+
+        if (req.body.fila !== undefined) {
+            const resultadoFila = validarFila(req.body.fila);
+
+            if (resultadoFila.error) {
+                return res.status(400).json({ mensaje: resultadoFila.error });
+            }
+
+            nodo.fila = resultadoFila.valor;
+        }
+
+        if (req.body.fotos !== undefined) {
+            if (!Array.isArray(req.body.fotos)) {
+                return res.status(400).json({
+                    mensaje: 'El campo fotos debe ser un arreglo.'
+                });
+            }
+
+            nodo.fotos = normalizarFotosNodo(req.body.fotos);
+        }
 
         if (req.body.nombre && !req.body.iniciales) {
             nodo.iniciales = obtenerIniciales(req.body.nombre);
@@ -378,6 +602,13 @@ const actualizarNodo = async (req, res) => {
         });
     } catch (error) {
         console.error('❌ Error al actualizar nodo:', error);
+
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({
+                mensaje: error.message || 'Los datos del nodo no son válidos.'
+            });
+        }
+
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 };
@@ -478,6 +709,7 @@ const eliminarNodo = async (req, res) => {
 };
 
 module.exports = {
+    subirFotoNodo,
     obtenerNodosPorArbol,
     obtenerDetalleNodo,
     crearPerfilSinCuenta,

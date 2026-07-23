@@ -205,3 +205,34 @@ video.publicacion-media-elemento {
     transition: none;
   }
 }
+
+
+/* Variante usada en el visor de Momentos Familiares: conserva la fotografía completa. */
+.publicacion-media-carousel.ajuste-contain {
+  height: 100%;
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: #090f18;
+}
+
+.publicacion-media-carousel.ajuste-contain .publicacion-media-viewport {
+  height: 100%;
+  min-height: 420px;
+  aspect-ratio: auto;
+  border-radius: 0;
+  background-color: #090f18;
+}
+
+.publicacion-media-carousel.ajuste-contain .publicacion-media-elemento {
+  object-fit: contain;
+  background-color: #090f18;
+}
+
+@media (max-width: 992px) {
+  .publicacion-media-carousel.ajuste-contain .publicacion-media-viewport {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 4 / 5;
+  }
+}

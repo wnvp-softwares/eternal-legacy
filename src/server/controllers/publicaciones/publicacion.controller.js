@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const { Publicacion, Upload, Usuario, Arbol } = require('../../models/index.model');
+const Nodo = require('../../models/arboles/nodo.model');
+const Comentario = require('../../models/publicacion/comentario.model');
 
 const EventoFamiliar = require('../../models/arboles/eventoFamiliar.model');
 const cloudinary = require('../../configs/cloudinary.config');
@@ -119,6 +121,71 @@ const normalizarListaPersonas = (valor) => {
             };
         })
         .filter((persona) => persona.usuario || persona.nombre);
+};
+
+
+const normalizarFechaMomento = (valor) => {
+    if (!valor) return null;
+
+    const texto = String(valor).trim();
+    // Los inputs type=date no incluyen zona horaria. Se fija al mediodía UTC para
+    // evitar que el calendario cambie al día anterior al mostrarse en México.
+    const fecha = /^\d{4}-\d{2}-\d{2}$/.test(texto)
+        ? new Date(`${texto}T12:00:00.000Z`)
+        : new Date(texto);
+
+    if (Number.isNaN(fecha.getTime())) return undefined;
+    return fecha;
+};
+
+const obtenerIdsNodosRelacionados = (valor) => {
+    const lista = parseJSONSeguro(valor, []);
+    if (!Array.isArray(lista)) return [];
+
+    return Array.from(new Set(
+        lista
+            .map(item => obtenerIdSeguro(item?.nodo || item?.nodoId || item))
+            .filter(esObjectIdValido)
+            .map(String)
+    ));
+};
+
+const construirPersonasRelacionadas = async ({ valor, arbolId }) => {
+    const idsNodos = obtenerIdsNodosRelacionados(valor);
+    if (idsNodos.length === 0) return [];
+
+    const nodos = await Nodo.find({
+        _id: { $in: idsNodos },
+        arbol: arbolId,
+        visible: { $ne: false }
+    }).select('_id usuario nombre');
+
+    if (nodos.length !== idsNodos.length) {
+        const error = new Error('Una o más personas relacionadas no pertenecen al árbol seleccionado.');
+        error.status = 400;
+        throw error;
+    }
+
+    const mapa = new Map(nodos.map(nodo => [String(nodo._id), nodo]));
+
+    return idsNodos.map(id => {
+        const nodo = mapa.get(String(id));
+        return {
+            nodo: nodo._id,
+            usuario: nodo.usuario || null,
+            nombreSnapshot: String(nodo.nombre || 'Familiar').trim()
+        };
+    });
+};
+
+const esFotografiaPublicacion = (archivo = {}) => {
+    const formato = String(archivo?.formato || archivo?.mimetype || archivo?.mimeType || '').toLowerCase();
+    const url = String(archivo?.urlArchivo || archivo?.url || archivo?.path || '').toLowerCase();
+
+    if (formato === 'image/gif' || /\.gif(?:$|\?)/i.test(url)) return false;
+    if (formato.startsWith('image/')) return true;
+
+    return /\.(?:jpe?g|png|webp|avif|bmp|heic|heif)(?:$|\?)/i.test(url);
 };
 
 const obtenerNombreFamiliaDesdeArbol = (arbol) => {
@@ -327,6 +394,8 @@ const poblarPublicacion = async (publicacionId) => {
         .populate('multimedia')
         .populate('menciones.usuario', 'nombreUsuario email imagenPerfil')
         .populate('etiquetasMultimedia.usuario', 'nombreUsuario email imagenPerfil')
+        .populate('personasRelacionadas.nodo', 'nombre usuario origen')
+        .populate('personasRelacionadas.usuario', 'nombreUsuario email imagenPerfil')
         .populate('eventoRelacionado.evento')
         .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
         .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
@@ -344,6 +413,8 @@ const poblarConsultaPublicaciones = (consulta) => {
         .populate('multimedia')
         .populate('menciones.usuario', 'nombreUsuario email imagenPerfil')
         .populate('etiquetasMultimedia.usuario', 'nombreUsuario email imagenPerfil')
+        .populate('personasRelacionadas.nodo', 'nombre usuario origen')
+        .populate('personasRelacionadas.usuario', 'nombreUsuario email imagenPerfil')
         .populate('eventoRelacionado.evento')
         .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
         .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
@@ -364,7 +435,9 @@ const crearPublicacion = async (req, res) => {
             etiquetasMultimedia,
             eventoRelacionadoId,
             eventoRelacionado,
-            arbolAudienciaId
+            arbolAudienciaId,
+            fechaMomento,
+            personasRelacionadas
         } = req.body || {};
 
         const contenidoLimpio = String(contenido || '').trim();
@@ -421,6 +494,25 @@ const crearPublicacion = async (req, res) => {
             arbolAudiencia = resultadoArbol.arbol;
         }
 
+        const fechaMomentoNormalizada = tipoSeguro === 'familiar'
+            ? normalizarFechaMomento(fechaMomento)
+            : null;
+
+        if (fechaMomentoNormalizada === undefined) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({
+                mensaje: 'La fecha del momento no es válida.'
+            });
+        }
+
+        let personasRelacionadasNormalizadas = [];
+        if (tipoSeguro === 'familiar' && arbolAudiencia) {
+            personasRelacionadasNormalizadas = await construirPersonasRelacionadas({
+                valor: personasRelacionadas,
+                arbolId: arbolAudiencia._id
+            });
+        }
+
         for (const archivo of archivosSubidos) {
             const nuevoUpload = new Upload({
                 propietario: req.usuario.id,
@@ -445,10 +537,12 @@ const crearPublicacion = async (req, res) => {
             arbolAudiencia: arbolAudiencia?._id || null,
             nombreFamiliaAudienciaSnapshot: arbolAudiencia ? obtenerNombreFamiliaDesdeArbol(arbolAudiencia) : '',
             contenido: contenidoLimpio,
+            fechaMomento: fechaMomentoNormalizada || null,
             multimedia: idsMultimedia,
             ubicacionTexto: ubicacionTexto || '',
             menciones: normalizarListaPersonas(menciones),
             etiquetasMultimedia: normalizarListaPersonas(etiquetasMultimedia),
+            personasRelacionadas: personasRelacionadasNormalizadas,
             eventoRelacionado: eventoNormalizado,
             reacciones: [],
             compartido: 0
@@ -479,8 +573,8 @@ const crearPublicacion = async (req, res) => {
             });
         }
 
-        return res.status(500).json({
-            mensaje: 'Error interno al crear la publicación.'
+        return res.status(error.status || 500).json({
+            mensaje: error.status ? error.message : 'Error interno al crear la publicación.'
         });
     }
 };
@@ -600,6 +694,117 @@ const obtenerPublicacionesPorEvento = async (req, res) => {
     }
 };
 
+
+// OBTENER MOMENTOS FAMILIARES FOTOGRÁFICOS DE UN NODO DEL ÁRBOL
+const obtenerMomentosFamiliaresPorNodo = async (req, res) => {
+    try {
+        const { arbolId, nodoId } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(arbolId) || !esObjectIdValido(nodoId)) {
+            return res.status(400).json({
+                mensaje: 'El árbol o la persona seleccionada no tienen un ID válido.'
+            });
+        }
+
+        const arbol = await Arbol.findOne({ _id: arbolId, activo: true })
+            .select('_id nombreFamilia nombre titulo creador admins miembros');
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'El árbol seleccionado no existe o ya no está activo.' });
+        }
+
+        if (!usuarioPerteneceAlArbol(arbol, usuarioId)) {
+            return res.status(403).json({ mensaje: 'No tienes permiso para consultar los momentos de este árbol.' });
+        }
+
+        const nodo = await Nodo.findOne({ _id: nodoId, arbol: arbolId, visible: { $ne: false } })
+            .select('_id usuario nombre origen');
+
+        if (!nodo) {
+            return res.status(404).json({ mensaje: 'La persona seleccionada no pertenece a este árbol.' });
+        }
+
+        const condicionesPersona = [
+            { 'personasRelacionadas.nodo': nodo._id }
+        ];
+
+        if (nodo.usuario) {
+            condicionesPersona.push(
+                { autor: nodo.usuario },
+                { 'personasRelacionadas.usuario': nodo.usuario },
+                { 'menciones.usuario': nodo.usuario },
+                { 'etiquetasMultimedia.usuario': nodo.usuario }
+            );
+        }
+
+        const publicaciones = await poblarConsultaPublicaciones(
+            Publicacion.find({
+                tipo: 'familiar',
+                $and: [
+                    {
+                        $or: [
+                            { arbolAudiencia: arbol._id },
+                            { 'eventoRelacionado.arbol': arbol._id }
+                        ]
+                    },
+                    { $or: condicionesPersona }
+                ]
+            })
+        );
+
+        const publicacionesConFotos = publicaciones
+            .map(publicacion => {
+                const objeto = typeof publicacion.toObject === 'function'
+                    ? publicacion.toObject()
+                    : publicacion;
+                const fotografias = (Array.isArray(objeto.multimedia) ? objeto.multimedia : [])
+                    .filter(esFotografiaPublicacion);
+
+                if (fotografias.length === 0) return null;
+
+                const fechaEfectiva = objeto.fechaMomento || objeto.createdAt;
+                return {
+                    ...objeto,
+                    multimedia: fotografias,
+                    fechaEfectiva
+                };
+            })
+            .filter(Boolean)
+            .sort((a, b) => new Date(a.fechaEfectiva).getTime() - new Date(b.fechaEfectiva).getTime());
+
+        const idsPublicaciones = publicacionesConFotos.map(item => item._id);
+        const conteos = idsPublicaciones.length > 0
+            ? await Comentario.aggregate([
+                { $match: { publicacionPadre: { $in: idsPublicaciones } } },
+                { $group: { _id: '$publicacionPadre', total: { $sum: 1 } } }
+            ])
+            : [];
+        const mapaConteos = new Map(conteos.map(item => [String(item._id), item.total]));
+
+        const respuesta = publicacionesConFotos.map(publicacion => ({
+            ...publicacion,
+            totalComentarios: mapaConteos.get(String(publicacion._id)) || 0
+        }));
+
+        return res.status(200).json({
+            nodo: {
+                _id: nodo._id,
+                nombre: nodo.nombre,
+                origen: nodo.origen
+            },
+            totalPublicaciones: respuesta.length,
+            totalFotos: respuesta.reduce((total, pub) => total + pub.multimedia.length, 0),
+            publicaciones: respuesta
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener Momentos Familiares del nodo:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'Error interno al obtener los Momentos Familiares.'
+        });
+    }
+};
+
 // REACCIONAR A UNA PUBLICACIÓN
 const reaccionarPublicacion = async (req, res) => {
     try {
@@ -666,5 +871,6 @@ module.exports = {
     obtenerPublicaciones,
     buscarTodo,
     obtenerPublicacionesPorEvento,
+    obtenerMomentosFamiliaresPorNodo,
     reaccionarPublicacion
 };

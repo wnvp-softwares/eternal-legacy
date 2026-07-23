@@ -1,9 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { BACKEND_BASE_URL } from '../config/env';
+import PublicacionMediaCarousel from '../components/PublicacionMediaCarousel';
+import PublicacionHeader from '../components/PublicacionHeader';
+import ImageCropperModal from '../components/ImageCropperModal';
 import 'bootstrap-icons/font/bootstrap-icons.css';
+import './Inicio.css';
 import './ArbolGenealogico.css';
 
 // ==========================================
@@ -96,6 +101,72 @@ const FORMULARIO_PERFIL_SIN_CUENTA_INICIAL = {
   fotosGaleria: []
 };
 
+
+const CONFIG_MOMENTO_FAMILIAR_ARBOL = {
+  titulo: 'Momento Familiar',
+  subtitulo: 'Comparte un momento privado con las personas de tu Árbol Genealógico.',
+  icono: 'bi-people',
+  placeholder: '¿Qué está pasando en tu núcleo familiar hoy?...',
+  boton: 'Publicar Momento'
+};
+
+const EMOJIS_MOMENTO_FAMILIAR_ARBOL = ['❤️', '😊', '😂', '🥹', '🙏', '🎉', '🎂', '📸', '🕊️', '✨', '🌳', '👨‍👩‍👧‍👦', '🏡', '📍', '💛', '🫶'];
+const MAX_MULTIMEDIA_MOMENTO_ARBOL = 5;
+const MAX_UPLOAD_MB_MOMENTO_ARBOL = (() => {
+  const configurado = Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_MB || 50);
+  return Number.isFinite(configurado) && configurado > 0 ? configurado : 50;
+})();
+const MAX_UPLOAD_BYTES_MOMENTO_ARBOL = MAX_UPLOAD_MB_MOMENTO_ARBOL * 1024 * 1024;
+
+const crearIdMultimediaMomentoArbol = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `media-arbol-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const esArchivoVideoMomentoArbol = (archivo) => Boolean(archivo?.type?.startsWith('video/'));
+const esArchivoGifMomentoArbol = (archivo) => archivo?.type === 'image/gif';
+const esArchivoImagenMomentoArbol = (archivo) => Boolean(
+  archivo?.type?.startsWith('image/') && !esArchivoGifMomentoArbol(archivo)
+);
+
+const revocarUrlTemporalMomentoArbol = (url) => {
+  if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url);
+};
+
+const obtenerImagenPersonaMomentoArbol = (persona = {}) => (
+  persona.imagenPerfil ||
+  persona.fotoPerfil ||
+  persona.imagen ||
+  persona.img ||
+  persona.avatar ||
+  persona.usuario?.imagenPerfil ||
+  persona.usuario?.fotoPerfil ||
+  null
+);
+
+const normalizarPersonaMomentoArbol = (persona = {}) => {
+  const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id);
+  const nicknameCrudo = normalizarTexto(
+    persona.nickname || persona.nombreUsuario || persona.usuario?.nickname || persona.usuario?.nombreUsuario || ''
+  ).replace(/^@+/, '');
+  const nombreReal = normalizarTexto(
+    persona.nombreCompleto || persona.nombre || persona.usuario?.nombreCompleto || persona.usuario?.nombre || ''
+  );
+  const nombre = nombreReal || nicknameCrudo || 'Familiar';
+
+  return {
+    ...persona,
+    id,
+    nombre,
+    nombreReal: nombreReal || nombre,
+    nickname: nicknameCrudo ? `@${nicknameCrudo}` : '',
+    nombreUsuario: nicknameCrudo,
+    imagen: obtenerImagenPersonaMomentoArbol(persona)
+  };
+};
+
 const FORMULARIO_EVENTO_FAMILIAR_INICIAL = {
   titulo: '',
   tipoEvento: 'reunion',
@@ -147,6 +218,100 @@ const leerArchivoComoDataUrl = (archivo) => {
     lector.readAsDataURL(archivo);
   });
 };
+
+const obtenerUrlCrudaFoto = (foto) => {
+  if (!foto) return '';
+  if (typeof foto === 'string') return foto.trim();
+
+  return String(
+    foto.url ||
+    foto.urlArchivo ||
+    foto.secure_url ||
+    foto.path ||
+    foto.location ||
+    ''
+  ).trim();
+};
+
+const obtenerSrcFoto = (foto) => resolverUrlImagen(obtenerUrlCrudaFoto(foto));
+
+const normalizarFotoNodo = (foto) => {
+  const url = obtenerUrlCrudaFoto(foto);
+  if (!url) return null;
+
+  if (typeof foto === 'string') {
+    return {
+      url,
+      fechaSubida: null,
+      fechaReal: null,
+      personas: '',
+      lugar: '',
+      descripcion: '',
+      esFotoPerfil: false
+    };
+  }
+
+  return {
+    ...foto,
+    url,
+    fechaSubida: foto.fechaSubida || null,
+    fechaReal: foto.fechaReal || null,
+    personas: String(foto.personas || '').trim(),
+    lugar: String(foto.lugar || '').trim(),
+    descripcion: String(foto.descripcion || '').trim(),
+    // Las fotografías antiguas que no tengan este campo se consideran galería.
+    esFotoPerfil: foto.esFotoPerfil === true
+  };
+};
+
+
+const esFotografiaMomento = (archivo = {}) => {
+  const formato = String(archivo?.formato || archivo?.mimetype || archivo?.mimeType || '').toLowerCase();
+  const url = obtenerUrlCrudaFoto(archivo).toLowerCase();
+  if (formato === 'image/gif' || /\.gif(?:$|\?)/i.test(url)) return false;
+  if (formato.startsWith('image/')) return true;
+  return /\.(?:jpe?g|png|webp|avif|bmp|heic|heif)(?:$|\?)/i.test(url);
+};
+
+const obtenerFechaEfectivaMomento = (publicacion = {}) => (
+  publicacion.fechaEfectiva || publicacion.fechaMomento || publicacion.createdAt || null
+);
+
+const formatearFechaLineaTiempo = (valor, idioma = 'es-MX', zonaHoraria = 'America/Mexico_City') => {
+  if (!valor) return 'FECHA SIN REGISTRAR';
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) return 'FECHA SIN REGISTRAR';
+  return new Intl.DateTimeFormat(idioma || 'es-MX', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: zonaHoraria || 'America/Mexico_City'
+  }).format(fecha).toLocaleUpperCase(idioma || 'es-MX');
+};
+
+const formatearFechaPublicacionMomento = (valor, idioma = 'es-MX', zonaHoraria = 'America/Mexico_City') => {
+  if (!valor) return '';
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) return '';
+  return new Intl.DateTimeFormat(idioma || 'es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: zonaHoraria || 'America/Mexico_City'
+  }).format(fecha);
+};
+
+const obtenerNombreAutorMomento = (publicacion = {}) => (
+  publicacion.autor?.nombreUsuario || publicacion.usuario?.nombreUsuario || 'Familiar'
+);
+
+const obtenerAvatarAutorMomento = (publicacion = {}) => resolverUrlImagen(
+  publicacion.autor?.imagenPerfil?.urlArchivo ||
+  publicacion.autor?.imagenPerfil ||
+  publicacion.usuario?.imagenPerfil?.urlArchivo ||
+  publicacion.usuario?.imagenPerfil ||
+  null
+);
 
 const obtenerValorRamaNodo = (nodo = {}) => {
   return String(
@@ -243,7 +408,8 @@ const obtenerUsuarioIdDesdeToken = (token) => {
 };
 
 const romano = (numero) => {
-  const n = Number(numero) + 1;
+  const valor = Number(numero);
+  const n = (Number.isFinite(valor) ? Math.max(0, Math.trunc(valor)) : 0) + 1;
   const mapa = [
     [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
     [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
@@ -551,13 +717,12 @@ const normalizarNodo = (nodo, usuarioActualId = null) => {
   const fechaNacimientoPerfil = informacionPerfil.fechaNacimiento || null;
   const fechaNacimientoFinal = nodo.fechaNacimiento || fechaNacimientoPerfil || null;
 
-  const fotosNodo = Array.isArray(nodo.fotos)
-    ? nodo.fotos.map(resolverUrlImagen).filter(Boolean)
+  const fotos = Array.isArray(nodo.fotos)
+    ? nodo.fotos.map(normalizarFotoNodo).filter(Boolean)
     : [];
 
-  const fotos = imagenPerfil
-    ? [imagenPerfil, ...fotosNodo.filter(f => f !== imagenPerfil)]
-    : fotosNodo;
+  const fotoPerfilNodo = fotos.find(foto => foto.esFotoPerfil === true) || null;
+  const urlFotoPerfilNodo = fotoPerfilNodo ? obtenerSrcFoto(fotoPerfilNodo) : null;
 
   const fechaCortaCalculada = construirFechaCorta({
     fechaNacimiento: fechaNacimientoFinal,
@@ -583,7 +748,8 @@ const normalizarNodo = (nodo, usuarioActualId = null) => {
     colorFondo: nodo.colorFondo || colorPorTexto(nombreBase),
     colorTexto: nodo.colorTexto || '#0f172a',
 
-    fotoPerfil: imagenPerfil || fotos[0] || null,
+    // Las fotos de galería nunca se utilizan como avatar automáticamente.
+    fotoPerfil: imagenPerfil || urlFotoPerfilNodo || null,
 
     fechaNacimiento: fechaNacimientoFinal,
     fechaCorta: fechaCortaCalculada,
@@ -1126,6 +1292,49 @@ export default function ArbolGenealogico() {
   const [modoFormularioPerfilSinCuenta, establecerModoFormularioPerfilSinCuenta] = useState('crear');
   const [nodoEditandoPerfilSinCuenta, establecerNodoEditandoPerfilSinCuenta] = useState(null);
 
+  // Momentos Familiares fotográficos del nodo seleccionado.
+  const [momentosFamiliaresNodo, establecerMomentosFamiliaresNodo] = useState([]);
+  const [cargandoMomentosFamiliares, establecerCargandoMomentosFamiliares] = useState(false);
+  const [errorMomentosFamiliares, establecerErrorMomentosFamiliares] = useState('');
+  const [modalMomentosFamiliaresAbierto, establecerModalMomentosFamiliaresAbierto] = useState(false);
+  const [indiceMomentoFamiliar, establecerIndiceMomentoFamiliar] = useState(0);
+  const [indiceFotoMomentoFamiliar, establecerIndiceFotoMomentoFamiliar] = useState(0);
+  const [comentariosMomentos, establecerComentariosMomentos] = useState({});
+  const [cargandoComentariosMomento, establecerCargandoComentariosMomento] = useState(false);
+  const [nuevoComentarioMomento, establecerNuevoComentarioMomento] = useState('');
+  const [enviandoComentarioMomento, establecerEnviandoComentarioMomento] = useState(false);
+  const touchMomentoInicioXRef = useRef(null);
+
+
+  // Compositor de Momentos Familiares abierto desde el botón Fotos.
+  const [modalPublicacionArbolAbierto, establecerModalPublicacionArbolAbierto] = useState(false);
+  const [textoPublicacionArbol, establecerTextoPublicacionArbol] = useState('');
+  const [fechaMomentoPublicacionArbol, establecerFechaMomentoPublicacionArbol] = useState('');
+  const [panelHerramientaPublicacionArbol, establecerPanelHerramientaPublicacionArbol] = useState(null);
+  const [ubicacionPublicacionArbol, establecerUbicacionPublicacionArbol] = useState('');
+  const [ubicacionTemporalPublicacionArbol, establecerUbicacionTemporalPublicacionArbol] = useState('');
+  const [busquedaPersonaPublicacionArbol, establecerBusquedaPersonaPublicacionArbol] = useState('');
+  const [sugerenciasPersonasPublicacionArbol, establecerSugerenciasPersonasPublicacionArbol] = useState([]);
+  const [cargandoSugerenciasPublicacionArbol, establecerCargandoSugerenciasPublicacionArbol] = useState(false);
+  const [mencionesPublicacionArbol, establecerMencionesPublicacionArbol] = useState([]);
+  const [etiquetasImagenPublicacionArbol, establecerEtiquetasImagenPublicacionArbol] = useState([]);
+  const [eventoRelacionadoPublicacionArbol, establecerEventoRelacionadoPublicacionArbol] = useState(null);
+  const [personasRelacionadasPublicacionArbol, establecerPersonasRelacionadasPublicacionArbol] = useState([]);
+  const [busquedaNodoRelacionadoPublicacionArbol, establecerBusquedaNodoRelacionadoPublicacionArbol] = useState('');
+  const [multimediaBorradorPublicacionArbol, establecerMultimediaBorradorPublicacionArbol] = useState([]);
+  const multimediaBorradorPublicacionArbolRef = useRef([]);
+  const [cropperPublicacionArbol, establecerCropperPublicacionArbol] = useState({
+    abierto: false,
+    archivo: null,
+    multimediaId: null
+  });
+  const [publicandoMomentoArbol, establecerPublicandoMomentoArbol] = useState(false);
+  const [versionMomentosFamiliares, establecerVersionMomentosFamiliares] = useState(0);
+  const archivoPublicacionArbolRef = useRef(null);
+  const gifPublicacionArbolRef = useRef(null);
+  const textareaPublicacionArbolRef = useRef(null);
+  const overlayPublicacionArbolRef = useRef(null);
+
   // Estados: Colocación
   const [modoColocacion, establecerModoColocacion] = useState(false);
   const [personaEnColocacion, establecerPersonaEnColocacion] = useState(null);
@@ -1160,22 +1369,15 @@ export default function ArbolGenealogico() {
 
   const [filtrosAplicados, establecerFiltrosAplicados] = useState(FILTROS_ARBOL_DEFECTO);
 
-  // Agregar dentro del componente principal ArbolGenealogico:
+  // Estados para subir una fotografía a la vez y capturar sus metadatos.
   const [modalFotoMetadata, setModalFotoMetadata] = useState(false);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [archivoFotoPendiente, setArchivoFotoPendiente] = useState(null);
+  const [previewFotoPendiente, setPreviewFotoPendiente] = useState('');
+  const [destinoFotoPendiente, setDestinoFotoPendiente] = useState('galeria');
+  const [errorFotoMetadata, setErrorFotoMetadata] = useState('');
   const [tempFotoData, setTempFotoData] = useState({
-    url: '',
-    fechaSubida: new Date().toISOString().split('T')[0],
-    fechaReal: '',
-    personas: '',
-    lugar: '',
-    descripcion: ''
-  });
-
-  const [modalImagenAbierto, setModalImagenAbierto] = useState(false);
-  const [archivoPendiente, setArchivoPendiente] = useState(null);
-  const [datosImagen, setDatosImagen] = useState({
-    fechaSubida: '',
+    fechaSubida: new Date().toISOString(),
     fechaReal: '',
     personas: '',
     lugar: '',
@@ -1249,6 +1451,969 @@ export default function ArbolGenealogico() {
 
     return data;
   };
+
+
+  const audienciaMomentoArbol = useMemo(() => ({
+    id: obtenerId(arbol),
+    nombreFamilia: arbol?.nombreFamilia || 'Árbol familiar'
+  }), [arbol]);
+
+  const nodosRelacionablesPublicacionArbol = useMemo(() => (
+    nodos
+      .filter(nodo => obtenerId(nodo) && !esIdTemporal(obtenerId(nodo)))
+      .map(nodo => ({
+        id: obtenerId(nodo),
+        nodoId: obtenerId(nodo),
+        usuarioId: obtenerId(nodo.usuario),
+        nombre: nodo.nombre || nodo.usuario?.nombreUsuario || 'Familiar',
+        origen: nodo.origen || (obtenerId(nodo.usuario) ? 'usuario_real' : 'perfil_sin_cuenta'),
+        imagen: resolverUrlImagen(nodo.fotoPerfil || nodo.usuario?.imagenPerfil?.urlArchivo || nodo.usuario?.imagenPerfil)
+      }))
+  ), [nodos]);
+
+  const hayMultimediaPublicacionArbol = multimediaBorradorPublicacionArbol.length > 0;
+  const hayImagenPublicacionArbol = multimediaBorradorPublicacionArbol.some(elemento => elemento.tipo === 'imagen');
+  const hayArchivoEspecialPublicacionArbol = multimediaBorradorPublicacionArbol.some(elemento => elemento.tipo !== 'imagen');
+  const puedeAgregarFotosPublicacionArbol = !hayArchivoEspecialPublicacionArbol && multimediaBorradorPublicacionArbol.length < MAX_MULTIMEDIA_MOMENTO_ARBOL;
+  const puedeAgregarGifPublicacionArbol = multimediaBorradorPublicacionArbol.length === 0;
+  const puedePublicarMomentoArbol = Boolean(textoPublicacionArbol.trim() || hayMultimediaPublicacionArbol);
+
+  const actualizarMultimediaPublicacionArbol = (nuevoValor) => {
+    establecerMultimediaBorradorPublicacionArbol(prev => {
+      const siguiente = typeof nuevoValor === 'function' ? nuevoValor(prev) : nuevoValor;
+      multimediaBorradorPublicacionArbolRef.current = siguiente;
+      return siguiente;
+    });
+  };
+
+  const crearElementoMultimediaPublicacionArbol = (archivo) => ({
+    id: crearIdMultimediaMomentoArbol(),
+    archivo,
+    vistaPrevia: URL.createObjectURL(archivo),
+    tipo: esArchivoVideoMomentoArbol(archivo) ? 'video' : (esArchivoGifMomentoArbol(archivo) ? 'gif' : 'imagen'),
+    esRecortable: esArchivoImagenMomentoArbol(archivo),
+    nombre: archivo.name,
+    pesoBytes: archivo.size,
+    recortada: false
+  });
+
+  const limpiarMultimediaPublicacionArbol = () => {
+    const elementos = multimediaBorradorPublicacionArbolRef.current;
+    multimediaBorradorPublicacionArbolRef.current = [];
+    establecerMultimediaBorradorPublicacionArbol([]);
+    establecerEtiquetasImagenPublicacionArbol([]);
+    establecerCropperPublicacionArbol({ abierto: false, archivo: null, multimediaId: null });
+    setTimeout(() => elementos.forEach(elemento => revocarUrlTemporalMomentoArbol(elemento.vistaPrevia)), 0);
+    if (archivoPublicacionArbolRef.current) archivoPublicacionArbolRef.current.value = '';
+    if (gifPublicacionArbolRef.current) gifPublicacionArbolRef.current.value = '';
+  };
+
+  const limpiarHerramientasPublicacionArbol = () => {
+    establecerPanelHerramientaPublicacionArbol(null);
+    establecerUbicacionPublicacionArbol('');
+    establecerUbicacionTemporalPublicacionArbol('');
+    establecerBusquedaPersonaPublicacionArbol('');
+    establecerSugerenciasPersonasPublicacionArbol([]);
+    establecerMencionesPublicacionArbol([]);
+    establecerEtiquetasImagenPublicacionArbol([]);
+    establecerEventoRelacionadoPublicacionArbol(null);
+    establecerPersonasRelacionadasPublicacionArbol([]);
+    establecerBusquedaNodoRelacionadoPublicacionArbol('');
+    establecerFechaMomentoPublicacionArbol('');
+  };
+
+  const abrirModalPublicacionFotosArbol = () => {
+    if (!obtenerId(arbol)) {
+      window.alert('Abre un árbol antes de publicar fotografías.');
+      return;
+    }
+    if (!token) {
+      window.alert('Necesitas iniciar sesión para publicar un Momento Familiar.');
+      return;
+    }
+
+    establecerTextoPublicacionArbol('');
+    limpiarMultimediaPublicacionArbol();
+    limpiarHerramientasPublicacionArbol();
+    establecerModalPublicacionArbolAbierto(true);
+  };
+
+  const cerrarModalPublicacionArbol = () => {
+    if (publicandoMomentoArbol) return;
+    establecerModalPublicacionArbolAbierto(false);
+    establecerPanelHerramientaPublicacionArbol(null);
+  };
+
+  const agregarArchivosPublicacionArbol = (archivosSeleccionados = []) => {
+    const archivos = Array.from(archivosSeleccionados).filter(Boolean);
+    if (archivos.length === 0) return;
+
+    const actuales = multimediaBorradorPublicacionArbolRef.current;
+    const tieneVideo = archivos.some(esArchivoVideoMomentoArbol);
+    const tieneGif = archivos.some(esArchivoGifMomentoArbol);
+    const tieneImagen = archivos.some(esArchivoImagenMomentoArbol);
+
+    if ((tieneVideo || tieneGif) && (archivos.length > 1 || tieneImagen || actuales.length > 0)) {
+      window.alert('Los videos y GIF se publican de uno en uno y no se pueden mezclar con fotografías.');
+      return;
+    }
+
+    if (tieneVideo || tieneGif) {
+      const archivo = archivos[0];
+      if (archivo.size > MAX_UPLOAD_BYTES_MOMENTO_ARBOL) {
+        window.alert(`El archivo supera el límite de ${MAX_UPLOAD_MB_MOMENTO_ARBOL} MB.`);
+        return;
+      }
+      actualizarMultimediaPublicacionArbol([crearElementoMultimediaPublicacionArbol(archivo)]);
+      establecerEtiquetasImagenPublicacionArbol([]);
+      establecerPanelHerramientaPublicacionArbol(null);
+      return;
+    }
+
+    if (actuales.some(elemento => elemento.tipo !== 'imagen')) {
+      window.alert('Elimina el video o GIF actual antes de agregar fotografías.');
+      return;
+    }
+
+    const espaciosDisponibles = Math.max(0, MAX_MULTIMEDIA_MOMENTO_ARBOL - actuales.length);
+    if (espaciosDisponibles === 0) {
+      window.alert(`Solo puedes agregar hasta ${MAX_MULTIMEDIA_MOMENTO_ARBOL} fotografías.`);
+      return;
+    }
+
+    const firmas = new Set(actuales.map(elemento => `${elemento.archivo.name}-${elemento.archivo.size}-${elemento.archivo.lastModified}`));
+    const candidatas = archivos.filter(esArchivoImagenMomentoArbol).filter(archivo => {
+      const firma = `${archivo.name}-${archivo.size}-${archivo.lastModified}`;
+      if (firmas.has(firma)) return false;
+      firmas.add(firma);
+      return true;
+    });
+
+    const nuevas = [];
+    let peso = actuales.reduce((total, elemento) => total + (elemento.pesoBytes || 0), 0);
+    let excedioPeso = false;
+
+    for (const archivo of candidatas) {
+      if (nuevas.length >= espaciosDisponibles) break;
+      if (peso + archivo.size > MAX_UPLOAD_BYTES_MOMENTO_ARBOL) {
+        excedioPeso = true;
+        continue;
+      }
+      nuevas.push(crearElementoMultimediaPublicacionArbol(archivo));
+      peso += archivo.size;
+    }
+
+    if (nuevas.length > 0) {
+      actualizarMultimediaPublicacionArbol(prev => [...prev, ...nuevas]);
+      establecerPanelHerramientaPublicacionArbol(null);
+    }
+
+    if (candidatas.length > espaciosDisponibles) {
+      window.alert(`Se agregaron las primeras ${espaciosDisponibles} fotografías. El máximo es ${MAX_MULTIMEDIA_MOMENTO_ARBOL}.`);
+    } else if (excedioPeso) {
+      window.alert(`Algunas fotografías no se agregaron porque el conjunto supera ${MAX_UPLOAD_MB_MOMENTO_ARBOL} MB.`);
+    } else if (nuevas.length === 0) {
+      window.alert('No se agregaron archivos nuevos. Revisa que sean fotografías compatibles y que no estén duplicadas.');
+    }
+  };
+
+  const manejarCambioArchivoPublicacionArbol = (evento) => {
+    agregarArchivosPublicacionArbol(evento.target.files);
+    evento.target.value = '';
+  };
+
+  const eliminarMultimediaPublicacionArbol = (multimediaId) => {
+    const actuales = multimediaBorradorPublicacionArbolRef.current;
+    const eliminado = actuales.find(elemento => elemento.id === multimediaId);
+    if (!eliminado) return;
+    const restantes = actuales.filter(elemento => elemento.id !== multimediaId);
+    actualizarMultimediaPublicacionArbol(restantes);
+    if (!restantes.some(elemento => elemento.tipo === 'imagen')) {
+      establecerEtiquetasImagenPublicacionArbol([]);
+      if (panelHerramientaPublicacionArbol === 'etiquetas') establecerPanelHerramientaPublicacionArbol(null);
+    }
+    setTimeout(() => revocarUrlTemporalMomentoArbol(eliminado.vistaPrevia), 0);
+  };
+
+  const abrirCropperPublicacionArbol = (elemento) => {
+    if (!elemento?.esRecortable) return;
+    establecerCropperPublicacionArbol({ abierto: true, archivo: elemento.archivo, multimediaId: elemento.id });
+  };
+
+  const cerrarCropperPublicacionArbol = () => {
+    establecerCropperPublicacionArbol({ abierto: false, archivo: null, multimediaId: null });
+  };
+
+  const confirmarCropperPublicacionArbol = ({ archivo, vistaPrevia }) => {
+    if (!archivo || !cropperPublicacionArbol.multimediaId) {
+      revocarUrlTemporalMomentoArbol(vistaPrevia);
+      cerrarCropperPublicacionArbol();
+      return;
+    }
+
+    const anterior = multimediaBorradorPublicacionArbolRef.current.find(
+      elemento => elemento.id === cropperPublicacionArbol.multimediaId
+    );
+    if (!anterior) {
+      revocarUrlTemporalMomentoArbol(vistaPrevia);
+      cerrarCropperPublicacionArbol();
+      return;
+    }
+
+    const nuevaVistaPrevia = vistaPrevia || URL.createObjectURL(archivo);
+    actualizarMultimediaPublicacionArbol(prev => prev.map(elemento => (
+      elemento.id === cropperPublicacionArbol.multimediaId
+        ? { ...elemento, archivo, vistaPrevia: nuevaVistaPrevia, nombre: archivo.name, pesoBytes: archivo.size, recortada: true }
+        : elemento
+    )));
+    setTimeout(() => revocarUrlTemporalMomentoArbol(anterior.vistaPrevia), 0);
+    cerrarCropperPublicacionArbol();
+  };
+
+  const insertarTextoPublicacionArbol = (texto) => {
+    const textarea = textareaPublicacionArbolRef.current;
+    if (!textarea) {
+      establecerTextoPublicacionArbol(prev => `${prev}${texto}`);
+      return;
+    }
+    const inicio = textarea.selectionStart ?? textoPublicacionArbol.length;
+    const fin = textarea.selectionEnd ?? textoPublicacionArbol.length;
+    const nuevoTexto = `${textoPublicacionArbol.slice(0, inicio)}${texto}${textoPublicacionArbol.slice(fin)}`;
+    const nuevaPosicion = inicio + texto.length;
+    establecerTextoPublicacionArbol(nuevoTexto);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nuevaPosicion, nuevaPosicion);
+    }, 0);
+  };
+
+  const detectarMencionPublicacionArbol = (texto, cursor) => {
+    const previo = texto.slice(0, cursor);
+    const coincidencia = previo.match(/(^|\s)@([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]{0,40})$/);
+    if (!coincidencia) return null;
+    return { query: coincidencia[2] || '', inicio: previo.length - coincidencia[2].length - 1 };
+  };
+
+  const manejarCambioTextoPublicacionArbol = (evento) => {
+    const valor = evento.target.value;
+    const cursor = evento.target.selectionStart || valor.length;
+    const mencion = detectarMencionPublicacionArbol(valor, cursor);
+    establecerTextoPublicacionArbol(valor);
+    if (mencion) {
+      establecerPanelHerramientaPublicacionArbol('menciones');
+      establecerBusquedaPersonaPublicacionArbol(mencion.query);
+    }
+  };
+
+  const manejarScrollTextoPublicacionArbol = (evento) => {
+    if (overlayPublicacionArbolRef.current) overlayPublicacionArbolRef.current.scrollTop = evento.target.scrollTop;
+  };
+
+  const abrirPanelHerramientaPublicacionArbol = (panel) => {
+    establecerPanelHerramientaPublicacionArbol(prev => prev === panel ? null : panel);
+    if (panel === 'ubicacion') establecerUbicacionTemporalPublicacionArbol(ubicacionPublicacionArbol);
+    if (panel === 'menciones' || panel === 'etiquetas') {
+      establecerBusquedaPersonaPublicacionArbol('');
+      establecerSugerenciasPersonasPublicacionArbol([]);
+    }
+    if (panel === 'familiares') establecerBusquedaNodoRelacionadoPublicacionArbol('');
+    if (panel === 'eventos' && eventosFamiliares.length === 0) cargarEventosFamiliares(obtenerId(arbol));
+  };
+
+  const seleccionarPersonaPublicacionArbol = (personaOriginal) => {
+    const persona = normalizarPersonaMomentoArbol(personaOriginal);
+    if (!persona.id) return;
+
+    if (panelHerramientaPublicacionArbol === 'etiquetas') {
+      establecerEtiquetasImagenPublicacionArbol(prev => (
+        prev.some(item => String(item.id) === String(persona.id)) ? prev : [...prev, persona]
+      ));
+      establecerBusquedaPersonaPublicacionArbol('');
+      establecerSugerenciasPersonasPublicacionArbol([]);
+      return;
+    }
+
+    const textarea = textareaPublicacionArbolRef.current;
+    const cursor = textarea?.selectionStart ?? textoPublicacionArbol.length;
+    const mencion = detectarMencionPublicacionArbol(textoPublicacionArbol, cursor);
+    const handle = persona.nombreUsuario ? `@${persona.nombreUsuario}` : `@${persona.nombre.replace(/\s+/g, '_')}`;
+    const textoMencion = `${handle} `;
+
+    if (mencion) {
+      const antes = textoPublicacionArbol.slice(0, mencion.inicio);
+      const despues = textoPublicacionArbol.slice(cursor);
+      establecerTextoPublicacionArbol(`${antes}${textoMencion}${despues}`);
+      const posicion = antes.length + textoMencion.length;
+      setTimeout(() => {
+        textarea?.focus();
+        textarea?.setSelectionRange(posicion, posicion);
+      }, 0);
+    } else {
+      insertarTextoPublicacionArbol(textoMencion);
+    }
+
+    establecerMencionesPublicacionArbol(prev => (
+      prev.some(item => String(item.id) === String(persona.id)) ? prev : [...prev, persona]
+    ));
+    establecerBusquedaPersonaPublicacionArbol('');
+    establecerPanelHerramientaPublicacionArbol(null);
+  };
+
+  const alternarPersonaRelacionadaPublicacionArbol = (persona) => {
+    if (!persona?.id) return;
+    establecerPersonasRelacionadasPublicacionArbol(prev => (
+      prev.some(item => String(item.id) === String(persona.id))
+        ? prev.filter(item => String(item.id) !== String(persona.id))
+        : [...prev, persona]
+    ));
+  };
+
+  const renderTextoPublicacionArbol = (texto = '') => (
+    String(texto || '').split(/(@[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]+)/g).map((parte, indice) => (
+      parte.startsWith('@')
+        ? <span key={`mencion-arbol-${indice}`} className="mencion-dorada">{parte}</span>
+        : <React.Fragment key={`texto-arbol-${indice}`}>{parte}</React.Fragment>
+    ))
+  );
+
+  const manejarPublicarMomentoArbol = async () => {
+    if (publicandoMomentoArbol) return;
+    const arbolId = obtenerId(arbol);
+    const contenido = textoPublicacionArbol.trim();
+    const archivos = multimediaBorradorPublicacionArbolRef.current;
+
+    if (!arbolId) {
+      window.alert('No se pudo identificar el árbol de audiencia.');
+      return;
+    }
+    if (!contenido && archivos.length === 0) {
+      window.alert('Escribe un mensaje o agrega al menos una foto, video o GIF.');
+      return;
+    }
+
+    const pesoTotal = archivos.reduce((total, elemento) => total + (elemento.pesoBytes || 0), 0);
+    if (pesoTotal > MAX_UPLOAD_BYTES_MOMENTO_ARBOL) {
+      window.alert(`El conjunto de archivos supera el límite de ${MAX_UPLOAD_MB_MOMENTO_ARBOL} MB.`);
+      return;
+    }
+
+    try {
+      establecerPublicandoMomentoArbol(true);
+      const formData = new FormData();
+      formData.append('tipo', 'familiar');
+      formData.append('contenido', contenido);
+      formData.append('arbolAudienciaId', arbolId);
+      if (fechaMomentoPublicacionArbol) formData.append('fechaMomento', fechaMomentoPublicacionArbol);
+      if (ubicacionPublicacionArbol) formData.append('ubicacionTexto', ubicacionPublicacionArbol);
+      if (personasRelacionadasPublicacionArbol.length > 0) {
+        formData.append('personasRelacionadas', JSON.stringify(
+          personasRelacionadasPublicacionArbol.map(persona => ({ nodoId: persona.id }))
+        ));
+      }
+      if (mencionesPublicacionArbol.length > 0) {
+        formData.append('menciones', JSON.stringify(mencionesPublicacionArbol.map(persona => ({
+          id: persona.id,
+          nombre: persona.nombreReal || persona.nombre,
+          nickname: persona.nickname,
+          nombreUsuario: persona.nombreUsuario
+        }))));
+      }
+      if (etiquetasImagenPublicacionArbol.length > 0) {
+        formData.append('etiquetasMultimedia', JSON.stringify(etiquetasImagenPublicacionArbol.map(persona => ({
+          id: persona.id,
+          nombre: persona.nombreReal || persona.nombre,
+          nickname: persona.nickname,
+          nombreUsuario: persona.nombreUsuario
+        }))));
+      }
+      if (eventoRelacionadoPublicacionArbol?.id) {
+        formData.append('eventoRelacionadoId', eventoRelacionadoPublicacionArbol.id);
+        formData.append('eventoRelacionado', JSON.stringify({
+          id: eventoRelacionadoPublicacionArbol.id,
+          titulo: eventoRelacionadoPublicacionArbol.titulo,
+          fechaInicio: eventoRelacionadoPublicacionArbol.fechaInicio,
+          tipoEvento: eventoRelacionadoPublicacionArbol.tipoEvento,
+          nombreFamilia: audienciaMomentoArbol.nombreFamilia
+        }));
+      }
+      archivos.forEach(elemento => formData.append('archivo', elemento.archivo));
+
+      const respuesta = await fetch(`${URL_BASE_BACKEND}/api/publicaciones/crear`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo publicar el Momento Familiar.');
+
+      establecerModalPublicacionArbolAbierto(false);
+      establecerTextoPublicacionArbol('');
+      limpiarMultimediaPublicacionArbol();
+      limpiarHerramientasPublicacionArbol();
+      establecerMensajeSistema('Momento Familiar publicado correctamente.');
+      establecerVersionMomentosFamiliares(version => version + 1);
+    } catch (error) {
+      console.error('Error al publicar Momento Familiar desde el árbol:', error);
+      window.alert(error.message || 'No se pudo publicar el Momento Familiar.');
+    } finally {
+      establecerPublicandoMomentoArbol(false);
+    }
+  };
+
+  useEffect(() => {
+    multimediaBorradorPublicacionArbolRef.current = multimediaBorradorPublicacionArbol;
+  }, [multimediaBorradorPublicacionArbol]);
+
+  useEffect(() => {
+    if (!token || !['menciones', 'etiquetas'].includes(panelHerramientaPublicacionArbol)) return undefined;
+    const query = busquedaPersonaPublicacionArbol.trim();
+    if (!query) {
+      establecerSugerenciasPersonasPublicacionArbol([]);
+      establecerCargandoSugerenciasPublicacionArbol(false);
+      return undefined;
+    }
+
+    const temporizador = window.setTimeout(async () => {
+      try {
+        establecerCargandoSugerenciasPublicacionArbol(true);
+        const respuesta = await fetch(`${URL_BASE_BACKEND}/api/publicaciones/buscar?q=${encodeURIComponent(query)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const datos = await respuesta.json().catch(() => ({}));
+        if (!respuesta.ok) {
+          establecerSugerenciasPersonasPublicacionArbol([]);
+          return;
+        }
+        const personas = Array.isArray(datos.personas) ? datos.personas : [];
+        establecerSugerenciasPersonasPublicacionArbol(personas.map(normalizarPersonaMomentoArbol).filter(persona => persona.id).slice(0, 6));
+      } catch (error) {
+        establecerSugerenciasPersonasPublicacionArbol([]);
+      } finally {
+        establecerCargandoSugerenciasPublicacionArbol(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(temporizador);
+  }, [busquedaPersonaPublicacionArbol, panelHerramientaPublicacionArbol, token]);
+
+  useEffect(() => {
+    if (!modalPublicacionArbolAbierto) return undefined;
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const manejarEscape = (evento) => {
+      if (evento.key === 'Escape' && !publicandoMomentoArbol && !cropperPublicacionArbol.abierto) cerrarModalPublicacionArbol();
+    };
+    document.addEventListener('keydown', manejarEscape);
+    return () => {
+      document.body.style.overflow = overflowAnterior;
+      document.removeEventListener('keydown', manejarEscape);
+    };
+  }, [modalPublicacionArbolAbierto, publicandoMomentoArbol, cropperPublicacionArbol.abierto]);
+
+  useEffect(() => () => {
+    multimediaBorradorPublicacionArbolRef.current.forEach(elemento => revocarUrlTemporalMomentoArbol(elemento.vistaPrevia));
+    multimediaBorradorPublicacionArbolRef.current = [];
+  }, []);
+
+  const renderChipsPublicacionArbol = () => {
+    const hayChips = ubicacionPublicacionArbol || eventoRelacionadoPublicacionArbol || personasRelacionadasPublicacionArbol.length > 0 || audienciaMomentoArbol.id;
+    if (!hayChips) return null;
+    return (
+      <div className="chips-publicacion-modal">
+        <span className="chip-publicacion familia">
+          <i className="bi bi-shield-lock-fill"></i>
+          Visible para {audienciaMomentoArbol.nombreFamilia}
+        </span>
+        {ubicacionPublicacionArbol && (
+          <span className="chip-publicacion ubicacion">
+            <i className="bi bi-geo-alt-fill"></i>{ubicacionPublicacionArbol}
+            <button type="button" onClick={() => establecerUbicacionPublicacionArbol('')} aria-label="Quitar ubicación"><i className="bi bi-x"></i></button>
+          </span>
+        )}
+        {eventoRelacionadoPublicacionArbol && (
+          <span className="chip-publicacion evento">
+            <i className="bi bi-calendar-heart-fill"></i>{eventoRelacionadoPublicacionArbol.titulo}
+            <button type="button" onClick={() => establecerEventoRelacionadoPublicacionArbol(null)} aria-label="Quitar evento"><i className="bi bi-x"></i></button>
+          </span>
+        )}
+        {personasRelacionadasPublicacionArbol.map(persona => (
+          <span key={`relacion-arbol-${persona.id}`} className="chip-publicacion familiar-relacionado">
+            <i className="bi bi-person-heart"></i>{persona.nombre}
+            <button type="button" onClick={() => alternarPersonaRelacionadaPublicacionArbol(persona)} aria-label={`Quitar a ${persona.nombre}`}><i className="bi bi-x"></i></button>
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  const renderPanelHerramientaPublicacionArbol = () => {
+    if (!panelHerramientaPublicacionArbol) return null;
+
+    if (panelHerramientaPublicacionArbol === 'emoji') {
+      return (
+        <div className="panel-herramienta-publicacion panel-emojis">
+          {EMOJIS_MOMENTO_FAMILIAR_ARBOL.map(emoji => (
+            <button key={emoji} type="button" onClick={() => insertarTextoPublicacionArbol(emoji)}>{emoji}</button>
+          ))}
+        </div>
+      );
+    }
+
+    if (panelHerramientaPublicacionArbol === 'ubicacion') {
+      return (
+        <div className="panel-herramienta-publicacion panel-ubicacion">
+          <div className="input-ubicacion-publicacion">
+            <i className="bi bi-geo-alt"></i>
+            <input type="text" value={ubicacionTemporalPublicacionArbol} onChange={evento => establecerUbicacionTemporalPublicacionArbol(evento.target.value)} placeholder="Agrega una ubicación manual..." autoFocus />
+          </div>
+          <div className="acciones-panel-publicacion">
+            <button type="button" className="btn-cancelar-panel" onClick={() => establecerPanelHerramientaPublicacionArbol(null)}>Cancelar</button>
+            <button type="button" className="btn-guardar-panel" onClick={() => {
+              establecerUbicacionPublicacionArbol(ubicacionTemporalPublicacionArbol.trim());
+              establecerPanelHerramientaPublicacionArbol(null);
+            }}>Guardar</button>
+          </div>
+        </div>
+      );
+    }
+
+    if (panelHerramientaPublicacionArbol === 'eventos') {
+      return (
+        <div className="panel-herramienta-publicacion panel-eventos-publicacion">
+          <div className="encabezado-panel-eventos-publicacion">
+            <div><strong>Mencionar evento familiar</strong><small>Relaciona esta publicación con un evento del árbol.</small></div>
+            <button type="button" onClick={() => cargarEventosFamiliares(obtenerId(arbol))} disabled={cargandoEventos} title="Actualizar eventos">
+              <i className={`bi ${cargandoEventos ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
+            </button>
+          </div>
+          <div className="lista-eventos-publicacion">
+            {cargandoEventos ? (
+              <div className="estado-sugerencias-publicacion"><span className="spinner-border spinner-border-sm me-2"></span>Cargando eventos...</div>
+            ) : errorEventos ? (
+              <div className="estado-sugerencias-publicacion error">{errorEventos}</div>
+            ) : eventosFamiliares.length > 0 ? eventosFamiliares.map(evento => {
+              const fecha = evento.fechaInicio ? new Date(evento.fechaInicio) : null;
+              return (
+                <button key={evento.id} type="button" className="evento-sugerido-publicacion" onClick={() => {
+                  establecerEventoRelacionadoPublicacionArbol(evento);
+                  establecerPanelHerramientaPublicacionArbol(null);
+                }}>
+                  <span className="evento-sugerido-fecha">
+                    <strong>{fecha && !Number.isNaN(fecha.getTime()) ? String(fecha.getDate()).padStart(2, '0') : '--'}</strong>
+                    <small>{fecha && !Number.isNaN(fecha.getTime()) ? fecha.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '').toUpperCase() : '---'}</small>
+                  </span>
+                  <span className="evento-sugerido-info"><strong>{evento.titulo}</strong><small>{obtenerTextoUbicacionEvento(evento)}</small></span>
+                </button>
+              );
+            }) : <div className="estado-sugerencias-publicacion">No hay eventos familiares disponibles.</div>}
+          </div>
+        </div>
+      );
+    }
+
+    if (panelHerramientaPublicacionArbol === 'familiares') {
+      const termino = normalizarTexto(busquedaNodoRelacionadoPublicacionArbol).toLowerCase();
+      const resultados = nodosRelacionablesPublicacionArbol.filter(nodo => !termino || nodo.nombre.toLowerCase().includes(termino));
+      return (
+        <div className="panel-herramienta-publicacion panel-familiares-relacionados">
+          <div className="encabezado-panel-familiares"><div><strong>Relacionar familiares del árbol</strong><small>Incluye miembros registrados y perfiles familiares sin cuenta.</small></div></div>
+          <div className="buscador-familiares-relacionados">
+            <i className="bi bi-search"></i>
+            <input type="search" value={busquedaNodoRelacionadoPublicacionArbol} onChange={evento => establecerBusquedaNodoRelacionadoPublicacionArbol(evento.target.value)} placeholder="Buscar familiar por nombre..." autoFocus />
+          </div>
+          <div className="lista-familiares-relacionados">
+            {resultados.length > 0 ? resultados.map(nodo => {
+              const seleccionado = personasRelacionadasPublicacionArbol.some(item => String(item.id) === String(nodo.id));
+              return (
+                <button key={nodo.id} type="button" className={`familiar-relacionable ${seleccionado ? 'seleccionado' : ''}`} onClick={() => alternarPersonaRelacionadaPublicacionArbol(nodo)}>
+                  {nodo.imagen ? <img src={nodo.imagen} alt="" /> : <span>{obtenerIniciales(nodo.nombre)}</span>}
+                  <div><strong>{nodo.nombre}</strong><small>{nodo.origen === 'perfil_sin_cuenta' ? 'Perfil familiar sin cuenta' : 'Miembro registrado'}</small></div>
+                  <i className={`bi ${seleccionado ? 'bi-check-circle-fill' : 'bi-plus-circle'}`}></i>
+                </button>
+              );
+            }) : <div className="estado-panel-familiares">No se encontraron familiares guardados en este árbol.</div>}
+          </div>
+        </div>
+      );
+    }
+
+    if (panelHerramientaPublicacionArbol === 'menciones' || panelHerramientaPublicacionArbol === 'etiquetas') {
+      const esEtiquetar = panelHerramientaPublicacionArbol === 'etiquetas';
+      return (
+        <div className="panel-herramienta-publicacion panel-personas-publicacion">
+          <div className="input-ubicacion-publicacion">
+            <i className={`bi ${esEtiquetar ? 'bi-person-bounding-box' : 'bi-at'}`}></i>
+            <input type="text" value={busquedaPersonaPublicacionArbol} onChange={evento => establecerBusquedaPersonaPublicacionArbol(evento.target.value)} placeholder={esEtiquetar ? 'Buscar persona para etiquetar...' : 'Buscar persona o @nickname...'} autoFocus />
+          </div>
+          <div className="lista-sugerencias-publicacion">
+            {cargandoSugerenciasPublicacionArbol ? (
+              <div className="estado-sugerencias-publicacion"><span className="spinner-border spinner-border-sm me-2"></span>Buscando personas...</div>
+            ) : sugerenciasPersonasPublicacionArbol.length > 0 ? sugerenciasPersonasPublicacionArbol.map(persona => {
+              const avatar = resolverUrlImagen(typeof persona.imagen === 'object' ? (persona.imagen.urlArchivo || persona.imagen.url) : persona.imagen) || `https://ui-avatars.com/api/?name=${encodeURIComponent(persona.nombre)}&background=0D1B2A&color=fff`;
+              return (
+                <button key={persona.id} type="button" className="persona-sugerida-publicacion" onClick={() => seleccionarPersonaPublicacionArbol(persona)}>
+                  <img src={avatar} alt={persona.nombre} />
+                  <div><strong>{persona.nombreReal || persona.nombre}</strong>{persona.nickname && <small className="d-block text-muted">{persona.nickname}</small>}<small>{esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}</small></div>
+                </button>
+              );
+            }) : (
+              <div className="estado-sugerencias-publicacion">{busquedaPersonaPublicacionArbol.trim() ? 'No se encontraron personas.' : 'Escribe un nombre o nickname para buscar.'}</div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderEditorMultimediaPublicacionArbol = () => {
+    if (!hayMultimediaPublicacionArbol) return null;
+    const archivoEspecial = multimediaBorradorPublicacionArbol.length === 1 && multimediaBorradorPublicacionArbol[0].tipo !== 'imagen';
+    return (
+      <div className="editor-multimedia-publicacion mt-3">
+        <div className="editor-multimedia-encabezado">
+          <div><strong>{archivoEspecial ? 'Archivo adjunto' : 'Fotos de la publicación'}</strong><span>{archivoEspecial ? 'Publica un video o GIF de forma individual.' : `${multimediaBorradorPublicacionArbol.length} de ${MAX_MULTIMEDIA_MOMENTO_ARBOL} fotografías`}</span></div>
+          {!archivoEspecial && <span className="editor-multimedia-contador">{multimediaBorradorPublicacionArbol.length}/{MAX_MULTIMEDIA_MOMENTO_ARBOL}</span>}
+        </div>
+        <div className={`carrusel-borrador-publicacion ${archivoEspecial ? 'archivo-unico' : ''}`}>
+          {multimediaBorradorPublicacionArbol.map((elemento, indice) => (
+            <article key={elemento.id} className="tarjeta-multimedia-borrador">
+              {elemento.tipo === 'video' ? <video src={elemento.vistaPrevia} muted preload="metadata" /> : <img src={elemento.vistaPrevia} alt={`Vista previa ${indice + 1}`} />}
+              <div className="acciones-multimedia-borrador">
+                {elemento.esRecortable && (
+                  <button type="button" className="accion-multimedia editar" onClick={() => abrirCropperPublicacionArbol(elemento)} disabled={publicandoMomentoArbol} aria-label={`Recortar fotografía ${indice + 1}`} title="Recortar fotografía"><i className="bi bi-pencil-fill"></i></button>
+                )}
+                <button type="button" className="accion-multimedia eliminar" onClick={() => eliminarMultimediaPublicacionArbol(elemento.id)} disabled={publicandoMomentoArbol} aria-label={`Eliminar archivo ${indice + 1}`} title="Eliminar archivo"><i className="bi bi-x-lg"></i></button>
+              </div>
+              {!archivoEspecial && <span className="posicion-multimedia-borrador">{indice + 1}</span>}
+            </article>
+          ))}
+          {puedeAgregarFotosPublicacionArbol && multimediaBorradorPublicacionArbol.length > 0 && (
+            <button type="button" className="tarjeta-agregar-multimedia" onClick={() => archivoPublicacionArbolRef.current?.click()} disabled={publicandoMomentoArbol} aria-label="Agregar más fotografías"><i className="bi bi-plus-lg"></i><span>Agregar</span></button>
+          )}
+        </div>
+        {hayImagenPublicacionArbol && etiquetasImagenPublicacionArbol.length > 0 && (
+          <div className="etiquetas-imagen-modal">
+            <span className="titulo-etiquetas-imagen"><i className="bi bi-person-bounding-box"></i> Personas etiquetadas en la publicación</span>
+            <div className="chips-publicacion-modal">
+              {etiquetasImagenPublicacionArbol.map(persona => (
+                <span key={persona.id} className="chip-publicacion etiqueta">{persona.nombreReal || persona.nombre}{persona.nickname ? ` (${persona.nickname})` : ''}<button type="button" onClick={() => establecerEtiquetasImagenPublicacionArbol(prev => prev.filter(item => String(item.id) !== String(persona.id)))} aria-label={`Quitar etiqueta de ${persona.nombre}`}><i className="bi bi-x"></i></button></span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const momentosPerfilSinCuenta = useMemo(() => {
+    if (!nodoSeleccionado || nodoSeleccionado.origen !== 'perfil_sin_cuenta') return [];
+
+    const nodoId = obtenerId(nodoSeleccionado) || 'perfil-sin-cuenta';
+    const urlsIncluidas = new Set();
+    const fotosUnicas = (Array.isArray(nodoSeleccionado.fotos) ? nodoSeleccionado.fotos : [])
+      .map(normalizarFotoNodo)
+      .filter(Boolean)
+      .filter(esFotografiaMomento)
+      .filter((foto) => {
+        const claveUrl = obtenerUrlCrudaFoto(foto).toLowerCase();
+        if (!claveUrl || urlsIncluidas.has(claveUrl)) return false;
+        urlsIncluidas.add(claveUrl);
+        return true;
+      });
+
+    const gruposPorFecha = new Map();
+
+    fotosUnicas.forEach((foto, indiceFoto) => {
+      const fechaReferencia = foto.fechaReal || foto.fechaSubida || nodoSeleccionado.updatedAt || nodoSeleccionado.createdAt || null;
+      const partesFecha = extraerPartesFecha(fechaReferencia);
+      const claveFecha = partesFecha
+        ? `${String(partesFecha.year).padStart(4, '0')}-${String(partesFecha.month).padStart(2, '0')}-${String(partesFecha.day).padStart(2, '0')}`
+        : 'sin-fecha';
+      const fechaEfectiva = partesFecha ? `${claveFecha}T12:00:00` : fechaReferencia;
+
+      if (!gruposPorFecha.has(claveFecha)) {
+        gruposPorFecha.set(claveFecha, {
+          _id: `archivo-familiar-${nodoId}-${claveFecha}`,
+          id: `archivo-familiar-${nodoId}-${claveFecha}`,
+          origenMomento: 'perfil_sin_cuenta',
+          esMomentoVirtual: true,
+          fechaMomento: fechaEfectiva,
+          fechaEfectiva,
+          createdAt: fechaEfectiva || foto.fechaSubida || null,
+          contenido: '',
+          multimedia: [],
+          reacciones: [],
+          totalComentarios: 0,
+          personasRelacionadas: [],
+          nombreFamiliaAudienciaSnapshot: arbol?.nombreFamilia || arbol?.nombre || 'Árbol familiar'
+        });
+      }
+
+      gruposPorFecha.get(claveFecha).multimedia.push({
+        ...foto,
+        _id: `foto-archivo-${nodoId}-${indiceFoto}`,
+        id: `foto-archivo-${nodoId}-${indiceFoto}`,
+        urlArchivo: foto.url,
+        formato: foto.formato || foto.mimetype || 'image/jpeg',
+        origenFotoNodo: true
+      });
+    });
+
+    return Array.from(gruposPorFecha.values())
+      .map((momento) => ({
+        ...momento,
+        multimedia: [...momento.multimedia].sort((a, b) => (
+          new Date(a.fechaSubida || a.fechaReal || 0).getTime() -
+          new Date(b.fechaSubida || b.fechaReal || 0).getTime()
+        ))
+      }))
+      .sort((a, b) => (
+        new Date(obtenerFechaEfectivaMomento(a) || 0).getTime() -
+        new Date(obtenerFechaEfectivaMomento(b) || 0).getTime()
+      ));
+  }, [nodoSeleccionado, arbol?.nombreFamilia, arbol?.nombre]);
+
+  const momentosFamiliaresCombinados = useMemo(() => {
+    return [
+      ...momentosFamiliaresNodo.map(publicacion => ({
+        ...publicacion,
+        origenMomento: publicacion.origenMomento || 'publicacion'
+      })),
+      ...momentosPerfilSinCuenta
+    ].sort((a, b) => (
+      new Date(obtenerFechaEfectivaMomento(a) || 0).getTime() -
+      new Date(obtenerFechaEfectivaMomento(b) || 0).getTime()
+    ));
+  }, [momentosFamiliaresNodo, momentosPerfilSinCuenta]);
+
+  const publicacionMomentoActiva = momentosFamiliaresCombinados[indiceMomentoFamiliar] || null;
+  const esMomentoVirtualActivo = publicacionMomentoActiva?.origenMomento === 'perfil_sin_cuenta';
+  const fotoMomentoActiva = publicacionMomentoActiva?.multimedia?.[indiceFotoMomentoFamiliar] || null;
+  const descripcionMomentoActiva = esMomentoVirtualActivo
+    ? String(fotoMomentoActiva?.descripcion || '').trim()
+    : String(publicacionMomentoActiva?.contenido || '').trim();
+  const personasMomentoActivo = esMomentoVirtualActivo
+    ? String(fotoMomentoActiva?.personas || '').trim()
+    : '';
+  const ubicacionMomentoActiva = esMomentoVirtualActivo
+    ? String(fotoMomentoActiva?.lugar || '').trim()
+    : String(publicacionMomentoActiva?.ubicacionTexto || '').trim();
+  const fechaFotoMomentoActiva = esMomentoVirtualActivo
+    ? (fotoMomentoActiva?.fechaReal || fotoMomentoActiva?.fechaSubida || obtenerFechaEfectivaMomento(publicacionMomentoActiva))
+    : null;
+
+  const fotosMomentosPanel = useMemo(() => {
+    return momentosFamiliaresCombinados
+      .flatMap((publicacion, indicePublicacion) => (
+        (Array.isArray(publicacion.multimedia) ? publicacion.multimedia : [])
+          .filter(esFotografiaMomento)
+          .map((foto, indiceFoto) => ({
+            foto,
+            indicePublicacion,
+            indiceFoto,
+            fecha: obtenerFechaEfectivaMomento(publicacion),
+            origenMomento: publicacion.origenMomento || 'publicacion'
+          }))
+      ))
+      .sort((a, b) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime());
+  }, [momentosFamiliaresCombinados]);
+
+  const cerrarModalMomentosFamiliares = () => {
+    establecerModalMomentosFamiliaresAbierto(false);
+    establecerNuevoComentarioMomento('');
+  };
+
+  const abrirModalMomentosFamiliares = (indicePublicacion = 0, indiceFoto = 0) => {
+    if (momentosFamiliaresCombinados.length === 0) return;
+    establecerIndiceMomentoFamiliar(Math.max(0, Math.min(indicePublicacion, momentosFamiliaresCombinados.length - 1)));
+    establecerIndiceFotoMomentoFamiliar(Math.max(0, indiceFoto));
+    establecerModalMomentosFamiliaresAbierto(true);
+  };
+
+  const navegarMomentoFamiliar = (direccion) => {
+    establecerIndiceMomentoFamiliar(indiceActual => {
+      const siguiente = indiceActual + direccion;
+      if (siguiente < 0 || siguiente >= momentosFamiliaresCombinados.length) return indiceActual;
+      return siguiente;
+    });
+    establecerIndiceFotoMomentoFamiliar(0);
+    establecerNuevoComentarioMomento('');
+  };
+
+  const cargarComentariosMomento = async (publicacionId) => {
+    if (!publicacionId || comentariosMomentos[publicacionId]) return;
+
+    try {
+      establecerCargandoComentariosMomento(true);
+      const respuesta = await fetch(`${URL_BASE_BACKEND}/api/comentarios/publicacion/${publicacionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => []);
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudieron cargar los comentarios.');
+
+      establecerComentariosMomentos(prev => ({
+        ...prev,
+        [publicacionId]: Array.isArray(datos) ? datos : []
+      }));
+    } catch (error) {
+      console.error('Error al cargar comentarios del Momento Familiar:', error);
+      establecerComentariosMomentos(prev => ({ ...prev, [publicacionId]: [] }));
+    } finally {
+      establecerCargandoComentariosMomento(false);
+    }
+  };
+
+  const enviarComentarioMomento = async () => {
+    if (esMomentoVirtualActivo) return;
+    const publicacionId = obtenerId(publicacionMomentoActiva);
+    const texto = nuevoComentarioMomento.trim();
+    if (!publicacionId || !texto || enviandoComentarioMomento) return;
+
+    try {
+      establecerEnviandoComentarioMomento(true);
+      const respuesta = await fetch(`${URL_BASE_BACKEND}/api/comentarios/crear`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ publicacionId, texto })
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo publicar el comentario.');
+
+      establecerComentariosMomentos(prev => ({
+        ...prev,
+        [publicacionId]: [...(prev[publicacionId] || []), datos.comentario]
+      }));
+      establecerMomentosFamiliaresNodo(prev => prev.map(pub => (
+        String(obtenerId(pub)) === String(publicacionId)
+          ? { ...pub, totalComentarios: Number(pub.totalComentarios || 0) + 1 }
+          : pub
+      )));
+      establecerNuevoComentarioMomento('');
+    } catch (error) {
+      window.alert(error.message || 'No se pudo publicar el comentario.');
+    } finally {
+      establecerEnviandoComentarioMomento(false);
+    }
+  };
+
+  const alternarReaccionMomento = async () => {
+    if (esMomentoVirtualActivo) return;
+    const publicacionId = obtenerId(publicacionMomentoActiva);
+    if (!publicacionId) return;
+
+    try {
+      const respuesta = await fetch(`${URL_BASE_BACKEND}/api/publicaciones/${publicacionId}/reaccionar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo actualizar la reacción.');
+
+      establecerMomentosFamiliaresNodo(prev => prev.map(pub => (
+        String(obtenerId(pub)) === String(publicacionId)
+          ? { ...pub, reacciones: Array.isArray(datos.reacciones) ? datos.reacciones : [] }
+          : pub
+      )));
+    } catch (error) {
+      console.error('Error al reaccionar al Momento Familiar:', error);
+    }
+  };
+
+  const usuarioReaccionoMomento = (publicacion = {}) => {
+    if (publicacion?.origenMomento === 'perfil_sin_cuenta') return false;
+    const miId = usuarioActualId || obtenerId(usuarioSesion);
+    if (!miId || !Array.isArray(publicacion.reacciones)) return false;
+    return publicacion.reacciones.some(reaccion => String(obtenerId(reaccion) || reaccion) === String(miId));
+  };
+
+  useEffect(() => {
+    const arbolId = obtenerId(arbol);
+    const nodoId = obtenerId(nodoSeleccionado);
+
+    establecerModalMomentosFamiliaresAbierto(false);
+    establecerIndiceMomentoFamiliar(0);
+    establecerIndiceFotoMomentoFamiliar(0);
+    establecerMomentosFamiliaresNodo([]);
+    establecerErrorMomentosFamiliares('');
+    establecerComentariosMomentos({});
+
+    if (!arbolId || !nodoId || !token) {
+      establecerCargandoMomentosFamiliares(false);
+      return undefined;
+    }
+
+    const controlador = new AbortController();
+
+    const cargarMomentos = async () => {
+      try {
+        establecerCargandoMomentosFamiliares(true);
+        const respuesta = await fetch(
+          `${URL_BASE_BACKEND}/api/publicaciones/arbol/${arbolId}/nodo/${nodoId}/momentos-familiares`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controlador.signal
+          }
+        );
+        const datos = await respuesta.json().catch(() => ({}));
+        if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudieron cargar los Momentos Familiares.');
+
+        const publicaciones = (Array.isArray(datos.publicaciones) ? datos.publicaciones : [])
+          .map(publicacion => ({
+            ...publicacion,
+            multimedia: (Array.isArray(publicacion.multimedia) ? publicacion.multimedia : []).filter(esFotografiaMomento)
+          }))
+          .filter(publicacion => publicacion.multimedia.length > 0)
+          .sort((a, b) => new Date(obtenerFechaEfectivaMomento(a)).getTime() - new Date(obtenerFechaEfectivaMomento(b)).getTime());
+
+        establecerMomentosFamiliaresNodo(publicaciones);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error al cargar Momentos Familiares del nodo:', error);
+          establecerErrorMomentosFamiliares(error.message || 'No se pudieron cargar los Momentos Familiares.');
+        }
+      } finally {
+        if (!controlador.signal.aborted) establecerCargandoMomentosFamiliares(false);
+      }
+    };
+
+    cargarMomentos();
+    return () => controlador.abort();
+  }, [arbol?._id, nodoSeleccionado?.id, token, versionMomentosFamiliares]);
+
+  useEffect(() => {
+    if (!modalMomentosFamiliaresAbierto || !publicacionMomentoActiva || esMomentoVirtualActivo) return;
+    const publicacionId = obtenerId(publicacionMomentoActiva);
+    if (publicacionId) cargarComentariosMomento(publicacionId);
+  }, [modalMomentosFamiliaresAbierto, indiceMomentoFamiliar, esMomentoVirtualActivo]);
+
+  useEffect(() => {
+    if (!modalMomentosFamiliaresAbierto) return undefined;
+
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const manejarTeclado = (evento) => {
+      if (evento.key === 'Escape') {
+        cerrarModalMomentosFamiliares();
+        return;
+      }
+
+      if (evento.target?.closest?.('.publicacion-media-carousel')) return;
+      if (evento.key === 'ArrowLeft') navegarMomentoFamiliar(-1);
+      if (evento.key === 'ArrowRight') navegarMomentoFamiliar(1);
+    };
+
+    document.addEventListener('keydown', manejarTeclado);
+    return () => {
+      document.body.style.overflow = overflowAnterior;
+      document.removeEventListener('keydown', manejarTeclado);
+    };
+  }, [modalMomentosFamiliaresAbierto, momentosFamiliaresCombinados.length]);
 
   const generarIdTemporal = (prefijo = 'tmp') => {
     return `${prefijo}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -1441,80 +2606,155 @@ export default function ArbolGenealogico() {
     }
   };
 
-  const handleSeleccionarImagenIndividual = async (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-
-    try {
-      setSubiendoFoto(true);
-
-      // 1. Crear FormData con el archivo binario real
-      const formData = new FormData();
-      formData.append('archivo', file);
-
-      // 2. Subir directamente al servidor usando el endpoint de uploads
-      const res = await fetch('/api/uploads/subir', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}` // Usa tu token de autenticación
-        },
-        body: formData
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.mensaje || 'Error al subir la imagen al servidor');
-      }
-
-      // 3. Extraer solo la URL del archivo (NO almacenar Base64)
-      const urlImagenSubida = data.upload?.urlArchivo || data.upload?.url || data.url;
-
-      if (!urlImagenSubida) {
-        throw new Error('No se recibió la URL de la imagen subida.');
-      }
-
-      // 4. Cargar la URL en el estado temporal e invocar el modal
-      setTempFotoData({
-        url: urlImagenSubida,
-        fechaSubida: new Date().toISOString().split('T')[0],
-        fechaReal: '',
-        personas: '',
-        lugar: '',
-        descripcion: ''
-      });
-
-      // Abrir modal de metadatos
-      setModalFotoMetadata(true);
-
-    } catch (err) {
-      console.error('Error al subir imagen:', err);
-      alert(err.message || 'Error al procesar la imagen');
-    } finally {
-      setSubiendoFoto(false);
-      e.target.value = ''; // Limpiar el input para permitir subir la misma foto si se desea
+  const limpiarFotoPendiente = () => {
+    if (previewFotoPendiente?.startsWith('blob:')) {
+      URL.revokeObjectURL(previewFotoPendiente);
     }
-  };
 
-  const handleGuardarMetadataFoto = () => {
-    if (!tempFotoData.url) return;
-
-    // Agregar la nueva foto procesada al estado actual de las fotos del perfil sin cuenta o nodo
-    setFormPerfilSinCuenta(prev => ({
-      ...prev,
-      fotos: [...(prev.fotos || []), tempFotoData]
-    }));
-
-    // Resetear modal y estado temporal
-    setModalFotoMetadata(false);
+    setArchivoFotoPendiente(null);
+    setPreviewFotoPendiente('');
+    setDestinoFotoPendiente('galeria');
+    setErrorFotoMetadata('');
     setTempFotoData({
-      url: '',
-      fechaSubida: new Date().toISOString().split('T')[0],
+      fechaSubida: new Date().toISOString(),
       fechaReal: '',
       personas: '',
       lugar: '',
       descripcion: ''
     });
+  };
+
+  const cerrarModalFotoMetadata = () => {
+    if (subiendoFoto) return;
+    setModalFotoMetadata(false);
+    limpiarFotoPendiente();
+  };
+
+  const handleSeleccionarImagenIndividual = (evento, destino = 'galeria') => {
+    const archivos = Array.from(evento.target.files || []);
+    evento.target.value = '';
+
+    if (archivos.length === 0) return;
+
+    if (archivos.length !== 1) {
+      window.alert('Selecciona solamente una fotografía por vez.');
+      return;
+    }
+
+    const archivo = archivos[0];
+
+    if (!archivo.type.startsWith('image/')) {
+      window.alert('El archivo seleccionado no es una imagen válida.');
+      return;
+    }
+
+    if (destino === 'galeria' && formularioPerfilSinCuenta.fotosGaleria.length >= 8) {
+      window.alert('La galería ya alcanzó el máximo de 8 fotografías.');
+      return;
+    }
+
+    const preview = URL.createObjectURL(archivo);
+
+    setArchivoFotoPendiente(archivo);
+    setPreviewFotoPendiente(preview);
+    setDestinoFotoPendiente(destino);
+    setErrorFotoMetadata('');
+    setTempFotoData({
+      fechaSubida: new Date().toISOString(),
+      fechaReal: '',
+      personas: '',
+      lugar: '',
+      descripcion: ''
+    });
+    setModalFotoMetadata(true);
+  };
+
+  const handleGuardarMetadataFoto = async () => {
+    if (!archivoFotoPendiente || !arbol?._id || subiendoFoto) return;
+
+    const fechaReal = tempFotoData.fechaReal.trim();
+    const personas = tempFotoData.personas.trim();
+    const lugar = tempFotoData.lugar.trim();
+    const descripcion = tempFotoData.descripcion.trim();
+
+    if (!fechaReal || !personas || !lugar || !descripcion) {
+      setErrorFotoMetadata('Completa la fecha real, las personas, el lugar y la descripción.');
+      return;
+    }
+
+    const fechaFoto = new Date(`${fechaReal}T12:00:00`);
+    if (Number.isNaN(fechaFoto.getTime())) {
+      setErrorFotoMetadata('La fecha real de la fotografía no es válida.');
+      return;
+    }
+
+    if (fechaFoto.getTime() > Date.now()) {
+      setErrorFotoMetadata('La fecha real de la fotografía no puede estar en el futuro.');
+      return;
+    }
+
+    try {
+      setSubiendoFoto(true);
+      setErrorFotoMetadata('');
+
+      const formData = new FormData();
+      formData.append('archivo', archivoFotoPendiente);
+
+      const respuesta = await fetch(
+        `${URL_BASE_BACKEND}/api/nodos/arbol/${arbol._id}/subir-foto`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: formData
+        }
+      );
+
+      const data = await respuesta.json().catch(() => ({}));
+
+      if (!respuesta.ok) {
+        throw new Error(data.mensaje || 'No se pudo subir la fotografía.');
+      }
+
+      const url = data.url || data.urlArchivo || data.upload?.urlArchivo || data.upload?.url;
+
+      if (!url) {
+        throw new Error('El servidor no devolvió la URL de la fotografía.');
+      }
+
+      const fotoNueva = {
+        url,
+        fechaSubida: data.fechaSubida || new Date().toISOString(),
+        fechaReal,
+        personas,
+        lugar,
+        descripcion,
+        esFotoPerfil: destinoFotoPendiente === 'perfil'
+      };
+
+      establecerFormularioPerfilSinCuenta(prev => {
+        if (destinoFotoPendiente === 'perfil') {
+          return {
+            ...prev,
+            fotoPerfil: fotoNueva
+          };
+        }
+
+        return {
+          ...prev,
+          fotosGaleria: [...prev.fotosGaleria, fotoNueva].slice(0, 8)
+        };
+      });
+
+      setModalFotoMetadata(false);
+      limpiarFotoPendiente();
+    } catch (error) {
+      console.error('Error al subir fotografía del nodo:', error);
+      setErrorFotoMetadata(error.message || 'No se pudo subir la fotografía.');
+    } finally {
+      setSubiendoFoto(false);
+    }
   };
 
   const entrarModoEdicion = () => {
@@ -1550,6 +2790,25 @@ export default function ArbolGenealogico() {
     }
 
     entrarModoEdicion();
+  };
+
+  const alternarPanelFiltros = () => {
+    establecerMostrarFiltros(prev => !prev);
+    establecerNodoSeleccionado(null);
+    establecerMostrarInvitar(false);
+    establecerMostrarEventos(false);
+  };
+
+  const abrirPanelAnadirFamiliar = () => {
+    establecerMostrarInvitar(true);
+    establecerMostrandoFormularioPerfilSinCuenta(false);
+    establecerMostrarFiltros(false);
+    establecerNodoSeleccionado(null);
+    establecerModoRelacionar(false);
+    establecerModoEliminar(false);
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
+    establecerMostrarEventos(false);
   };
 
   const cargarAmigosDisponibles = async (arbolId) => {
@@ -2699,15 +3958,13 @@ export default function ArbolGenealogico() {
   };
 
   const obtenerFotosFormularioDesdeNodo = (nodo = {}) => {
-    const fotos = Array.isArray(nodo.fotos) ? nodo.fotos.filter(Boolean) : [];
-    const fotoPrincipal = nodo.fotoPerfil || fotos[0] || null;
-    const fotosGaleria = fotoPrincipal
-      ? fotos.filter(foto => foto && foto !== fotoPrincipal)
-      : fotos.slice(1);
+    const fotos = Array.isArray(nodo.fotos)
+      ? nodo.fotos.map(normalizarFotoNodo).filter(Boolean)
+      : [];
 
     return {
-      fotoPrincipal,
-      fotosGaleria
+      fotoPrincipal: fotos.find(foto => foto.esFotoPerfil === true) || null,
+      fotosGaleria: fotos.filter(foto => foto.esFotoPerfil !== true)
     };
   };
 
@@ -2853,63 +4110,12 @@ La persona seguirá dentro del árbol como miembro normal.`
     restablecerFormularioPerfilSinCuenta();
   };
 
-  const manejarFotoPrincipalPerfilSinCuenta = async (evento) => {
-    const archivo = evento.target.files?.[0];
-
-    if (!archivo) return;
-
-    if (!archivo.type.startsWith('image/')) {
-      window.alert('Selecciona un archivo de imagen válido.');
-      evento.target.value = '';
-      return;
-    }
-
-    try {
-      establecerProcesandoFotosPerfilSinCuenta(true);
-      const dataUrl = await leerArchivoComoDataUrl(archivo);
-
-      establecerFormularioPerfilSinCuenta(prev => ({
-        ...prev,
-        fotoPerfil: dataUrl
-      }));
-    } catch (error) {
-      window.alert(error.message || 'No se pudo cargar la foto de perfil.');
-    } finally {
-      establecerProcesandoFotosPerfilSinCuenta(false);
-      evento.target.value = '';
-    }
+  const manejarFotoPrincipalPerfilSinCuenta = (evento) => {
+    handleSeleccionarImagenIndividual(evento, 'perfil');
   };
 
-  const manejarGaleriaPerfilSinCuenta = async (evento) => {
-    const archivos = Array.from(evento.target.files || []);
-
-    if (archivos.length === 0) return;
-
-    const imagenes = archivos.filter(archivo => archivo.type.startsWith('image/'));
-
-    if (imagenes.length !== archivos.length) {
-      window.alert('Algunos archivos fueron ignorados porque no eran imágenes.');
-    }
-
-    if (imagenes.length === 0) {
-      evento.target.value = '';
-      return;
-    }
-
-    try {
-      establecerProcesandoFotosPerfilSinCuenta(true);
-      const nuevasFotos = await Promise.all(imagenes.map(leerArchivoComoDataUrl));
-
-      establecerFormularioPerfilSinCuenta(prev => ({
-        ...prev,
-        fotosGaleria: [...prev.fotosGaleria, ...nuevasFotos].slice(0, 8)
-      }));
-    } catch (error) {
-      window.alert(error.message || 'No se pudieron cargar las fotos.');
-    } finally {
-      establecerProcesandoFotosPerfilSinCuenta(false);
-      evento.target.value = '';
-    }
+  const manejarGaleriaPerfilSinCuenta = (evento) => {
+    handleSeleccionarImagenIndividual(evento, 'galeria');
   };
 
   const quitarFotoGaleriaPerfilSinCuenta = (indiceFoto) => {
@@ -2941,10 +4147,21 @@ La persona seguirá dentro del árbol como miembro normal.`
     }
 
     const estaFallecido = Boolean(fechaFallecimiento);
-    const fotos = [
-      formularioPerfilSinCuenta.fotoPerfil,
-      ...formularioPerfilSinCuenta.fotosGaleria
-    ].filter(Boolean);
+    const fotoPerfil = formularioPerfilSinCuenta.fotoPerfil
+      ? normalizarFotoNodo({
+        ...formularioPerfilSinCuenta.fotoPerfil,
+        esFotoPerfil: true
+      })
+      : null;
+
+    const fotosGaleria = formularioPerfilSinCuenta.fotosGaleria
+      .map(foto => normalizarFotoNodo({
+        ...foto,
+        esFotoPerfil: false
+      }))
+      .filter(Boolean);
+
+    const fotos = [fotoPerfil, ...fotosGaleria].filter(Boolean);
 
     return {
       nombre,
@@ -2963,7 +4180,7 @@ La persona seguirá dentro del árbol como miembro normal.`
       estaFallecido,
       biografia: descripcion,
       fotos,
-      fotoPerfil: fotos[0] || null,
+      fotoPerfil: fotoPerfil ? obtenerSrcFoto(fotoPerfil) : null,
       edad: calcularEdad(fechaNacimiento, estaFallecido ? fechaFallecimiento : null),
       estado: 'Incompleto',
       origen: 'perfil_sin_cuenta'
@@ -3016,6 +4233,10 @@ La persona seguirá dentro del árbol como miembro normal.`
   };
 
   const iniciarColocacion = (datosFamiliar) => {
+    if (!esModoEdicion) {
+      entrarModoEdicion();
+    }
+
     const nombreBase = datosFamiliar.nombre || 'Nuevo Familiar';
     const fechaNacimiento = datosFamiliar.fechaNacimiento || null;
     const fechaFallecimiento = datosFamiliar.fechaFallecimiento || null;
@@ -3100,10 +4321,130 @@ La persona seguirá dentro del árbol como miembro normal.`
     });
   };
 
+  const prepararDestinoGeneracional = (numGeneracion) => {
+    const generacionSolicitada = Number(numGeneracion);
+
+    if (!Number.isInteger(generacionSolicitada)) {
+      return null;
+    }
+
+    if (generacionSolicitada >= 0) {
+      return {
+        generacionDestino: generacionSolicitada,
+        nodosAjustados: nodos,
+        huboDesplazamiento: false
+      };
+    }
+
+    const desplazamiento = Math.abs(generacionSolicitada);
+    const nodosAjustados = nodos.map(nodo => ({
+      ...nodo,
+      generacion: Number(nodo.generacion) + desplazamiento
+    }));
+
+    establecerNodos(nodosAjustados);
+
+    establecerCambiosPendientes(prev => {
+      let siguientes = prev.map(cambio => {
+        if (cambio.tipo !== 'enviarInvitacion') return cambio;
+
+        const generacionPropuesta = Number(cambio.payload?.datosNodoPropuesto?.generacion);
+        if (!Number.isFinite(generacionPropuesta)) return cambio;
+
+        return {
+          ...cambio,
+          payload: {
+            ...cambio.payload,
+            datosNodoPropuesto: {
+              ...cambio.payload.datosNodoPropuesto,
+              generacion: generacionPropuesta + desplazamiento
+            }
+          }
+        };
+      });
+
+      nodosAjustados.forEach(nodoAjustado => {
+        const datosGeneracion = {
+          generacion: Number(nodoAjustado.generacion),
+          fila: Number(nodoAjustado.fila)
+        };
+
+        if (esIdTemporal(nodoAjustado.id)) {
+          siguientes = siguientes.map(cambio => {
+            if (
+              cambio.tipo === 'crearNodoSinCuenta' &&
+              cambio.tempId &&
+              String(cambio.tempId) === String(nodoAjustado.id)
+            ) {
+              return {
+                ...cambio,
+                payload: {
+                  ...cambio.payload,
+                  ...datosGeneracion
+                }
+              };
+            }
+
+            return cambio;
+          });
+          return;
+        }
+
+        const indiceCambio = siguientes.findIndex(cambio =>
+          cambio.tipo === 'actualizarNodo' &&
+          String(cambio.payload?.nodoId) === String(nodoAjustado.id)
+        );
+
+        if (indiceCambio >= 0) {
+          siguientes = siguientes.map((cambio, indice) => (
+            indice === indiceCambio
+              ? {
+                ...cambio,
+                payload: {
+                  ...cambio.payload,
+                  ...datosGeneracion
+                }
+              }
+              : cambio
+          ));
+          return;
+        }
+
+        siguientes = [
+          ...siguientes,
+          {
+            tipo: 'actualizarNodo',
+            payload: {
+              arbolId: arbol._id,
+              nodoId: nodoAjustado.id,
+              ...datosGeneracion
+            }
+          }
+        ];
+      });
+
+      return siguientes;
+    });
+
+    return {
+      generacionDestino: 0,
+      nodosAjustados,
+      huboDesplazamiento: true
+    };
+  };
+
   const colocarEnGeneracion = async (numGeneracion) => {
     if (!personaEnColocacion || !arbol?._id) return;
 
-    const filaDestino = obtenerSiguienteFila(numGeneracion);
+    const destinoPreparado = prepararDestinoGeneracional(numGeneracion);
+
+    if (!destinoPreparado) {
+      window.alert('La generación seleccionada no es válida.');
+      return;
+    }
+
+    const { generacionDestino, nodosAjustados, huboDesplazamiento } = destinoPreparado;
+    const filaDestino = obtenerSiguienteFilaDesdeLista(nodosAjustados, generacionDestino);
 
     if (personaEnColocacion.origen === 'perfil_sin_cuenta') {
       const tempId = generarIdTemporal('nodo');
@@ -3124,7 +4465,7 @@ La persona seguirá dentro del árbol como miembro normal.`
         tipo: 'normal',
         estado: 'Incompleto',
         origen: 'perfil_sin_cuenta',
-        generacion: numGeneracion,
+        generacion: generacionDestino,
         fila: filaDestino,
         fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
         biografia: personaEnColocacion.biografia || '',
@@ -3147,14 +4488,14 @@ La persona seguirá dentro del árbol como miembro normal.`
           fechaCorta: personaEnColocacion.fechaCorta || 'Pendiente',
           estaFallecido: Boolean(personaEnColocacion.estaFallecido),
           estado: 'Incompleto',
-          generacion: numGeneracion,
+          generacion: generacionDestino,
           fila: filaDestino,
           fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
           biografia: personaEnColocacion.biografia || ''
         }
       });
 
-      establecerMensajeSistema('Perfil sin cuenta preparado. Presiona Guardar cambios para aplicarlo.');
+      establecerMensajeSistema(`${huboDesplazamiento ? 'Las generaciones se recorrieron automáticamente. ' : ''}Perfil sin cuenta preparado. Presiona Guardar cambios para aplicarlo.`);
     } else {
       registrarCambioPendiente({
         tipo: 'enviarInvitacion',
@@ -3166,7 +4507,7 @@ La persona seguirá dentro del árbol como miembro normal.`
             iniciales: personaEnColocacion.iniciales,
             colorFondo: personaEnColocacion.colorFondo,
             colorTexto: personaEnColocacion.colorTexto,
-            generacion: numGeneracion,
+            generacion: generacionDestino,
             fila: filaDestino,
             tipo: 'normal'
           },
@@ -3175,7 +4516,7 @@ La persona seguirá dentro del árbol como miembro normal.`
         }
       });
 
-      establecerMensajeSistema('Invitación preparada. Se enviará al guardar cambios.');
+      establecerMensajeSistema(`${huboDesplazamiento ? 'Las generaciones se recorrieron automáticamente. ' : ''}Invitación preparada. Se enviará al guardar cambios.`);
     }
 
     establecerModoColocacion(false);
@@ -3487,6 +4828,26 @@ La persona seguirá dentro del árbol como miembro normal.`
 
   const registrarCambioNodoPendiente = (nodoId, datosActualizados) => {
     establecerCambiosPendientes(prev => {
+      if (esIdTemporal(nodoId)) {
+        return prev.map(cambio => {
+          if (
+            cambio.tipo === 'crearNodoSinCuenta' &&
+            cambio.tempId &&
+            String(cambio.tempId) === String(nodoId)
+          ) {
+            return {
+              ...cambio,
+              payload: {
+                ...cambio.payload,
+                ...datosActualizados
+              }
+            };
+          }
+
+          return cambio;
+        });
+      }
+
       const cambioPrevio = prev.find(cambio =>
         cambio.tipo === 'actualizarNodo' &&
         String(cambio.payload?.nodoId) === String(nodoId)
@@ -3622,6 +4983,26 @@ La persona seguirá dentro del árbol como miembro normal.`
     });
 
     const { nodosNormalizados, desplazamiento } = normalizarGeneracionesDesdeCero(nodosBase);
+
+    if (desplazamiento !== 0) {
+      establecerCambiosPendientes(prev => prev.map(cambio => {
+        if (cambio.tipo !== 'enviarInvitacion') return cambio;
+
+        const generacionPropuesta = Number(cambio.payload?.datosNodoPropuesto?.generacion);
+        if (!Number.isFinite(generacionPropuesta)) return cambio;
+
+        return {
+          ...cambio,
+          payload: {
+            ...cambio.payload,
+            datosNodoPropuesto: {
+              ...cambio.payload.datosNodoPropuesto,
+              generacion: generacionPropuesta - desplazamiento
+            }
+          }
+        };
+      }));
+    }
 
     nodosNormalizados.forEach((nodoNormalizado) => {
       const nodoOriginal = nodosBase.find(nodo => String(nodo.id) === String(nodoNormalizado.id));
@@ -4785,6 +6166,89 @@ La persona seguirá dentro del árbol como miembro normal.`
   return (
     <div className="contenedor-arbol">
 
+      {cropperPublicacionArbol.abierto && createPortal((
+        <ImageCropperModal
+          abierto={cropperPublicacionArbol.abierto}
+          archivo={cropperPublicacionArbol.archivo}
+          titulo="Ajustar imagen de publicación"
+          descripcion="Mueve la imagen y ajusta el zoom para elegir cómo se verá en tu publicación."
+          aspectRatio={4 / 5}
+          forma="rect"
+          outputWidth={1080}
+          outputHeight={1350}
+          sufijoArchivo="publicacion"
+          onCancelar={cerrarCropperPublicacionArbol}
+          onConfirmar={confirmarCropperPublicacionArbol}
+        />
+      ), document.body)}
+
+      {modalPublicacionArbolAbierto && createPortal((
+        <div className="modal-backdrop-custom modal-backdrop-publicacion modal-backdrop-publicacion-arbol" onClick={cerrarModalPublicacionArbol}>
+          <div
+            className={`modal-publicacion modal-publicacion-familiar ${hayMultimediaPublicacionArbol ? 'modal-publicacion-con-preview' : 'modal-publicacion-sin-preview'} ${panelHerramientaPublicacionArbol ? 'modal-publicacion-con-panel' : ''}`}
+            onClick={evento => evento.stopPropagation()}
+          >
+            <div className="modal-publicacion-topbar-movil">
+              <button type="button" className="btn-cerrar-publicacion-movil" onClick={cerrarModalPublicacionArbol} disabled={publicandoMomentoArbol} aria-label="Cerrar publicación"><i className="bi bi-x-lg"></i></button>
+              <span>Nueva publicación</span>
+              <button type="button" className="btn-menu-publicacion-movil" aria-label="Más opciones"><i className="bi bi-three-dots"></i></button>
+            </div>
+
+            <button className="btn-cerrar-modal btn-cerrar-modal-publicacion" onClick={cerrarModalPublicacionArbol} disabled={publicandoMomentoArbol} aria-label="Cerrar"><i className="bi bi-x"></i></button>
+
+            <div className="modal-cabecera modal-cabecera-unica familiar">
+              <div className="titulo-modal-publicacion">
+                <span className="icono-modal-publicacion"><i className={`bi ${CONFIG_MOMENTO_FAMILIAR_ARBOL.icono}`}></i></span>
+                <div><h4>{CONFIG_MOMENTO_FAMILIAR_ARBOL.titulo}</h4><p>{CONFIG_MOMENTO_FAMILIAR_ARBOL.subtitulo}</p></div>
+              </div>
+            </div>
+
+            <div className="modal-cuerpo mt-3">
+              <div className="selector-audiencia-familiar mb-3">
+                <div className="selector-audiencia-info">
+                  <span className="selector-audiencia-icono"><i className="bi bi-shield-lock-fill"></i></span>
+                  <div><strong>Visible solo para familia</strong><small>Este momento solo aparecerá para miembros del árbol actual.</small></div>
+                </div>
+                <div className="audiencia-familiar-unica"><i className="bi bi-tree-fill"></i>{audienciaMomentoArbol.nombreFamilia}</div>
+              </div>
+
+              <div className="fecha-momento-publicacion mb-3">
+                <label htmlFor="fecha-momento-publicacion-arbol"><i className="bi bi-calendar3"></i>Fecha del momento <span>opcional</span></label>
+                <input id="fecha-momento-publicacion-arbol" type="date" value={fechaMomentoPublicacionArbol} max={new Date().toISOString().slice(0, 10)} onChange={evento => establecerFechaMomentoPublicacionArbol(evento.target.value)} />
+                <small>Si la dejas vacía, la línea del tiempo usará la fecha de publicación.</small>
+              </div>
+
+              <div className="contenedor-input-superpuesto">
+                <div className="form-control input-publicacion input-overlay" ref={overlayPublicacionArbolRef} aria-hidden="true">{textoPublicacionArbol ? renderTextoPublicacionArbol(textoPublicacionArbol) : ''}</div>
+                <textarea ref={textareaPublicacionArbolRef} className="form-control input-publicacion textarea-transparente" rows="3" placeholder={CONFIG_MOMENTO_FAMILIAR_ARBOL.placeholder} value={textoPublicacionArbol} onChange={manejarCambioTextoPublicacionArbol} onScroll={manejarScrollTextoPublicacionArbol} spellCheck="false"></textarea>
+              </div>
+
+              {renderChipsPublicacionArbol()}
+              {renderEditorMultimediaPublicacionArbol()}
+              {renderPanelHerramientaPublicacionArbol()}
+            </div>
+
+            <div className="modal-pie d-flex justify-content-between align-items-center mt-3 pt-2">
+              <div className="grupo-herramientas-modal">
+                <input type="file" ref={archivoPublicacionArbolRef} onChange={manejarCambioArchivoPublicacionArbol} accept="image/*,video/*" multiple style={{ display: 'none' }} />
+                <input type="file" ref={gifPublicacionArbolRef} onChange={manejarCambioArchivoPublicacionArbol} accept="image/gif" style={{ display: 'none' }} />
+                <button className="btn-herramienta-modal" type="button" title={puedeAgregarFotosPublicacionArbol ? 'Agregar fotos o un video' : 'Alcanzaste el límite o debes eliminar el archivo actual'} disabled={publicandoMomentoArbol || !puedeAgregarFotosPublicacionArbol} onClick={() => archivoPublicacionArbolRef.current?.click()}><i className="bi bi-image"></i></button>
+                <button className="btn-herramienta-modal" type="button" title="Agregar GIF" disabled={publicandoMomentoArbol || !puedeAgregarGifPublicacionArbol} onClick={() => gifPublicacionArbolRef.current?.click()}><i className="bi bi-filetype-gif"></i></button>
+                <button className={`btn-herramienta-modal ${panelHerramientaPublicacionArbol === 'emoji' ? 'activo' : ''}`} type="button" title="Agregar emoji" onClick={() => abrirPanelHerramientaPublicacionArbol('emoji')}><i className="bi bi-emoji-smile"></i></button>
+                <button className={`btn-herramienta-modal ${panelHerramientaPublicacionArbol === 'ubicacion' || ubicacionPublicacionArbol ? 'activo' : ''}`} type="button" title="Agregar ubicación" onClick={() => abrirPanelHerramientaPublicacionArbol('ubicacion')}><i className="bi bi-geo-alt"></i></button>
+                <button className={`btn-herramienta-modal ${panelHerramientaPublicacionArbol === 'eventos' || eventoRelacionadoPublicacionArbol ? 'activo' : ''}`} type="button" title="Mencionar evento familiar" onClick={() => abrirPanelHerramientaPublicacionArbol('eventos')}><i className="bi bi-calendar-heart"></i></button>
+                <button className={`btn-herramienta-modal ${panelHerramientaPublicacionArbol === 'familiares' || personasRelacionadasPublicacionArbol.length > 0 ? 'activo' : ''}`} type="button" title="Relacionar familiares del árbol" onClick={() => abrirPanelHerramientaPublicacionArbol('familiares')}><i className="bi bi-person-hearts"></i></button>
+                <button className={`btn-herramienta-modal ${panelHerramientaPublicacionArbol === 'menciones' || mencionesPublicacionArbol.length > 0 ? 'activo' : ''}`} type="button" title="Mencionar persona" onClick={() => abrirPanelHerramientaPublicacionArbol('menciones')}><span className="icono-arroba">@</span></button>
+                <button className={`btn-herramienta-modal ${panelHerramientaPublicacionArbol === 'etiquetas' || etiquetasImagenPublicacionArbol.length > 0 ? 'activo' : ''}`} type="button" title={hayImagenPublicacionArbol ? 'Etiquetar personas en la publicación' : 'Agrega una fotografía para etiquetar personas'} disabled={!hayImagenPublicacionArbol || publicandoMomentoArbol} onClick={() => abrirPanelHerramientaPublicacionArbol('etiquetas')}><i className="bi bi-person-bounding-box"></i></button>
+              </div>
+              <button className="boton-publicar-modal" type="button" onClick={manejarPublicarMomentoArbol} disabled={!puedePublicarMomentoArbol || publicandoMomentoArbol}>
+                {publicandoMomentoArbol ? <><span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Publicando...</> : CONFIG_MOMENTO_FAMILIAR_ARBOL.boton}
+              </button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
       {mensajeSistema && (
         <div className="mensaje-colocacion-flotante" style={{ backgroundColor: 'var(--dorado)' }}>
           <span>{mensajeSistema}</span>
@@ -4845,7 +6309,7 @@ La persona seguirá dentro del árbol como miembro normal.`
       )}
 
       {/* --- CABECERA --- */}
-      <div className="cabecera-arbol d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3">
+      <div className="cabecera-arbol d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
         <div>
           <span className="antetitulo-familia">{arbol?.nombreFamilia || 'Mi Familia'}</span>
           <h2 className="fuente-elegante fw-bold titulo-seccion mb-0">Árbol Genealógico</h2>
@@ -4853,31 +6317,62 @@ La persona seguirá dentro del árbol como miembro normal.`
         </div>
 
         <div className="barra-controles-superior">
-          <button className="boton-accion-arbol" onClick={volverAlMenuArboles}>
-            <i className="bi bi-grid-1x2"></i> Mis árboles
+          <button
+            type="button"
+            className="boton-accion-arbol boton-arboles-superior"
+            onClick={volverAlMenuArboles}
+            aria-label="Mis árboles"
+            title="Mis árboles"
+          >
+            <i className="bi bi-grid-1x2" aria-hidden="true"></i>
+            <span className="texto-control-superior">Mis árboles</span>
           </button>
 
           {esUsuarioAdmin && (
-            <div className={`interruptor-edicion ${esModoEdicion ? 'activo' : ''}`} onClick={alternarModoEdicion}>
-              <span>Modo Edición</span>
-              <div className="switch-deslizador"></div>
-            </div>
+            <button
+              type="button"
+              className={`interruptor-edicion ${esModoEdicion ? 'activo' : ''}`}
+              onClick={alternarModoEdicion}
+              role="switch"
+              aria-checked={esModoEdicion}
+              aria-label={esModoEdicion ? 'Desactivar edición' : 'Activar edición'}
+              title={esModoEdicion ? 'Salir de edición' : 'Activar edición'}
+            >
+              <i className="bi bi-pencil-square icono-edicion" aria-hidden="true"></i>
+              <span className="texto-control-superior">Edición</span>
+              <span className="switch-deslizador" aria-hidden="true"></span>
+            </button>
           )}
 
           <button
-            className={`boton-accion-arbol ${(mostrarFiltros && !nodoSeleccionado && !mostrarInvitar && !mostrarEventos) || hayFiltrosAplicados ? 'activo' : ''}`}
-            onClick={() => {
-              establecerMostrarFiltros(!mostrarFiltros);
-              establecerNodoSeleccionado(null);
-              establecerMostrarInvitar(false);
-              establecerMostrarEventos(false);
-            }}
+            type="button"
+            className={`boton-accion-arbol boton-fotos-superior ${modalPublicacionArbolAbierto ? 'activo' : ''}`}
+            onClick={abrirModalPublicacionFotosArbol}
+            aria-label="Fotos"
+            aria-pressed={modalPublicacionArbolAbierto}
+            title="Publicar un Momento Familiar con fotos"
           >
-            <i className="bi bi-funnel"></i> Filtros
+            <i className="bi bi-image" aria-hidden="true"></i>
+            <span className="texto-control-superior">Fotos</span>
           </button>
 
+          {esUsuarioAdmin && !modoColocacion && (
+            <button
+              type="button"
+              className={`boton-accion-arbol boton-anadir-superior ${mostrarInvitar ? 'activo' : ''}`}
+              onClick={abrirPanelAnadirFamiliar}
+              aria-label="Añadir una persona al árbol"
+              aria-pressed={mostrarInvitar}
+              title="Añadir una persona al árbol"
+            >
+              <i className="bi bi-person-plus" aria-hidden="true"></i>
+              <span className="texto-control-superior">Añadir</span>
+            </button>
+          )}
+
           <button
-            className={`boton-accion-arbol ${mostrarEventos && !nodoSeleccionado && !mostrarInvitar && !mostrarFiltros ? 'activo' : ''}`}
+            type="button"
+            className={`boton-accion-arbol boton-eventos-superior ${mostrarEventos && !nodoSeleccionado && !mostrarInvitar && !mostrarFiltros ? 'activo' : ''}`}
             onClick={() => {
               const nuevoEstado = !mostrarEventos;
               establecerMostrarEventos(nuevoEstado);
@@ -4889,8 +6384,12 @@ La persona seguirá dentro del árbol como miembro normal.`
                 cargarEventosFamiliares(arbol._id);
               }
             }}
+            aria-label="Eventos"
+            aria-pressed={mostrarEventos && !nodoSeleccionado && !mostrarInvitar && !mostrarFiltros}
+            title="Eventos familiares"
           >
-            <i className="bi bi-calendar-event"></i> Eventos
+            <i className="bi bi-calendar-event" aria-hidden="true"></i>
+            <span className="texto-control-superior">Eventos</span>
           </button>
 
           <div className="leyenda-roles-superior ms-md-3">
@@ -5037,33 +6536,25 @@ La persona seguirá dentro del árbol como miembro normal.`
               )}
             </div>
 
-            <button className="boton-zoom" onClick={acercarZoom}><i className="bi bi-plus"></i></button>
-            <button className="boton-zoom" onClick={alejarZoom}><i className="bi bi-dash"></i></button>
-            <button className="boton-zoom cuadrado" onClick={restablecerZoom}><i className="bi bi-arrows-fullscreen" style={{ fontSize: '0.9rem' }}></i></button>
+            <button
+              type="button"
+              className={`boton-zoom boton-filtros-flotante ${((mostrarFiltros && !nodoSeleccionado && !mostrarInvitar && !mostrarEventos) || hayFiltrosAplicados) ? 'activo' : ''}`}
+              onClick={alternarPanelFiltros}
+              title={hayFiltrosAplicados ? 'Filtros activos' : 'Filtros'}
+              aria-label={mostrarFiltros ? 'Cerrar filtros' : 'Abrir filtros'}
+              aria-pressed={mostrarFiltros}
+            >
+              <i className={`bi ${hayFiltrosAplicados ? 'bi-funnel-fill' : 'bi-funnel'}`} aria-hidden="true"></i>
+            </button>
+
+            <button className="boton-zoom" onClick={acercarZoom} title="Acercar" aria-label="Acercar"><i className="bi bi-plus"></i></button>
+            <button className="boton-zoom" onClick={alejarZoom} title="Alejar" aria-label="Alejar"><i className="bi bi-dash"></i></button>
+            <button className="boton-zoom cuadrado" onClick={restablecerZoom} title="Restablecer vista" aria-label="Restablecer vista"><i className="bi bi-arrows-fullscreen" style={{ fontSize: '0.9rem' }}></i></button>
           </div>
 
           {/* BARRA DE EDICIÓN FLOTANTE */}
           {esModoEdicion && !modoColocacion && (
             <div className="barra-edicion-flotante">
-              <button
-                className="btn-herramienta-edicion"
-                title="Añadir un nuevo nodo al árbol"
-                onClick={() => {
-                  establecerMostrarInvitar(true);
-                  establecerMostrandoFormularioPerfilSinCuenta(false);
-                  establecerMostrarFiltros(false);
-                  establecerNodoSeleccionado(null);
-                  establecerModoRelacionar(false);
-                  establecerModoEliminar(false);
-                  establecerModoMover(false);
-                  establecerNodoEnMovimiento(null);
-                  establecerMostrarEventos(false);
-                }}
-              >
-                <i className="bi bi-person-plus"></i> Añadir familiar
-              </button>
-              <div className="separador-vertical"></div>
-
               <button
                 className={`btn-herramienta-edicion ${modoMover ? 'activo' : ''}`}
                 title="Mover una persona a otra generación o como pareja"
@@ -5246,28 +6737,49 @@ La persona seguirá dentro del árbol como miembro normal.`
                     </p>
                   </div>
 
-                  {nodoSeleccionado.fotos && nodoSeleccionado.fotos.length > 0 && (
-                    <div className="mb-4">
-                      <h6 className="fw-bold mb-3 small text-uppercase text-muted" style={{ letterSpacing: '1px' }}>Fotos</h6>
-                      <div className="row g-2">
-                        {nodoSeleccionado.fotos.slice(0, 6).map((foto, indice) => {
-                          const srcFoto = foto?.startsWith('/uploads') ? `${URL_BASE_BACKEND}${foto}` : foto;
+                  <div className="mb-4 seccion-momentos-familiares-panel">
+                    <div className="encabezado-fotos-momentos-panel">
+                      <h6 className="fw-bold mb-0 small text-uppercase text-muted" style={{ letterSpacing: '1px' }}>Fotos</h6>
+                      {fotosMomentosPanel.length > 0 && <span>{fotosMomentosPanel.length}</span>}
+                    </div>
+
+                    {cargandoMomentosFamiliares && fotosMomentosPanel.length === 0 ? (
+                      <div className="estado-fotos-momentos-panel">
+                        <span className="spinner-border spinner-border-sm"></span>
+                        Cargando Momentos Familiares...
+                      </div>
+                    ) : errorMomentosFamiliares && fotosMomentosPanel.length === 0 ? (
+                      <div className="estado-fotos-momentos-panel error">
+                        <i className="bi bi-exclamation-triangle"></i>
+                        {errorMomentosFamiliares}
+                      </div>
+                    ) : fotosMomentosPanel.length > 0 ? (
+                      <div className="grid-fotos-momentos-panel">
+                        {fotosMomentosPanel.slice(0, 6).map((item, indice) => {
+                          const restantes = Math.max(0, fotosMomentosPanel.length - 6);
                           return (
-                            <div className="col-4" key={indice}>
-                              <div className="position-relative h-100 w-100">
-                                <img src={srcFoto} className="img-fluid rounded shadow-sm w-100 object-fit-cover" style={{ height: '70px' }} alt="Recuerdo" />
-                                {indice === 5 && nodoSeleccionado.fotos.length >= 6 && (
-                                  <div className="capa-mas-fotos rounded" title="Ver todas las fotos">
-                                    <i className="bi bi-plus-lg text-white fs-5"></i>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+                            <button
+                              type="button"
+                              className="miniatura-momento-familiar"
+                              key={`${obtenerId(item.foto) || obtenerUrlCrudaFoto(item.foto)}-${indice}`}
+                              onClick={() => abrirModalMomentosFamiliares(item.indicePublicacion, item.indiceFoto)}
+                              title={`Abrir Momento Familiar del ${formatearFechaLineaTiempo(item.fecha, idioma, zonaHoraria)}`}
+                            >
+                              <img src={obtenerSrcFoto(item.foto)} alt={`Momento Familiar de ${nodoSeleccionado.nombre}`} />
+                              {indice === 5 && restantes > 0 && (
+                                <span className="capa-cantidad-momentos">+{restantes}</span>
+                              )}
+                            </button>
                           );
                         })}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="estado-fotos-momentos-panel vacio">
+                        <i className="bi bi-images"></i>
+                        <span>Aún no hay Momentos Familiares con fotos relacionados con esta persona.</span>
+                      </div>
+                    )}
+                  </div>
 
                   {estadoFamiliarSeleccionado && (
                     <div className="mb-4">
@@ -5466,7 +6978,7 @@ La persona seguirá dentro del árbol como miembro normal.`
                       <div className="encabezado-formulario-sin-cuenta">
                         <div className="avatar-preview-sin-cuenta">
                           {formularioPerfilSinCuenta.fotoPerfil ? (
-                            <img src={formularioPerfilSinCuenta.fotoPerfil} alt="Foto de perfil" />
+                            <img src={obtenerSrcFoto(formularioPerfilSinCuenta.fotoPerfil)} alt="Foto de perfil" />
                           ) : (
                             <span>{obtenerIniciales(formularioPerfilSinCuenta.nombre || 'Nuevo Familiar')}</span>
                           )}
@@ -5539,14 +7051,14 @@ La persona seguirá dentro del árbol como miembro normal.`
                           {/* En la sección de la galería de fotos del panel de edición */}
                           <div className="panel-galeria-upload">
                             <label htmlFor="input-foto-unica-nodo" className="btn-subir-foto-individual">
-                              {subiendoFoto ? 'Subiendo imagen...' : '+ Agregar Foto con Detalles'}
+                              {formularioPerfilSinCuenta.fotosGaleria.length >= 8 ? 'Galería completa' : '+ Agregar foto con detalles'}
                             </label>
                             <input
                               id="input-foto-unica-nodo"
                               type="file"
                               accept="image/*"
-                              onChange={handleSeleccionarImagenIndividual}
-                              disabled={subiendoFoto}
+                              onChange={manejarGaleriaPerfilSinCuenta}
+                              disabled={subiendoFoto || formularioPerfilSinCuenta.fotosGaleria.length >= 8}
                               style={{ display: 'none' }}
                             />
                           </div>
@@ -5555,8 +7067,12 @@ La persona seguirá dentro del árbol como miembro normal.`
                         {formularioPerfilSinCuenta.fotosGaleria.length > 0 ? (
                           <div className="grid-galeria-sin-cuenta">
                             {formularioPerfilSinCuenta.fotosGaleria.map((foto, indice) => (
-                              <div key={`${foto.slice(0, 20)}-${indice}`} className="miniatura-galeria-sin-cuenta">
-                                <img src={foto} alt={`Foto ${indice + 1}`} />
+                              <div key={`${obtenerUrlCrudaFoto(foto)}-${indice}`} className="miniatura-galeria-sin-cuenta">
+                                <img
+                                  src={obtenerSrcFoto(foto)}
+                                  alt={foto.descripcion || `Foto ${indice + 1}`}
+                                  title={`${foto.personas || ''}${foto.lugar ? ` · ${foto.lugar}` : ''}`}
+                                />
                                 <button
                                   type="button"
                                   onClick={() => quitarFotoGaleriaPerfilSinCuenta(indice)}
@@ -5970,67 +7486,370 @@ La persona seguirá dentro del árbol como miembro normal.`
           </div>
         )}
       </div>
+      {modalMomentosFamiliaresAbierto && publicacionMomentoActiva && nodoSeleccionado && createPortal((
+        <div
+          className="modal-backdrop-momentos-familiares"
+          role="presentation"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) cerrarModalMomentosFamiliares();
+          }}
+        >
+          <section
+            className="modal-momentos-familiares"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-momentos-familiares"
+            onMouseDown={(evento) => evento.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="boton-cerrar-momentos-familiares"
+              onClick={cerrarModalMomentosFamiliares}
+              aria-label="Cerrar Momentos Familiares"
+            >
+              <i className="bi bi-x-lg"></i>
+            </button>
+
+            <header className="hero-momentos-familiares">
+              <div className="icono-hero-momentos"><i className="bi bi-images"></i></div>
+              <div>
+                <span>MOMENTOS FAMILIARES DE</span>
+                <h2 id="titulo-momentos-familiares">{nodoSeleccionado.nombre}</h2>
+                <p>
+                  {arbol?.nombreFamilia || arbol?.nombre || 'Árbol familiar'} · {fotosMomentosPanel.length} {fotosMomentosPanel.length === 1 ? 'fotografía' : 'fotografías'}
+                </p>
+              </div>
+            </header>
+
+            <div className="linea-tiempo-momentos-familiares">
+              <button
+                type="button"
+                onClick={() => navegarMomentoFamiliar(-1)}
+                disabled={indiceMomentoFamiliar <= 0}
+                aria-label="Ver Momento Familiar anterior"
+              >
+                <i className="bi bi-chevron-left"></i>
+              </button>
+              <div>
+                <strong>{formatearFechaLineaTiempo(obtenerFechaEfectivaMomento(publicacionMomentoActiva), idioma, zonaHoraria)}</strong>
+                <span>{indiceMomentoFamiliar + 1} de {momentosFamiliaresCombinados.length}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navegarMomentoFamiliar(1)}
+                disabled={indiceMomentoFamiliar >= momentosFamiliaresCombinados.length - 1}
+                aria-label="Ver siguiente Momento Familiar"
+              >
+                <i className="bi bi-chevron-right"></i>
+              </button>
+            </div>
+
+            <div
+              className="contenido-momento-familiar-instagram"
+              onTouchStart={(evento) => {
+                if (evento.target.closest?.('.publicacion-media-carousel')) return;
+                touchMomentoInicioXRef.current = evento.touches?.[0]?.clientX ?? null;
+              }}
+              onTouchEnd={(evento) => {
+                if (touchMomentoInicioXRef.current === null || evento.target.closest?.('.publicacion-media-carousel')) return;
+                const finalX = evento.changedTouches?.[0]?.clientX;
+                const diferencia = typeof finalX === 'number' ? finalX - touchMomentoInicioXRef.current : 0;
+                touchMomentoInicioXRef.current = null;
+                if (Math.abs(diferencia) >= 60) navegarMomentoFamiliar(diferencia < 0 ? 1 : -1);
+              }}
+            >
+              <div className="columna-media-momento-familiar">
+                <PublicacionMediaCarousel
+                  key={obtenerId(publicacionMomentoActiva)}
+                  multimedia={publicacionMomentoActiva.multimedia}
+                  tipo="familiar"
+                  indiceInicial={indiceFotoMomentoFamiliar}
+                  ajuste="contain"
+                  onIndiceChange={establecerIndiceFotoMomentoFamiliar}
+                  alt={`Momento Familiar de ${nodoSeleccionado.nombre}`}
+                  className="carrusel-modal-momento-familiar"
+                />
+              </div>
+
+              <aside className="columna-detalle-momento-familiar">
+                <div className="encabezado-publicacion-momento">
+                  {esMomentoVirtualActivo ? (
+                    <div className="encabezado-momento-virtual">
+                      {nodoSeleccionado.fotoPerfil ? (
+                        <img src={nodoSeleccionado.fotoPerfil} alt="" />
+                      ) : (
+                        <span
+                          className="avatar-momento-virtual"
+                          style={{
+                            backgroundColor: nodoSeleccionado.colorFondo || colorPorTexto(nodoSeleccionado.nombre || 'Familiar'),
+                            color: nodoSeleccionado.colorTexto || '#0f172a'
+                          }}
+                        >
+                          {nodoSeleccionado.iniciales || obtenerIniciales(nodoSeleccionado.nombre || 'Familiar')}
+                        </span>
+                      )}
+
+                      <div className="texto-encabezado-momento-virtual">
+                        <strong>{nodoSeleccionado.nombre}</strong>
+                        <span>Fotografía del archivo familiar</span>
+                        <small>
+                          {formatearFechaPublicacionMomento(fechaFotoMomentoActiva, idioma, zonaHoraria)}
+                          {ubicacionMomentoActiva ? ` · ${ubicacionMomentoActiva}` : ''}
+                        </small>
+                      </div>
+
+                      <i className="bi bi-archive-fill icono-archivo-momento" aria-hidden="true"></i>
+                    </div>
+                  ) : (
+                    <PublicacionHeader
+                      nombre={obtenerNombreAutorMomento(publicacionMomentoActiva)}
+                      nombreUsuario={obtenerNombreAutorMomento(publicacionMomentoActiva)}
+                      avatarUrl={obtenerAvatarAutorMomento(publicacionMomentoActiva)}
+                      fecha={formatearFechaPublicacionMomento(publicacionMomentoActiva.createdAt, idioma, zonaHoraria)}
+                      fechaISO={publicacionMomentoActiva.createdAt}
+                      tipo="familiar"
+                      privacidad="familia"
+                      nombreFamilia={publicacionMomentoActiva.arbolAudiencia?.nombreFamilia || publicacionMomentoActiva.nombreFamiliaAudienciaSnapshot || arbol?.nombreFamilia || 'Familia'}
+                      ubicacion={publicacionMomentoActiva.ubicacionTexto || ''}
+                    />
+                  )}
+                </div>
+
+                <div className="descripcion-momento-familiar">
+                  {descripcionMomentoActiva ? (
+                    <p>{descripcionMomentoActiva}</p>
+                  ) : (
+                    <p className="sin-descripcion">
+                      {esMomentoVirtualActivo
+                        ? 'Esta fotografía del archivo familiar no tiene descripción.'
+                        : 'Este Momento Familiar no tiene descripción.'}
+                    </p>
+                  )}
+
+                  {esMomentoVirtualActivo ? (
+                    <div className="detalles-foto-archivo-familiar">
+                      {personasMomentoActivo && (
+                        <div>
+                          <i className="bi bi-people-fill"></i>
+                          <span><strong>Personas:</strong> {personasMomentoActivo}</span>
+                        </div>
+                      )}
+                      {ubicacionMomentoActiva && (
+                        <div>
+                          <i className="bi bi-geo-alt-fill"></i>
+                          <span><strong>Lugar:</strong> {ubicacionMomentoActiva}</span>
+                        </div>
+                      )}
+                      {fechaFotoMomentoActiva && (
+                        <div>
+                          <i className="bi bi-calendar3"></i>
+                          <span>
+                            <strong>{fotoMomentoActiva?.fechaReal ? 'Fecha de la fotografía:' : 'Fecha de incorporación:'}</strong>{' '}
+                            {formatearFechaLineaTiempo(fechaFotoMomentoActiva, idioma, zonaHoraria)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    Array.isArray(publicacionMomentoActiva.personasRelacionadas) && publicacionMomentoActiva.personasRelacionadas.length > 0 && (
+                      <div className="personas-relacionadas-momento">
+                        <i className="bi bi-people-fill"></i>
+                        <span>
+                          Con {publicacionMomentoActiva.personasRelacionadas.map(persona => persona.nombreSnapshot || persona.nodo?.nombre).filter(Boolean).join(', ')}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
+
+                {esMomentoVirtualActivo ? (
+                  <div className="estado-archivo-familiar">
+                    <i className="bi bi-images"></i>
+                    <strong>Fotografía del archivo familiar</strong>
+                    <p>Esta imagen pertenece al perfil sin cuenta de {nodoSeleccionado.nombre} y forma parte de sus Momentos Familiares dentro del árbol.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="acciones-momento-familiar-modal">
+                      <button
+                        type="button"
+                        className={usuarioReaccionoMomento(publicacionMomentoActiva) ? 'activo' : ''}
+                        onClick={alternarReaccionMomento}
+                        aria-label="Me gusta"
+                      >
+                        <i className={`bi ${usuarioReaccionoMomento(publicacionMomentoActiva) ? 'bi-heart-fill' : 'bi-heart'}`}></i>
+                        <span>{publicacionMomentoActiva.reacciones?.length || 0}</span>
+                      </button>
+                      <span><i className="bi bi-chat"></i> {publicacionMomentoActiva.totalComentarios ?? comentariosMomentos[obtenerId(publicacionMomentoActiva)]?.length ?? 0}</span>
+                    </div>
+
+                    <div className="lista-comentarios-momento-familiar">
+                      {cargandoComentariosMomento && !comentariosMomentos[obtenerId(publicacionMomentoActiva)] ? (
+                        <div className="estado-comentarios-momento"><span className="spinner-border spinner-border-sm"></span> Cargando comentarios...</div>
+                      ) : (comentariosMomentos[obtenerId(publicacionMomentoActiva)] || []).length > 0 ? (
+                        (comentariosMomentos[obtenerId(publicacionMomentoActiva)] || []).map(comentario => {
+                          const nombreComentario = comentario.autor?.nombreUsuario || 'Familiar';
+                          const avatarComentario = resolverUrlImagen(comentario.autor?.imagenPerfil?.urlArchivo || comentario.autor?.imagenPerfil) || `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreComentario)}&background=0D1B2A&color=fff`;
+                          return (
+                            <article className="comentario-momento-familiar" key={obtenerId(comentario) || `${nombreComentario}-${comentario.createdAt}`}>
+                              <img src={avatarComentario} alt="" />
+                              <div>
+                                <strong>{nombreComentario}</strong>
+                                <p>{comentario.texto}</p>
+                              </div>
+                            </article>
+                          );
+                        })
+                      ) : (
+                        <div className="estado-comentarios-momento vacio">Sé la primera persona en comentar este momento.</div>
+                      )}
+                    </div>
+
+                    <div className="formulario-comentario-momento">
+                      <input
+                        type="text"
+                        value={nuevoComentarioMomento}
+                        onChange={(evento) => establecerNuevoComentarioMomento(evento.target.value)}
+                        onKeyDown={(evento) => {
+                          if (evento.key === 'Enter') {
+                            evento.preventDefault();
+                            enviarComentarioMomento();
+                          }
+                        }}
+                        placeholder="Agrega un comentario..."
+                        maxLength={500}
+                      />
+                      <button
+                        type="button"
+                        onClick={enviarComentarioMomento}
+                        disabled={!nuevoComentarioMomento.trim() || enviandoComentarioMomento}
+                      >
+                        {enviandoComentarioMomento ? <span className="spinner-border spinner-border-sm"></span> : 'Publicar'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </aside>
+            </div>
+          </section>
+        </div>
+      ), document.body)}
+
       {modalFotoMetadata && (
-        <div className="modal-metadata-overlay">
-          <div className="modal-metadata-content">
-            <h3>Detalles de la Fotografía</h3>
+        <div
+          className="modal-metadata-overlay"
+          role="presentation"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) cerrarModalFotoMetadata();
+          }}
+        >
+          <div
+            className="modal-metadata-content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-modal-metadata-foto"
+          >
+            <div className="modal-metadata-cabecera">
+              <div>
+                <span className="modal-metadata-etiqueta">Fotografía familiar</span>
+                <h3 id="titulo-modal-metadata-foto">Completa los detalles</h3>
+              </div>
+
+              <button
+                type="button"
+                className="modal-metadata-cerrar"
+                onClick={cerrarModalFotoMetadata}
+                disabled={subiendoFoto}
+                aria-label="Cerrar"
+              >
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
 
             <div className="modal-metadata-preview">
-              <img src={tempFotoData.url} alt="Vista previa" />
+              <img src={previewFotoPendiente} alt="Vista previa de la fotografía seleccionada" />
             </div>
 
             <div className="modal-metadata-group">
-              <label>Fecha de subida (Automática)</label>
+              <label htmlFor="foto-fecha-subida">Fecha de subida</label>
               <input
-                type="date"
-                value={tempFotoData.fechaSubida}
+                id="foto-fecha-subida"
+                type="text"
+                value={new Date(tempFotoData.fechaSubida).toLocaleString('es-MX')}
                 disabled
               />
+              <small>Se asigna automáticamente al momento de seleccionar la imagen.</small>
             </div>
 
             <div className="modal-metadata-group">
-              <label>Fecha en la que se tomó la foto</label>
+              <label htmlFor="foto-fecha-real">Fecha real de la foto</label>
               <input
+                id="foto-fecha-real"
                 type="date"
+                max={new Date().toISOString().split('T')[0]}
                 value={tempFotoData.fechaReal}
-                onChange={(e) => setTempFotoData({ ...tempFotoData, fechaReal: e.target.value })}
+                onChange={(evento) => setTempFotoData(prev => ({ ...prev, fechaReal: evento.target.value }))}
+                disabled={subiendoFoto}
+                required
               />
             </div>
 
             <div className="modal-metadata-group">
-              <label>Personas que aparecen (Nombres separados por coma)</label>
+              <label htmlFor="foto-personas">Personas que aparecen</label>
               <input
+                id="foto-personas"
                 type="text"
                 placeholder="Ej. Juan Pérez, María Gómez"
                 value={tempFotoData.personas}
-                onChange={(e) => setTempFotoData({ ...tempFotoData, personas: e.target.value })}
+                onChange={(evento) => setTempFotoData(prev => ({ ...prev, personas: evento.target.value }))}
+                disabled={subiendoFoto}
+                maxLength={300}
+                required
               />
+              <small>Escribe solamente nombres, separados por comas.</small>
             </div>
 
             <div className="modal-metadata-group">
-              <label>Lugar donde se tomó</label>
+              <label htmlFor="foto-lugar">Lugar donde se tomó</label>
               <input
+                id="foto-lugar"
                 type="text"
-                placeholder="Ej. Madrid, España"
+                placeholder="Ej. Guadalajara, Jalisco"
                 value={tempFotoData.lugar}
-                onChange={(e) => setTempFotoData({ ...tempFotoData, lugar: e.target.value })}
+                onChange={(evento) => setTempFotoData(prev => ({ ...prev, lugar: evento.target.value }))}
+                disabled={subiendoFoto}
+                maxLength={200}
+                required
               />
             </div>
 
             <div className="modal-metadata-group">
-              <label>Descripción breve</label>
+              <label htmlFor="foto-descripcion">Descripción breve</label>
               <textarea
-                placeholder="Añade una descripción..."
+                id="foto-descripcion"
+                placeholder="Describe el momento de esta fotografía"
                 value={tempFotoData.descripcion}
-                onChange={(e) => setTempFotoData({ ...tempFotoData, descripcion: e.target.value })}
+                onChange={(evento) => setTempFotoData(prev => ({ ...prev, descripcion: evento.target.value }))}
+                disabled={subiendoFoto}
+                maxLength={500}
+                required
               />
+              <small>{tempFotoData.descripcion.length}/500 caracteres</small>
             </div>
+
+            {errorFotoMetadata && (
+              <div className="modal-metadata-error" role="alert">
+                <i className="bi bi-exclamation-circle"></i>
+                <span>{errorFotoMetadata}</span>
+              </div>
+            )}
 
             <div className="modal-metadata-acciones">
               <button
                 type="button"
                 className="btn-cancelar"
-                onClick={() => setModalFotoMetadata(false)}
+                onClick={cerrarModalFotoMetadata}
+                disabled={subiendoFoto}
               >
                 Cancelar
               </button>
@@ -6038,8 +7857,19 @@ La persona seguirá dentro del árbol como miembro normal.`
                 type="button"
                 className="btn-guardar"
                 onClick={handleGuardarMetadataFoto}
+                disabled={subiendoFoto}
               >
-                Añadir Fotografía
+                {subiendoFoto ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    Subiendo...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-cloud-arrow-up"></i>
+                    Añadir fotografía
+                  </>
+                )}
               </button>
             </div>
           </div>

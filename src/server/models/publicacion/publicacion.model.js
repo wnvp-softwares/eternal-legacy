@@ -26,6 +26,25 @@ const etiquetaMultimediaSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
+
+const personaRelacionadaSchema = new mongoose.Schema({
+    nodo: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Nodo',
+        required: true
+    },
+    usuario: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        default: null
+    },
+    nombreSnapshot: {
+        type: String,
+        trim: true,
+        required: true
+    }
+}, { _id: false });
+
 const eventoRelacionadoSchema = new mongoose.Schema({
     evento: {
         type: mongoose.Schema.Types.ObjectId,
@@ -100,6 +119,12 @@ const publicacionSchema = new mongoose.Schema({
         default: ''
     },
 
+    // Fecha en la que ocurrió el Momento Familiar. Si queda vacía se usa createdAt.
+    fechaMomento: {
+        type: Date,
+        default: null
+    },
+
     multimedia: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Upload'
@@ -114,6 +139,9 @@ const publicacionSchema = new mongoose.Schema({
     menciones: [mencionSchema],
 
     etiquetasMultimedia: [etiquetaMultimediaSchema],
+
+    // Nodos del árbol vinculados explícitamente con este Momento Familiar.
+    personasRelacionadas: [personaRelacionadaSchema],
 
     eventoRelacionado: {
         type: eventoRelacionadoSchema,
@@ -140,6 +168,8 @@ publicacionSchema.pre('validate', function () {
         this.privacidad = 'publico';
         this.arbolAudiencia = null;
         this.nombreFamiliaAudienciaSnapshot = '';
+        this.fechaMomento = null;
+        this.personasRelacionadas = [];
     }
 });
 
@@ -149,5 +179,7 @@ publicacionSchema.index({ privacidad: 1, createdAt: -1 });
 publicacionSchema.index({ arbolAudiencia: 1, createdAt: -1 });
 publicacionSchema.index({ 'eventoRelacionado.evento': 1, createdAt: -1 });
 publicacionSchema.index({ 'eventoRelacionado.arbol': 1, createdAt: -1 });
+publicacionSchema.index({ arbolAudiencia: 1, tipo: 1, fechaMomento: -1, createdAt: -1 });
+publicacionSchema.index({ 'personasRelacionadas.nodo': 1, fechaMomento: -1, createdAt: -1 });
 
 module.exports = mongoose.model('Publicacion', publicacionSchema);

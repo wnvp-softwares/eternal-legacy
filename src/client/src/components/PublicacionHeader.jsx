@@ -155,7 +155,14 @@ export default function PublicacionHeader({
 
       <div className="legacy-publicacion-identidad">
         <div className="legacy-publicacion-identidad-linea">
-          <span className="legacy-publicacion-nombre">
+          <span
+            className={`legacy-publicacion-nombre ${esAutorInteractivo ? 'interactivo' : ''}`}
+            role={esAutorInteractivo ? 'button' : undefined}
+            tabIndex={esAutorInteractivo ? 0 : undefined}
+            onClick={esAutorInteractivo ? onAutorClick : undefined}
+            onKeyDown={manejarTecladoAutor}
+            aria-label={esAutorInteractivo ? `Abrir perfil de ${nombre}` : undefined}
+          >
             {nombre}
           </span>
 
@@ -244,14 +251,16 @@ export default function PublicacionHeader({
           </span>
         </button>
 
-        <button
-          type="button"
-          className="legacy-publicacion-menu"
-          onClick={onMenuClick}
-          aria-label="Opciones de la publicación"
-        >
-          <i className="bi bi-three-dots" aria-hidden="true"></i>
-        </button>
+        {typeof onMenuClick === 'function' && (
+          <button
+            type="button"
+            className="legacy-publicacion-menu"
+            onClick={onMenuClick}
+            aria-label="Opciones de la publicación"
+          >
+            <i className="bi bi-three-dots" aria-hidden="true"></i>
+          </button>
+        )}
       </div>
     </header>
   );

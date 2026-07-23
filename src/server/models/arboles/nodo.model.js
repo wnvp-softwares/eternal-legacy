@@ -88,12 +88,22 @@ const nodoSchema = new mongoose.Schema({
 
     generacion: {
         type: Number,
-        required: true
+        required: true,
+        min: 0,
+        validate: {
+            validator: Number.isInteger,
+            message: 'La generación debe ser un número entero.'
+        }
     },
 
     fila: {
         type: Number,
-        required: true
+        required: true,
+        min: 0,
+        validate: {
+            validator: Number.isInteger,
+            message: 'La fila debe ser un número entero.'
+        }
     },
 
     fotos: [{
@@ -102,7 +112,9 @@ const nodoSchema = new mongoose.Schema({
         fechaReal: { type: Date, default: null },
         personas: { type: String, default: '' },
         lugar: { type: String, default: '' },
-        descripcion: { type: String, default: '' }
+        descripcion: { type: String, default: '' },
+        // Solo una fotografía por nodo puede tener este valor en true.
+        esFotoPerfil: { type: Boolean, default: false }
     }],
 
     biografia: {

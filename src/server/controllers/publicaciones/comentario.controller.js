@@ -1,8 +1,44 @@
 const mongoose = require('mongoose');
-const { Comentario, Publicacion } = require('../../models/index.model');
+const { Comentario, Publicacion, Arbol } = require('../../models/index.model');
 
 const esObjectIdValido = (id) => {
     return Boolean(id) && mongoose.Types.ObjectId.isValid(String(id));
+};
+
+
+const obtenerIdSeguro = (valor) => {
+    if (!valor) return null;
+    if (typeof valor === 'string') return valor;
+    return valor._id ? String(valor._id) : (valor.id ? String(valor.id) : null);
+};
+
+const sonMismoId = (a, b) => {
+    const idA = obtenerIdSeguro(a);
+    const idB = obtenerIdSeguro(b);
+    return Boolean(idA && idB && idA === idB);
+};
+
+const usuarioPerteneceAlArbol = (arbol, usuarioId) => {
+    if (!arbol || !usuarioId) return false;
+    if (sonMismoId(arbol.creador, usuarioId)) return true;
+    if (Array.isArray(arbol.admins) && arbol.admins.some(id => sonMismoId(id, usuarioId))) return true;
+
+    return (Array.isArray(arbol.miembros) ? arbol.miembros : []).some(miembro => (
+        sonMismoId(miembro.usuario, usuarioId) && miembro.estado === 'Activo'
+    ));
+};
+
+const usuarioPuedeVerPublicacion = async (publicacion, usuarioId) => {
+    if (!publicacion || !usuarioId) return false;
+    if (sonMismoId(publicacion.autor, usuarioId)) return true;
+    if (publicacion.tipo === 'historico' || publicacion.privacidad === 'publico') return true;
+
+    const arbolId = obtenerIdSeguro(publicacion.arbolAudiencia) ||
+        obtenerIdSeguro(publicacion.eventoRelacionado?.arbol);
+    if (!arbolId || !esObjectIdValido(arbolId)) return false;
+
+    const arbol = await Arbol.findById(arbolId).select('creador admins miembros activo');
+    return Boolean(arbol?.activo !== false && usuarioPerteneceAlArbol(arbol, usuarioId));
 };
 
 const poblarComentario = async (comentarioId) => {
@@ -40,6 +76,12 @@ const crearComentario = async (req, res) => {
             });
         }
 
+        if (!(await usuarioPuedeVerPublicacion(publicacion, req.usuario.id || req.usuario._id))) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para comentar esta publicación.'
+            });
+        }
+
         const nuevoComentario = new Comentario({
             publicacionPadre: publicacionId,
             autor: req.usuario.id || req.usuario._id,
@@ -73,11 +115,18 @@ const obtenerComentariosPorPublicacion = async (req, res) => {
             });
         }
 
-        const publicacion = await Publicacion.findById(publicacionId).select('_id');
+        const publicacion = await Publicacion.findById(publicacionId)
+            .select('_id autor tipo privacidad arbolAudiencia eventoRelacionado');
 
         if (!publicacion) {
             return res.status(404).json({
                 mensaje: 'Publicación no encontrada.'
+            });
+        }
+
+        if (!(await usuarioPuedeVerPublicacion(publicacion, req.usuario.id || req.usuario._id))) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para consultar los comentarios de esta publicación.'
             });
         }
 

@@ -85,15 +85,25 @@ export default function PublicacionMediaCarousel({
   tipo = 'familiar',
   compacto = false,
   alt = 'Multimedia de la publicación',
-  className = ''
+  className = '',
+  indiceInicial = 0,
+  ajuste = 'cover',
+  onIndiceChange
 }) {
   const elementos = useMemo(() => normalizarMultimedia(multimedia), [multimedia]);
   const [indiceActivo, setIndiceActivo] = useState(0);
   const touchInicioXRef = useRef(null);
 
   useEffect(() => {
-    setIndiceActivo(0);
-  }, [multimedia]);
+    const indiceSeguro = Number.isInteger(Number(indiceInicial)) ? Number(indiceInicial) : 0;
+    setIndiceActivo(Math.max(0, Math.min(indiceSeguro, Math.max(0, elementos.length - 1))));
+  }, [multimedia, indiceInicial, elementos.length]);
+
+  useEffect(() => {
+    if (typeof onIndiceChange === 'function') {
+      onIndiceChange(indiceActivo);
+    }
+  }, [indiceActivo, onIndiceChange]);
 
   useEffect(() => {
     if (indiceActivo >= elementos.length) {
@@ -130,12 +140,18 @@ export default function PublicacionMediaCarousel({
 
   return (
     <div
-      className={`publicacion-media-carousel ${esHistorico ? 'historico' : 'familiar'} ${compacto ? 'compacto' : ''} ${className}`.trim()}
+      className={`publicacion-media-carousel ${esHistorico ? 'historico' : 'familiar'} ${compacto ? 'compacto' : ''} ${ajuste === 'contain' ? 'ajuste-contain' : 'ajuste-cover'} ${className}`.trim()}
       onTouchStart={manejarTouchStart}
       onTouchEnd={manejarTouchEnd}
       onKeyDown={(event) => {
-        if (event.key === 'ArrowLeft') irA(indiceActivo - 1);
-        if (event.key === 'ArrowRight') irA(indiceActivo + 1);
+        if (event.key === 'ArrowLeft') {
+          event.stopPropagation();
+          irA(indiceActivo - 1);
+        }
+        if (event.key === 'ArrowRight') {
+          event.stopPropagation();
+          irA(indiceActivo + 1);
+        }
       }}
       tabIndex={total > 1 ? 0 : undefined}
       aria-label={total > 1 ? `Carrusel de ${total} archivos` : 'Archivo de la publicación'}

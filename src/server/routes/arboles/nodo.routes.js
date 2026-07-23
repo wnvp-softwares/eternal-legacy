@@ -2,14 +2,24 @@ const express = require('express');
 const router = express.Router();
 
 const { verificarToken } = require('../../middlewares/auth.middleware');
+const upload = require('../../configs/multer.config');
 
 const {
+    subirFotoNodo,
     obtenerNodosPorArbol,
     obtenerDetalleNodo,
     crearPerfilSinCuenta,
     actualizarNodo,
     eliminarNodo
 } = require('../../controllers/arboles/nodo.controller');
+
+// Subir una sola fotografía y devolver su URL pública.
+router.post(
+    '/arbol/:arbolId/subir-foto',
+    verificarToken,
+    upload.single('archivo'),
+    subirFotoNodo
+);
 
 // Obtener todos los nodos/personas de un árbol
 router.get('/arbol/:arbolId', verificarToken, obtenerNodosPorArbol);

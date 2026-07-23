@@ -215,6 +215,23 @@ const obtenerPartesFechaEnZona = (fecha, preferencias = {}) => {
   }
 };
 
+
+const normalizarNodoRelacionable = (nodo = {}) => {
+  const id = obtenerId(nodo);
+  const usuarioId = obtenerId(nodo.usuario);
+  const nombre = normalizarTexto(nodo.nombre || nodo.usuario?.nombreUsuario || 'Familiar');
+  const imagen = obtenerImagenDeEntidad(nodo.usuario) || nodo.fotoPerfil || null;
+
+  return {
+    id,
+    nodoId: id,
+    usuarioId,
+    nombre,
+    origen: nodo.origen || (usuarioId ? 'usuario_real' : 'perfil_sin_cuenta'),
+    imagen: imagen ? resolverUrlBackend(typeof imagen === 'object' ? (imagen.urlArchivo || imagen.url) : imagen) : null
+  };
+};
+
 const obtenerInicioDiaEnZona = (fecha, preferencias = {}) => {
   const partes = obtenerPartesFechaEnZona(fecha, preferencias);
   if (!partes) return null;
@@ -521,6 +538,11 @@ export default function Inicio() {
   const [cargandoArbolesAudiencia, setCargandoArbolesAudiencia] = useState(false);
   const [arbolAudienciaPublicacion, setArbolAudienciaPublicacion] = useState(null);
   const [etiquetasImagen, setEtiquetasImagen] = useState([]);
+  const [fechaMomentoPublicacion, setFechaMomentoPublicacion] = useState('');
+  const [nodosRelacionablesPublicacion, setNodosRelacionablesPublicacion] = useState([]);
+  const [personasRelacionadasPublicacion, setPersonasRelacionadasPublicacion] = useState([]);
+  const [busquedaNodoRelacionado, setBusquedaNodoRelacionado] = useState('');
+  const [cargandoNodosRelacionables, setCargandoNodosRelacionables] = useState(false);
 
   const [multimediaBorrador, setMultimediaBorrador] = useState([]);
   const multimediaBorradorRef = useRef([]);
@@ -744,6 +766,47 @@ export default function Inicio() {
     setArbolAudienciaPublicacion(arbolesAudienciaPublicacion[0]);
   }, [tipoPublicacion, arbolAudienciaPublicacion, arbolesAudienciaPublicacion]);
 
+
+  useEffect(() => {
+    const arbolId = arbolAudienciaPublicacion?.id;
+    setPersonasRelacionadasPublicacion([]);
+    setBusquedaNodoRelacionado('');
+
+    if (!token || tipoPublicacion !== 'familiar' || !arbolId) {
+      setNodosRelacionablesPublicacion([]);
+      setCargandoNodosRelacionables(false);
+      return undefined;
+    }
+
+    const controlador = new AbortController();
+
+    const cargarNodosRelacionables = async () => {
+      try {
+        setCargandoNodosRelacionables(true);
+        const respuesta = await fetch(`${API_BASE_URL}/nodos/arbol/${arbolId}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: controlador.signal
+        });
+        const datos = await respuesta.json().catch(() => ({}));
+        if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudieron cargar los familiares del árbol.');
+
+        const lista = (Array.isArray(datos.nodos) ? datos.nodos : [])
+          .map(normalizarNodoRelacionable)
+          .filter(item => item.id);
+        setNodosRelacionablesPublicacion(lista);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error al cargar familiares relacionables:', error);
+          setNodosRelacionablesPublicacion([]);
+        }
+      } finally {
+        if (!controlador.signal.aborted) setCargandoNodosRelacionables(false);
+      }
+    };
+
+    cargarNodosRelacionables();
+    return () => controlador.abort();
+  }, [token, tipoPublicacion, arbolAudienciaPublicacion?.id, API_BASE_URL]);
 
   useEffect(() => {
     if (!token || !['menciones', 'etiquetas'].includes(panelHerramientaActivo)) return;
@@ -975,6 +1038,9 @@ export default function Inicio() {
     setMencionesPublicacion([]);
     setEventoRelacionadoPublicacion(null);
     setEtiquetasImagen([]);
+    setFechaMomentoPublicacion('');
+    setPersonasRelacionadasPublicacion([]);
+    setBusquedaNodoRelacionado('');
   };
 
   const insertarTextoEnPublicacion = (textoAInsertar) => {
@@ -1021,6 +1087,9 @@ export default function Inicio() {
     if (panel === 'menciones' || panel === 'etiquetas') {
       setBusquedaPersonaPublicacion('');
       setSugerenciasPersonasPublicacion([]);
+    }
+    if (panel === 'familiares') {
+      setBusquedaNodoRelacionado('');
     }
   };
 
@@ -1076,6 +1145,16 @@ export default function Inicio() {
 
     setBusquedaPersonaPublicacion('');
     setPanelHerramientaActivo(null);
+  };
+
+  const alternarPersonaRelacionada = (nodo) => {
+    if (!nodo?.id) return;
+    setPersonasRelacionadasPublicacion(prev => {
+      const existe = prev.some(item => String(item.id) === String(nodo.id));
+      return existe
+        ? prev.filter(item => String(item.id) !== String(nodo.id))
+        : [...prev, nodo];
+    });
   };
 
   const abrirSelectorTipoPublicacion = () => setSelectorTipoAbierto(true);
@@ -1138,6 +1217,12 @@ export default function Inicio() {
       formData.append('contenido', contenidoLimpio);
       if (tipoPublicacion === 'familiar') {
         formData.append('arbolAudienciaId', arbolAudienciaPublicacion.id);
+        if (fechaMomentoPublicacion) formData.append('fechaMomento', fechaMomentoPublicacion);
+        if (personasRelacionadasPublicacion.length > 0) {
+          formData.append('personasRelacionadas', JSON.stringify(
+            personasRelacionadasPublicacion.map(persona => ({ nodoId: persona.id }))
+          ));
+        }
       }
       if (ubicacionPublicacion) formData.append('ubicacionTexto', ubicacionPublicacion);
       if (mencionesPublicacion.length > 0) {
@@ -1180,7 +1265,9 @@ export default function Inicio() {
           eventoRelacionado: datos.publicacion?.eventoRelacionado || eventoRelacionadoPublicacion,
           arbolAudiencia: datos.publicacion?.arbolAudiencia || arbolAudienciaPublicacion,
           nombreFamiliaAudienciaSnapshot: datos.publicacion?.nombreFamiliaAudienciaSnapshot || arbolAudienciaPublicacion?.nombreFamilia || '',
-          etiquetasMultimedia: datos.publicacion?.etiquetasMultimedia || etiquetasImagen
+          etiquetasMultimedia: datos.publicacion?.etiquetasMultimedia || etiquetasImagen,
+          fechaMomento: datos.publicacion?.fechaMomento || fechaMomentoPublicacion || null,
+          personasRelacionadas: datos.publicacion?.personasRelacionadas || personasRelacionadasPublicacion
         };
         setPublicaciones((prev) => [publicacionCreada, ...prev]);
         setComentariosPorPub(prev => ({ ...prev, [datos.publicacion._id]: [] }));
@@ -1396,6 +1483,18 @@ export default function Inicio() {
     const eventoNormalizado = normalizarEventoParaPublicacion(evento);
     if (!eventoNormalizado) return;
     setEventoRelacionadoPublicacion(eventoNormalizado);
+    if (!fechaMomentoPublicacion && eventoNormalizado.fechaInicio) {
+      const fechaCruda = String(eventoNormalizado.fechaInicio);
+      const coincidenciaFecha = fechaCruda.match(/^\d{4}-\d{2}-\d{2}/);
+      if (coincidenciaFecha) {
+        setFechaMomentoPublicacion(coincidenciaFecha[0]);
+      } else {
+        const fechaEvento = new Date(eventoNormalizado.fechaInicio);
+        if (!Number.isNaN(fechaEvento.getTime())) {
+          setFechaMomentoPublicacion(fechaEvento.toISOString().slice(0, 10));
+        }
+      }
+    }
     setPanelHerramientaActivo(null);
   };
 
@@ -1439,112 +1538,6 @@ export default function Inicio() {
     } finally {
       setCargandoPublicacionesEvento(false);
     }
-  };
-
-  // 1. Normalización de nombre de entidad soportando nickname y apodo
-  const obtenerNombreDeEntidad = (entidad, fallback = 'Familiar') => {
-    if (!entidad) return fallback;
-    if (typeof entidad === 'string') return entidad;
-    return normalizarTexto(
-      entidad.nombreUsuario ||
-      entidad.nickname ||
-      entidad.apodo ||
-      entidad.nombre ||
-      entidad.nombreCompleto ||
-      entidad.usuario?.nombreUsuario ||
-      entidad.usuario?.nickname ||
-      entidad.usuario?.nombre ||
-      entidad.id?.nombreUsuario ||
-      fallback
-    );
-  };
-
-  // 2. Normalización de persona sugerida con propiedad nickname
-  const normalizarPersonaSugerida = (persona = {}) => {
-    const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id) || obtenerNombreDeEntidad(persona);
-    const nombre = obtenerNombreDeEntidad(persona);
-    const nickname = normalizarTexto(
-      persona.nickname ||
-      persona.apodo ||
-      persona.nombreUsuario ||
-      persona.usuario?.nickname ||
-      persona.usuario?.apodo ||
-      persona.usuario?.nombreUsuario ||
-      ''
-    );
-    const imagen = obtenerImagenDeEntidad(persona);
-
-    return {
-      ...persona,
-      id,
-      nombre,
-      nickname,
-      imagen
-    };
-  };
-
-  // 3. Búsqueda de persona mencionada comparando por nombre de perfil, nickname y usuario
-  const buscarPersonaPorMencion = (textoMencion = '', menciones = []) => {
-    if (!Array.isArray(menciones) || menciones.length === 0) return null;
-    const mencionNormalizada = normalizarHandleMencion(textoMencion);
-
-    return menciones.find((persona) => {
-      const posiblesNombres = [
-        persona.nickname,
-        persona.apodo,
-        persona.nombre,
-        persona.nombreUsuario,
-        persona.nombreCompleto,
-        persona.usuario?.nickname,
-        persona.usuario?.apodo,
-        persona.usuario?.nombreUsuario,
-        persona.usuario?.nombre,
-        persona.id?.nombreUsuario
-      ].filter(Boolean);
-
-      return posiblesNombres.some(nombre => normalizarHandleMencion(nombre) === mencionNormalizada);
-    }) || null;
-  };
-
-  // 4. Inserción de mención privilegiando nickname si existe, o el nombre de perfil sin espacios
-  const seleccionarPersonaPublicacion = (personaOriginal) => {
-    const persona = normalizarPersonaSugerida(personaOriginal);
-    if (panelHerramientaActivo === 'etiquetas') {
-      setEtiquetasImagen(prev => {
-        const yaExiste = prev.some(item => String(item.id) === String(persona.id));
-        return yaExiste ? prev : [...prev, persona];
-      });
-      setBusquedaPersonaPublicacion('');
-      setSugerenciasPersonasPublicacion([]);
-      return;
-    }
-
-    const textarea = textareaPublicacionRef.current;
-    const cursor = textarea?.selectionStart ?? textoPublicacion.length;
-    const mencionActiva = detectarMencionActiva(textoPublicacion, cursor);
-
-    // Usa el nickname si está disponible; de lo contrario usa el nombre de perfil adaptado
-    const identificador = (persona.nickname || persona.nombre).replace(/\s+/g, '_');
-    const textoMencion = `@${identificador} `;
-
-    if (mencionActiva) {
-      const antes = textoPublicacion.slice(0, mencionActiva.inicio);
-      const despues = textoPublicacion.slice(cursor);
-      const nuevoTexto = `${antes}${textoMencion}${despues}`;
-      const nuevaPosicion = antes.length + textoMencion.length;
-      setTextoPublicacion(nuevoTexto);
-      setTimeout(() => { textarea?.focus(); textarea?.setSelectionRange(nuevaPosicion, nuevaPosicion); }, 0);
-    } else {
-      insertarTextoEnPublicacion(textoMencion);
-    }
-
-    setMencionesPublicacion(prev => {
-      const yaExiste = prev.some(item => String(item.id) === String(persona.id));
-      return yaExiste ? prev : [...prev, persona];
-    });
-
-    setBusquedaPersonaPublicacion('');
-    setPanelHerramientaActivo(null);
   };
 
   const abrirAlbumEvento = (evento) => { cargarPublicacionesDeEvento(evento); };
@@ -1647,7 +1640,7 @@ export default function Inicio() {
   };
 
   const renderChipsHerramientas = () => {
-    const hayChips = ubicacionPublicacion || eventoRelacionadoPublicacion || (tipoPublicacion === 'familiar' && arbolAudienciaPublicacion);
+    const hayChips = ubicacionPublicacion || eventoRelacionadoPublicacion || personasRelacionadasPublicacion.length > 0 || (tipoPublicacion === 'familiar' && arbolAudienciaPublicacion);
     if (!hayChips) return null;
 
     return (
@@ -1672,6 +1665,13 @@ export default function Inicio() {
             <button type="button" onClick={() => setEventoRelacionadoPublicacion(null)} aria-label="Quitar evento relacionado"><i className="bi bi-x"></i></button>
           </span>
         )}
+        {personasRelacionadasPublicacion.map(persona => (
+          <span key={`relacion-${persona.id}`} className="chip-publicacion familiar-relacionado">
+            <i className="bi bi-person-heart"></i>
+            {persona.nombre}
+            <button type="button" onClick={() => alternarPersonaRelacionada(persona)} aria-label={`Quitar a ${persona.nombre}`}><i className="bi bi-x"></i></button>
+          </span>
+        ))}
       </div>
     );
   };
@@ -1743,6 +1743,58 @@ export default function Inicio() {
       );
     }
 
+    if (panelHerramientaActivo === 'familiares') {
+      const termino = normalizarTexto(busquedaNodoRelacionado).toLowerCase();
+      const resultados = nodosRelacionablesPublicacion.filter(nodo => (
+        !termino || nodo.nombre.toLowerCase().includes(termino)
+      ));
+
+      return (
+        <div className="panel-herramienta-publicacion panel-familiares-relacionados">
+          <div className="encabezado-panel-familiares">
+            <div>
+              <strong>Relacionar familiares del árbol</strong>
+              <small>Incluye personas con cuenta y perfiles familiares sin cuenta.</small>
+            </div>
+          </div>
+          <div className="buscador-familiares-relacionados">
+            <i className="bi bi-search"></i>
+            <input
+              type="search"
+              value={busquedaNodoRelacionado}
+              onChange={(event) => setBusquedaNodoRelacionado(event.target.value)}
+              placeholder="Buscar familiar por nombre..."
+              autoFocus
+            />
+          </div>
+          <div className="lista-familiares-relacionados">
+            {cargandoNodosRelacionables ? (
+              <div className="estado-panel-familiares"><span className="spinner-border spinner-border-sm"></span> Cargando familiares...</div>
+            ) : resultados.length > 0 ? resultados.map(nodo => {
+              const seleccionado = personasRelacionadasPublicacion.some(item => String(item.id) === String(nodo.id));
+              return (
+                <button
+                  key={nodo.id}
+                  type="button"
+                  className={`familiar-relacionable ${seleccionado ? 'seleccionado' : ''}`}
+                  onClick={() => alternarPersonaRelacionada(nodo)}
+                >
+                  {nodo.imagen ? <img src={nodo.imagen} alt="" /> : <span>{nodo.nombre.slice(0, 2).toUpperCase()}</span>}
+                  <div>
+                    <strong>{nodo.nombre}</strong>
+                    <small>{nodo.origen === 'perfil_sin_cuenta' ? 'Perfil familiar sin cuenta' : 'Miembro registrado'}</small>
+                  </div>
+                  <i className={`bi ${seleccionado ? 'bi-check-circle-fill' : 'bi-plus-circle'}`}></i>
+                </button>
+              );
+            }) : (
+              <div className="estado-panel-familiares">No se encontraron familiares en este árbol.</div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     if (panelHerramientaActivo === 'menciones' || panelHerramientaActivo === 'etiquetas') {
       const esEtiquetar = panelHerramientaActivo === 'etiquetas';
       return (
@@ -1753,11 +1805,7 @@ export default function Inicio() {
               type="text"
               value={busquedaPersonaPublicacion}
               onChange={(e) => setBusquedaPersonaPublicacion(e.target.value)}
-<<<<<<< HEAD
               placeholder={esEtiquetar ? 'Buscar persona para etiquetar...' : 'Buscar persona o @nickname...'}
-=======
-              placeholder={esEtiquetar ? 'Buscar por nickname o nombre real...' : 'Buscar por nickname o nombre real...'}
->>>>>>> 31c5f5ec5fde39d8f1558dcd60977135f7c2daae
               autoFocus
             />
           </div>
@@ -1777,27 +1825,19 @@ export default function Inicio() {
                 >
                   <img src={obtenerUrlImagenPerfil(persona.imagen, persona.nombre)} alt={persona.nombre} />
                   <div>
-<<<<<<< HEAD
-                    <strong>{persona.nombre}</strong>
-                    <small>
-                      {persona.nickname ? `@${persona.nickname} • ` : ''}
-                      {esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}
-                    </small>
-=======
                     <strong>{persona.nombreReal || persona.nombre}</strong>
-                    {persona.nickname && <small className="d-block text-muted">{persona.nickname}</small>}
+                    {persona.nickname && (
+                      <small className="d-block text-muted">{persona.nickname}</small>
+                    )}
                     <small>{esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}</small>
->>>>>>> 31c5f5ec5fde39d8f1558dcd60977135f7c2daae
                   </div>
                 </button>
               ))
             ) : (
               <div className="estado-sugerencias-publicacion">
-<<<<<<< HEAD
-                {busquedaPersonaPublicacion.trim() ? 'No se encontraron personas.' : 'Escribe un nombre o nickname para buscar.'}
-=======
-                {busquedaPersonaPublicacion.trim() ? 'No se encontraron personas.' : 'Escribe un nickname o nombre real para buscar.'}
->>>>>>> 31c5f5ec5fde39d8f1558dcd60977135f7c2daae
+                {busquedaPersonaPublicacion.trim()
+                  ? 'No se encontraron personas.'
+                  : 'Escribe un nombre o nickname para buscar.'}
               </div>
             )}
           </div>
@@ -2053,6 +2093,23 @@ export default function Inicio() {
                 </div>
               )}
 
+              {tipoPublicacion === 'familiar' && (
+                <div className="fecha-momento-publicacion mb-3">
+                  <label htmlFor="fecha-momento-publicacion">
+                    <i className="bi bi-calendar3"></i>
+                    Fecha del momento <span>opcional</span>
+                  </label>
+                  <input
+                    id="fecha-momento-publicacion"
+                    type="date"
+                    value={fechaMomentoPublicacion}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(event) => setFechaMomentoPublicacion(event.target.value)}
+                  />
+                  <small>Si la dejas vacía, la línea del tiempo usará la fecha de publicación.</small>
+                </div>
+              )}
+
               <div className="contenedor-input-superpuesto">
                 <div className="form-control input-publicacion input-overlay" ref={overlayRef} aria-hidden="true">
                   {textoPublicacion ? renderTextoConMenciones(textoPublicacion) : ''}
@@ -2093,7 +2150,10 @@ export default function Inicio() {
                 <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'ubicacion' || ubicacionPublicacion ? 'activo' : ''}`} type="button" title="Agregar ubicación" onClick={() => abrirPanelHerramienta('ubicacion')}><i className="bi bi-geo-alt"></i></button>
 
                 {tipoPublicacion === 'familiar' && (
-                  <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'eventos' || eventoRelacionadoPublicacion ? 'activo' : ''}`} type="button" title="Mencionar evento familiar" onClick={() => abrirPanelHerramienta('eventos')}><i className="bi bi-calendar-heart"></i></button>
+                  <>
+                    <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'eventos' || eventoRelacionadoPublicacion ? 'activo' : ''}`} type="button" title="Mencionar evento familiar" onClick={() => abrirPanelHerramienta('eventos')}><i className="bi bi-calendar-heart"></i></button>
+                    <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'familiares' || personasRelacionadasPublicacion.length > 0 ? 'activo' : ''}`} type="button" title="Relacionar familiares del árbol" onClick={() => abrirPanelHerramienta('familiares')}><i className="bi bi-person-hearts"></i></button>
+                  </>
                 )}
 
                 <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'menciones' || mencionesPublicacion.length > 0 ? 'activo' : ''}`} type="button" title="Mencionar persona" onClick={() => abrirPanelHerramienta('menciones')}><span className="icono-arroba">@</span></button>
