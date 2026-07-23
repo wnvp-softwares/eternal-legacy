@@ -1447,35 +1447,52 @@ export default function ArbolGenealogico() {
 
     try {
       setSubiendoFoto(true);
+
+      // 1. Crear FormData con el archivo binario real
       const formData = new FormData();
       formData.append('archivo', file);
 
+      // 2. Subir directamente al servidor usando el endpoint de uploads
       const res = await fetch('/api/uploads/subir', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}` // Asegurar el token del estado/contexto
+          'Authorization': `Bearer ${token}` // Usa tu token de autenticación
         },
         body: formData
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.mensaje || 'Error al subir la imagen');
 
-      // Se prepara el estado temporal para el modal de metadatos
+      if (!res.ok) {
+        throw new Error(data.mensaje || 'Error al subir la imagen al servidor');
+      }
+
+      // 3. Extraer solo la URL del archivo (NO almacenar Base64)
+      const urlImagenSubida = data.upload?.urlArchivo || data.upload?.url || data.url;
+
+      if (!urlImagenSubida) {
+        throw new Error('No se recibió la URL de la imagen subida.');
+      }
+
+      // 4. Cargar la URL en el estado temporal e invocar el modal
       setTempFotoData({
-        url: data.upload.urlArchivo,
+        url: urlImagenSubida,
         fechaSubida: new Date().toISOString().split('T')[0],
         fechaReal: '',
         personas: '',
         lugar: '',
         descripcion: ''
       });
+
+      // Abrir modal de metadatos
       setModalFotoMetadata(true);
+
     } catch (err) {
-      alert(err.message || 'Error al subir el archivo');
+      console.error('Error al subir imagen:', err);
+      alert(err.message || 'Error al procesar la imagen');
     } finally {
       setSubiendoFoto(false);
-      e.target.value = ''; // Resetear el input file
+      e.target.value = ''; // Limpiar el input para permitir subir la misma foto si se desea
     }
   };
 
@@ -5519,12 +5536,13 @@ La persona seguirá dentro del árbol como miembro normal.`
                             <p className="text-muted small mb-0">Puedes agregar hasta 8 fotos.</p>
                           </div>
 
+                          {/* En la sección de la galería de fotos del panel de edición */}
                           <div className="panel-galeria-upload">
-                            <label htmlFor="input-foto-unica" className="btn-subir-foto-individual">
-                              {subiendoFoto ? 'Subiendo...' : '+ Agregar Foto con Detalles'}
+                            <label htmlFor="input-foto-unica-nodo" className="btn-subir-foto-individual">
+                              {subiendoFoto ? 'Subiendo imagen...' : '+ Agregar Foto con Detalles'}
                             </label>
                             <input
-                              id="input-foto-unica"
+                              id="input-foto-unica-nodo"
                               type="file"
                               accept="image/*"
                               onChange={handleSeleccionarImagenIndividual}

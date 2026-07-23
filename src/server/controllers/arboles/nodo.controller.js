@@ -346,16 +346,18 @@ const actualizarNodo = async (req, res) => {
 
         camposPermitidos.forEach(campo => {
             if (req.body[campo] !== undefined) {
-                if (campo === 'fotos' && Array.isArray(req.body.fotos)) {
-                    nodo.fotos = req.body.fotos.map(f => {
-                        if (typeof f === 'string') return { url: f, fechaSubida: new Date() };
+                if (req.body.fotos && Array.isArray(req.body.fotos)) {
+                    nodo.fotos = req.body.fotos.map(foto => {
+                        if (typeof foto === 'string') {
+                            return { url: foto, fechaSubida: new Date() };
+                        }
                         return {
-                            url: f.url || f,
-                            fechaSubida: f.fechaSubida || new Date(),
-                            fechaReal: f.fechaReal ? new Date(f.fechaReal) : null,
-                            personas: f.personas || '',
-                            lugar: f.lugar || '',
-                            descripcion: f.descripcion || ''
+                            url: foto.url,
+                            fechaSubida: foto.fechaSubida ? new Date(foto.fechaSubida) : new Date(),
+                            fechaReal: foto.fechaReal ? new Date(foto.fechaReal) : null,
+                            personas: foto.personas || '',
+                            lugar: foto.lugar || '',
+                            descripcion: foto.descripcion || ''
                         };
                     });
                 } else {
