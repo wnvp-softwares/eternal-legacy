@@ -250,6 +250,18 @@ const crearPerfilSinCuenta = async (req, res) => {
             });
         }
 
+        const fotosFormateadas = (Array.isArray(fotos) ? fotos : []).map(f => {
+            if (typeof f === 'string') return { url: f, fechaSubida: new Date() };
+            return {
+                url: f.url,
+                fechaSubida: f.fechaSubida || new Date(),
+                fechaReal: f.fechaReal ? new Date(f.fechaReal) : null,
+                personas: f.personas || '',
+                lugar: f.lugar || '',
+                descripcion: f.descripcion || ''
+            };
+        });
+
         const nuevoNodo = await Nodo.create({
             arbol: arbolId,
             usuario: null,
@@ -268,7 +280,7 @@ const crearPerfilSinCuenta = async (req, res) => {
             origen: 'perfil_sin_cuenta',
             generacion,
             fila,
-            fotos,
+            fotos: fotosFormateadas,
             biografia,
             perfilPrivado,
             visible: true
@@ -334,7 +346,21 @@ const actualizarNodo = async (req, res) => {
 
         camposPermitidos.forEach(campo => {
             if (req.body[campo] !== undefined) {
-                nodo[campo] = req.body[campo];
+                if (campo === 'fotos' && Array.isArray(req.body.fotos)) {
+                    nodo.fotos = req.body.fotos.map(f => {
+                        if (typeof f === 'string') return { url: f, fechaSubida: new Date() };
+                        return {
+                            url: f.url || f,
+                            fechaSubida: f.fechaSubida || new Date(),
+                            fechaReal: f.fechaReal ? new Date(f.fechaReal) : null,
+                            personas: f.personas || '',
+                            lugar: f.lugar || '',
+                            descripcion: f.descripcion || ''
+                        };
+                    });
+                } else {
+                    nodo[campo] = req.body[campo];
+                }
             }
         });
 

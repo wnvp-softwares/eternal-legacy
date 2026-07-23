@@ -97,7 +97,12 @@ const nodoSchema = new mongoose.Schema({
     },
 
     fotos: [{
-        type: String
+        url: { type: String, required: true },
+        fechaSubida: { type: Date, default: Date.now },
+        fechaReal: { type: Date, default: null },
+        personas: { type: String, default: '' },
+        lugar: { type: String, default: '' },
+        descripcion: { type: String, default: '' }
     }],
 
     biografia: {

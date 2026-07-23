@@ -1160,6 +1160,28 @@ export default function ArbolGenealogico() {
 
   const [filtrosAplicados, establecerFiltrosAplicados] = useState(FILTROS_ARBOL_DEFECTO);
 
+  // Agregar dentro del componente principal ArbolGenealogico:
+  const [modalFotoMetadata, setModalFotoMetadata] = useState(false);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [tempFotoData, setTempFotoData] = useState({
+    url: '',
+    fechaSubida: new Date().toISOString().split('T')[0],
+    fechaReal: '',
+    personas: '',
+    lugar: '',
+    descripcion: ''
+  });
+
+  const [modalImagenAbierto, setModalImagenAbierto] = useState(false);
+  const [archivoPendiente, setArchivoPendiente] = useState(null);
+  const [datosImagen, setDatosImagen] = useState({
+    fechaSubida: '',
+    fechaReal: '',
+    personas: '',
+    lugar: '',
+    descripcion: ''
+  });
+
   const token = localStorage.getItem('token');
   const usuarioActualId = useMemo(() => obtenerUsuarioIdDesdeToken(token), [token]);
 
@@ -1417,6 +1439,65 @@ export default function ArbolGenealogico() {
     } finally {
       establecerExportandoArbol(false);
     }
+  };
+
+  const handleSeleccionarImagenIndividual = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    try {
+      setSubiendoFoto(true);
+      const formData = new FormData();
+      formData.append('archivo', file);
+
+      const res = await fetch('/api/uploads/subir', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}` // Asegurar el token del estado/contexto
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.mensaje || 'Error al subir la imagen');
+
+      // Se prepara el estado temporal para el modal de metadatos
+      setTempFotoData({
+        url: data.upload.urlArchivo,
+        fechaSubida: new Date().toISOString().split('T')[0],
+        fechaReal: '',
+        personas: '',
+        lugar: '',
+        descripcion: ''
+      });
+      setModalFotoMetadata(true);
+    } catch (err) {
+      alert(err.message || 'Error al subir el archivo');
+    } finally {
+      setSubiendoFoto(false);
+      e.target.value = ''; // Resetear el input file
+    }
+  };
+
+  const handleGuardarMetadataFoto = () => {
+    if (!tempFotoData.url) return;
+
+    // Agregar la nueva foto procesada al estado actual de las fotos del perfil sin cuenta o nodo
+    setFormPerfilSinCuenta(prev => ({
+      ...prev,
+      fotos: [...(prev.fotos || []), tempFotoData]
+    }));
+
+    // Resetear modal y estado temporal
+    setModalFotoMetadata(false);
+    setTempFotoData({
+      url: '',
+      fechaSubida: new Date().toISOString().split('T')[0],
+      fechaReal: '',
+      personas: '',
+      lugar: '',
+      descripcion: ''
+    });
   };
 
   const entrarModoEdicion = () => {
@@ -5438,16 +5519,19 @@ La persona seguirá dentro del árbol como miembro normal.`
                             <p className="text-muted small mb-0">Puedes agregar hasta 8 fotos.</p>
                           </div>
 
-                          <label className="boton-agregar-galeria-sin-cuenta">
-                            <i className="bi bi-images"></i>
-                            Agregar
+                          <div className="panel-galeria-upload">
+                            <label htmlFor="input-foto-unica" className="btn-subir-foto-individual">
+                              {subiendoFoto ? 'Subiendo...' : '+ Agregar Foto con Detalles'}
+                            </label>
                             <input
+                              id="input-foto-unica"
                               type="file"
                               accept="image/*"
-                              multiple
-                              onChange={manejarGaleriaPerfilSinCuenta}
+                              onChange={handleSeleccionarImagenIndividual}
+                              disabled={subiendoFoto}
+                              style={{ display: 'none' }}
                             />
-                          </label>
+                          </div>
                         </div>
 
                         {formularioPerfilSinCuenta.fotosGaleria.length > 0 ? (
@@ -5868,6 +5952,81 @@ La persona seguirá dentro del árbol como miembro normal.`
           </div>
         )}
       </div>
+      {modalFotoMetadata && (
+        <div className="modal-metadata-overlay">
+          <div className="modal-metadata-content">
+            <h3>Detalles de la Fotografía</h3>
+
+            <div className="modal-metadata-preview">
+              <img src={tempFotoData.url} alt="Vista previa" />
+            </div>
+
+            <div className="modal-metadata-group">
+              <label>Fecha de subida (Automática)</label>
+              <input
+                type="date"
+                value={tempFotoData.fechaSubida}
+                disabled
+              />
+            </div>
+
+            <div className="modal-metadata-group">
+              <label>Fecha en la que se tomó la foto</label>
+              <input
+                type="date"
+                value={tempFotoData.fechaReal}
+                onChange={(e) => setTempFotoData({ ...tempFotoData, fechaReal: e.target.value })}
+              />
+            </div>
+
+            <div className="modal-metadata-group">
+              <label>Personas que aparecen (Nombres separados por coma)</label>
+              <input
+                type="text"
+                placeholder="Ej. Juan Pérez, María Gómez"
+                value={tempFotoData.personas}
+                onChange={(e) => setTempFotoData({ ...tempFotoData, personas: e.target.value })}
+              />
+            </div>
+
+            <div className="modal-metadata-group">
+              <label>Lugar donde se tomó</label>
+              <input
+                type="text"
+                placeholder="Ej. Madrid, España"
+                value={tempFotoData.lugar}
+                onChange={(e) => setTempFotoData({ ...tempFotoData, lugar: e.target.value })}
+              />
+            </div>
+
+            <div className="modal-metadata-group">
+              <label>Descripción breve</label>
+              <textarea
+                placeholder="Añade una descripción..."
+                value={tempFotoData.descripcion}
+                onChange={(e) => setTempFotoData({ ...tempFotoData, descripcion: e.target.value })}
+              />
+            </div>
+
+            <div className="modal-metadata-acciones">
+              <button
+                type="button"
+                className="btn-cancelar"
+                onClick={() => setModalFotoMetadata(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-guardar"
+                onClick={handleGuardarMetadataFoto}
+              >
+                Añadir Fotografía
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

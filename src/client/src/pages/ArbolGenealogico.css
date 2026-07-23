@@ -1290,7 +1290,7 @@
         z-index: 2;
     }
 
-    .panel-lateral-derecho > .d-flex {
+    .panel-lateral-derecho>.d-flex {
         width: 100%;
         min-height: 0;
     }
@@ -2803,6 +2803,7 @@
         align-items: flex-start;
     }
 }
+
 /* =========================================
    EDITAR PERFIL SIN CUENTA DESDE PANEL
    ========================================= */
@@ -3041,8 +3042,13 @@
 }
 
 @keyframes girarEvento {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .etiqueta-tipo-evento {
@@ -3150,6 +3156,7 @@
         flex: 1 1 100%;
     }
 }
+
 /* =========================================
    EXPORTACIÓN DEL ÁRBOL
    ========================================= */
@@ -3284,14 +3291,53 @@
     pointer-events: none;
 }
 
-.rama-1 { --rot: 0deg; --len: 235px; animation-delay: 0.18s; }
-.rama-2 { --rot: 45deg; --len: 190px; animation-delay: 0.27s; }
-.rama-3 { --rot: 90deg; --len: 150px; animation-delay: 0.36s; }
-.rama-4 { --rot: 135deg; --len: 190px; animation-delay: 0.45s; }
-.rama-5 { --rot: 180deg; --len: 235px; animation-delay: 0.54s; }
-.rama-6 { --rot: 225deg; --len: 190px; animation-delay: 0.63s; }
-.rama-7 { --rot: 270deg; --len: 150px; animation-delay: 0.72s; }
-.rama-8 { --rot: 315deg; --len: 190px; animation-delay: 0.81s; }
+.rama-1 {
+    --rot: 0deg;
+    --len: 235px;
+    animation-delay: 0.18s;
+}
+
+.rama-2 {
+    --rot: 45deg;
+    --len: 190px;
+    animation-delay: 0.27s;
+}
+
+.rama-3 {
+    --rot: 90deg;
+    --len: 150px;
+    animation-delay: 0.36s;
+}
+
+.rama-4 {
+    --rot: 135deg;
+    --len: 190px;
+    animation-delay: 0.45s;
+}
+
+.rama-5 {
+    --rot: 180deg;
+    --len: 235px;
+    animation-delay: 0.54s;
+}
+
+.rama-6 {
+    --rot: 225deg;
+    --len: 190px;
+    animation-delay: 0.63s;
+}
+
+.rama-7 {
+    --rot: 270deg;
+    --len: 150px;
+    animation-delay: 0.72s;
+}
+
+.rama-8 {
+    --rot: 315deg;
+    --len: 190px;
+    animation-delay: 0.81s;
+}
 
 .punto-conexion {
     --x: 0px;
@@ -3311,14 +3357,53 @@
     pointer-events: none;
 }
 
-.punto-1 { --x: 235px; --y: 0px; animation-delay: 0.70s; }
-.punto-2 { --x: 136px; --y: 136px; animation-delay: 0.78s; }
-.punto-3 { --x: 0px; --y: 150px; animation-delay: 0.86s; }
-.punto-4 { --x: -136px; --y: 136px; animation-delay: 0.94s; }
-.punto-5 { --x: -235px; --y: 0px; animation-delay: 1.02s; }
-.punto-6 { --x: -136px; --y: -136px; animation-delay: 1.10s; }
-.punto-7 { --x: 0px; --y: -150px; animation-delay: 1.18s; }
-.punto-8 { --x: 136px; --y: -136px; animation-delay: 1.26s; }
+.punto-1 {
+    --x: 235px;
+    --y: 0px;
+    animation-delay: 0.70s;
+}
+
+.punto-2 {
+    --x: 136px;
+    --y: 136px;
+    animation-delay: 0.78s;
+}
+
+.punto-3 {
+    --x: 0px;
+    --y: 150px;
+    animation-delay: 0.86s;
+}
+
+.punto-4 {
+    --x: -136px;
+    --y: 136px;
+    animation-delay: 0.94s;
+}
+
+.punto-5 {
+    --x: -235px;
+    --y: 0px;
+    animation-delay: 1.02s;
+}
+
+.punto-6 {
+    --x: -136px;
+    --y: -136px;
+    animation-delay: 1.10s;
+}
+
+.punto-7 {
+    --x: 0px;
+    --y: -150px;
+    animation-delay: 1.18s;
+}
+
+.punto-8 {
+    --x: 136px;
+    --y: -136px;
+    animation-delay: 1.26s;
+}
 
 .nodo-central-conexiones {
     position: relative;
@@ -3423,7 +3508,9 @@
 }
 
 @keyframes salidaOverlayConexiones {
-    0%, 76% {
+
+    0%,
+    76% {
         opacity: 1;
         visibility: visible;
     }
@@ -3553,24 +3640,61 @@
     }
 
     .rama-1,
-    .rama-5 { --len: 150px; }
+    .rama-5 {
+        --len: 150px;
+    }
 
     .rama-2,
     .rama-4,
     .rama-6,
-    .rama-8 { --len: 125px; }
+    .rama-8 {
+        --len: 125px;
+    }
 
     .rama-3,
-    .rama-7 { --len: 118px; }
+    .rama-7 {
+        --len: 118px;
+    }
 
-    .punto-1 { --x: 150px; --y: 0px; }
-    .punto-2 { --x: 90px; --y: 90px; }
-    .punto-3 { --x: 0px; --y: 118px; }
-    .punto-4 { --x: -90px; --y: 90px; }
-    .punto-5 { --x: -150px; --y: 0px; }
-    .punto-6 { --x: -90px; --y: -90px; }
-    .punto-7 { --x: 0px; --y: -118px; }
-    .punto-8 { --x: 90px; --y: -90px; }
+    .punto-1 {
+        --x: 150px;
+        --y: 0px;
+    }
+
+    .punto-2 {
+        --x: 90px;
+        --y: 90px;
+    }
+
+    .punto-3 {
+        --x: 0px;
+        --y: 118px;
+    }
+
+    .punto-4 {
+        --x: -90px;
+        --y: 90px;
+    }
+
+    .punto-5 {
+        --x: -150px;
+        --y: 0px;
+    }
+
+    .punto-6 {
+        --x: -90px;
+        --y: -90px;
+    }
+
+    .punto-7 {
+        --x: 0px;
+        --y: -118px;
+    }
+
+    .punto-8 {
+        --x: 90px;
+        --y: -90px;
+    }
 
     .nodo-central-conexiones {
         width: 118px;
@@ -3806,7 +3930,7 @@
         max-height: calc(100dvh - 132px - env(safe-area-inset-bottom, 0px));
     }
 
-    .panel-lateral-derecho > .d-flex {
+    .panel-lateral-derecho>.d-flex {
         height: 100%;
         min-height: 0;
     }
@@ -4001,4 +4125,117 @@
     .btn {
         font-size: 0.82rem;
     }
+}
+
+/* Modal de Metadatos para Fotografías */
+.modal-metadata-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(15, 23, 42, 0.75);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+}
+
+.modal-metadata-content {
+    background: #ffffff;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.modal-metadata-content h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 1.25rem;
+    color: #0f172a;
+}
+
+.modal-metadata-preview {
+    width: 100%;
+    height: 180px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    background-color: #f1f5f9;
+}
+
+.modal-metadata-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.modal-metadata-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 12px;
+}
+
+.modal-metadata-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 4px;
+}
+
+.modal-metadata-group input,
+.modal-metadata-group textarea {
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #1e293b;
+}
+
+.modal-metadata-group textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.modal-metadata-acciones {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.modal-metadata-acciones button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+}
+
+.modal-metadata-acciones .btn-cancelar {
+    background-color: #f1f5f9;
+    color: #475569;
+}
+
+.modal-metadata-acciones .btn-guardar {
+    background-color: #2563eb;
+    color: #ffffff;
+}
+
+.btn-subir-foto-individual {
+    display: inline-block;
+    padding: 8px 16px;
+    background-color: #0284c7;
+    color: #ffffff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: center;
 }
