@@ -46,9 +46,11 @@ const obtenerNombreDeEntidad = (entidad, fallback = 'Familiar') => {
   if (typeof entidad === 'string') return entidad;
   return normalizarTexto(
     entidad.nombreUsuario ||
+    entidad.nickname ||
     entidad.nombre ||
     entidad.nombreCompleto ||
     entidad.usuario?.nombreUsuario ||
+    entidad.usuario?.nickname ||
     entidad.usuario?.nombre ||
     entidad.id?.nombreUsuario ||
     fallback
@@ -58,10 +60,8 @@ const obtenerNombreDeEntidad = (entidad, fallback = 'Familiar') => {
 const obtenerUrlImagenPerfil = (imagen, nombreFallback = 'Usuario') => {
   const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreFallback)}&background=0D1B2A&color=fff`;
 
-  // 1. Si no hay imagen
   if (!imagen) return avatarFallback;
 
-  // 2. Si es una cadena directa
   if (typeof imagen === 'string') {
     const rutaLimpia = imagen.trim();
     if (!rutaLimpia || rutaLimpia === 'undefined' || rutaLimpia === 'null' || rutaLimpia === '[object Object]') {
@@ -70,7 +70,6 @@ const obtenerUrlImagenPerfil = (imagen, nombreFallback = 'Usuario') => {
     return rutaLimpia.startsWith('http') ? rutaLimpia : resolverUrlBackend(rutaLimpia);
   }
 
-  // 3. Si es un objeto
   if (typeof imagen === 'object' && imagen !== null) {
     const ruta = imagen.urlArchivo || imagen.url || imagen.path || imagen.secure_url || imagen.location || imagen.ruta || imagen.src;
 
@@ -82,7 +81,6 @@ const obtenerUrlImagenPerfil = (imagen, nombreFallback = 'Usuario') => {
     }
   }
 
-  // 4. Fallback por defecto
   return avatarFallback;
 };
 
@@ -176,7 +174,6 @@ const esVideoMultimediaPublicacion = (multimedia) => {
   return formato.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(url);
 };
 
-
 const obtenerPartesFechaEnZona = (fecha, preferencias = {}) => {
   const date = fecha instanceof Date ? fecha : new Date(fecha);
   if (Number.isNaN(date.getTime())) return null;
@@ -231,9 +228,9 @@ const formatearHoraPublicacion = (hour = 0, minute = '00') => {
   return `${hora12}:${String(minute || '00').padStart(2, '0')} ${periodo}`;
 };
 
-const formatearFechaAbsolutaPublicacion = (fecha, ahora, preferencias = {}) => {
+const formatearFechaAbsolutaPublicacion = (fecha, me, preferencias = {}) => {
   const partesFecha = obtenerPartesFechaEnZona(fecha, preferencias);
-  const partesAhora = obtenerPartesFechaEnZona(ahora, preferencias);
+  const partesAhora = obtenerPartesFechaEnZona(me, preferencias);
 
   if (!partesFecha) return '';
 
@@ -302,7 +299,6 @@ const TIPOS_PUBLICACION_CONFIG = {
 
 const EMOJIS_RAPIDOS = ['❤️', '😊', '😂', '🥹', '🙏', '🎉', '🎂', '📸', '🕊️', '✨', '🌳', '👨‍👩‍👧‍👦', '🏡', '📍', '💛', '🫶'];
 
-
 const MAX_MULTIMEDIA_PUBLICACION = 5;
 const maxUploadMbConfigurado = Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_MB || 50);
 const MAX_TOTAL_UPLOAD_MB_FRONTEND = Number.isFinite(maxUploadMbConfigurado) && maxUploadMbConfigurado > 0
@@ -314,7 +310,6 @@ const crearIdMultimediaBorrador = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-
   return `media-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
@@ -330,15 +325,42 @@ const revocarUrlTemporal = (url) => {
   }
 };
 
+// --- NORMALIZACIÓN MEJORADA CON SOPORTE PARA NICKNAME Y NOMBRE REAL ---
 const normalizarPersonaSugerida = (persona = {}) => {
   const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id) || obtenerNombreDeEntidad(persona);
-  const nombre = obtenerNombreDeEntidad(persona);
+  
+  const nicknameRaw = normalizarTexto(
+    persona.nickname ||
+    persona.nombreUsuario ||
+    persona.usuario?.nickname ||
+    persona.usuario?.nombreUsuario ||
+    persona.id?.nickname ||
+    persona.id?.nombreUsuario ||
+    ''
+  );
+
+  const nombreRealRaw = normalizarTexto(
+    persona.nombreCompleto ||
+    persona.nombre ||
+    persona.usuario?.nombreCompleto ||
+    persona.usuario?.nombre ||
+    persona.id?.nombreCompleto ||
+    persona.id?.nombre ||
+    ''
+  );
+
+  const nombre = nombreRealRaw || nicknameRaw || 'Familiar';
+  const nickname = nicknameRaw ? (nicknameRaw.startsWith('@') ? nicknameRaw : `@${nicknameRaw}`) : '';
+  const nombreUsuario = nicknameRaw.replace(/^@/, '');
   const imagen = obtenerImagenDeEntidad(persona);
 
   return {
     ...persona,
     id,
     nombre,
+    nombreReal: nombreRealRaw || nombre,
+    nickname,
+    nombreUsuario,
     imagen
   };
 };
@@ -1011,8 +1033,10 @@ export default function Inicio() {
     return lista.filter(persona => String(persona.id) !== String(personaId));
   };
 
+  // --- SELECCIÓN DE PERSONA SOPORTANDO NICKNAME Y NOMBRE REAL ---
   const seleccionarPersonaPublicacion = (personaOriginal) => {
     const persona = normalizarPersonaSugerida(personaOriginal);
+    
     if (panelHerramientaActivo === 'etiquetas') {
       setEtiquetasImagen(prev => {
         const yaExiste = prev.some(item => String(item.id) === String(persona.id));
@@ -1026,7 +1050,13 @@ export default function Inicio() {
     const textarea = textareaPublicacionRef.current;
     const cursor = textarea?.selectionStart ?? textoPublicacion.length;
     const mencionActiva = detectarMencionActiva(textoPublicacion, cursor);
-    const textoMencion = `@${persona.nombre.replace(/\s+/g, '_')} `;
+
+    // Preferir nickname si existe; de lo contrario, usar nombre real sin espacios
+    const handleTag = persona.nombreUsuario 
+      ? `@${persona.nombreUsuario}`
+      : `@${(persona.nombreReal || persona.nombre).replace(/\s+/g, '_')}`;
+      
+    const textoMencion = `${handleTag} `;
 
     if (mencionActiva) {
       const antes = textoPublicacion.slice(0, mencionActiva.inicio);
@@ -1110,12 +1140,30 @@ export default function Inicio() {
         formData.append('arbolAudienciaId', arbolAudienciaPublicacion.id);
       }
       if (ubicacionPublicacion) formData.append('ubicacionTexto', ubicacionPublicacion);
-      if (mencionesPublicacion.length > 0) formData.append('menciones', JSON.stringify(mencionesPublicacion.map(p => ({ id: p.id, nombre: p.nombre }))));
+      if (mencionesPublicacion.length > 0) {
+        formData.append('menciones', JSON.stringify(
+          mencionesPublicacion.map(p => ({
+            id: p.id,
+            nombre: p.nombreReal || p.nombre,
+            nickname: p.nickname,
+            nombreUsuario: p.nombreUsuario
+          }))
+        ));
+      }
       if (tipoPublicacion === 'familiar' && eventoRelacionadoPublicacion) {
         formData.append('eventoRelacionadoId', eventoRelacionadoPublicacion.id);
         formData.append('eventoRelacionado', JSON.stringify({ id: eventoRelacionadoPublicacion.id, titulo: eventoRelacionadoPublicacion.titulo, fechaInicio: eventoRelacionadoPublicacion.fechaInicio, tipoEvento: eventoRelacionadoPublicacion.tipoEvento, nombreFamilia: eventoRelacionadoPublicacion.nombreFamilia }));
       }
-      if (etiquetasImagen.length > 0) formData.append('etiquetasMultimedia', JSON.stringify(etiquetasImagen.map(p => ({ id: p.id, nombre: p.nombre }))));
+      if (etiquetasImagen.length > 0) {
+        formData.append('etiquetasMultimedia', JSON.stringify(
+          etiquetasImagen.map(p => ({
+            id: p.id,
+            nombre: p.nombreReal || p.nombre,
+            nickname: p.nickname,
+            nombreUsuario: p.nombreUsuario
+          }))
+        ));
+      }
       archivosAEnviar.forEach((elemento) => formData.append('archivo', elemento.archivo));
 
       const respuesta = await fetch(`${API_BASE_URL}/publicaciones/crear`, {
@@ -1284,14 +1332,24 @@ export default function Inicio() {
     return String(valor || '').replace(/^@/, '').replace(/\s+/g, '_').trim().toLowerCase();
   };
 
+  // --- BÚSQUEDA DE PERSONA COINCIDIENDO POR NICKNAME O NOMBRE REAL ---
   const buscarPersonaPorMencion = (textoMencion = '', menciones = []) => {
     if (!Array.isArray(menciones) || menciones.length === 0) return null;
     const mencionNormalizada = normalizarHandleMencion(textoMencion);
 
     return menciones.find((persona) => {
       const posiblesNombres = [
-        persona.nombre, persona.nombreUsuario, persona.nombreCompleto,
-        persona.usuario?.nombreUsuario, persona.usuario?.nombre, persona.id?.nombreUsuario
+        persona.nickname,
+        persona.nombreUsuario,
+        persona.nombreReal,
+        persona.nombre,
+        persona.nombreCompleto,
+        persona.usuario?.nickname,
+        persona.usuario?.nombreUsuario,
+        persona.usuario?.nombre,
+        persona.usuario?.nombreCompleto,
+        persona.id?.nombreUsuario,
+        persona.id?.nickname
       ].filter(Boolean);
 
       return posiblesNombres.some(nombre => normalizarHandleMencion(nombre) === mencionNormalizada);
@@ -1695,7 +1753,11 @@ export default function Inicio() {
               type="text"
               value={busquedaPersonaPublicacion}
               onChange={(e) => setBusquedaPersonaPublicacion(e.target.value)}
+<<<<<<< HEAD
               placeholder={esEtiquetar ? 'Buscar persona para etiquetar...' : 'Buscar persona o @nickname...'}
+=======
+              placeholder={esEtiquetar ? 'Buscar por nickname o nombre real...' : 'Buscar por nickname o nombre real...'}
+>>>>>>> 31c5f5ec5fde39d8f1558dcd60977135f7c2daae
               autoFocus
             />
           </div>
@@ -1715,17 +1777,27 @@ export default function Inicio() {
                 >
                   <img src={obtenerUrlImagenPerfil(persona.imagen, persona.nombre)} alt={persona.nombre} />
                   <div>
+<<<<<<< HEAD
                     <strong>{persona.nombre}</strong>
                     <small>
                       {persona.nickname ? `@${persona.nickname} • ` : ''}
                       {esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}
                     </small>
+=======
+                    <strong>{persona.nombreReal || persona.nombre}</strong>
+                    {persona.nickname && <small className="d-block text-muted">{persona.nickname}</small>}
+                    <small>{esEtiquetar ? 'Etiquetar en imagen' : 'Mencionar en texto'}</small>
+>>>>>>> 31c5f5ec5fde39d8f1558dcd60977135f7c2daae
                   </div>
                 </button>
               ))
             ) : (
               <div className="estado-sugerencias-publicacion">
+<<<<<<< HEAD
                 {busquedaPersonaPublicacion.trim() ? 'No se encontraron personas.' : 'Escribe un nombre o nickname para buscar.'}
+=======
+                {busquedaPersonaPublicacion.trim() ? 'No se encontraron personas.' : 'Escribe un nickname o nombre real para buscar.'}
+>>>>>>> 31c5f5ec5fde39d8f1558dcd60977135f7c2daae
               </div>
             )}
           </div>
@@ -1743,7 +1815,7 @@ export default function Inicio() {
         <div className="chips-publicacion-modal">
           {etiquetasImagen.map(persona => (
             <span key={persona.id} className="chip-publicacion etiqueta">
-              {persona.nombre}
+              {persona.nombreReal || persona.nombre} {persona.nickname ? `(${persona.nickname})` : ''}
               <button type="button" onClick={() => setEtiquetasImagen(prev => quitarPersonaDeLista(prev, persona.id))} aria-label={`Quitar etiqueta de ${persona.nombre}`}><i className="bi bi-x"></i></button>
             </span>
           ))}
@@ -2168,7 +2240,7 @@ export default function Inicio() {
                 {etiquetasMultimediaPost.length > 0 && (
                   <div className="etiquetas-post-render">
                     <i className="bi bi-person-bounding-box"></i>
-                    {etiquetasMultimediaPost.map((persona) => persona.nombre || persona.nombreUsuario || persona).join(', ')}
+                    {etiquetasMultimediaPost.map((persona) => persona.nombre || persona.nickname || persona.nombreUsuario || persona).join(', ')}
                   </div>
                 )}
 
