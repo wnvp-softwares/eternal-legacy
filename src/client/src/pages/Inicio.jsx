@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import ImageCropperModal from '../components/ImageCropperModal';
@@ -14,6 +14,15 @@ const obtenerId = (valor) => {
 };
 
 const normalizarTexto = (texto = '') => String(texto || '').trim();
+
+const leerUsuarioSesion = () => {
+  try {
+    return JSON.parse(localStorage.getItem('usuario') || '{}');
+  } catch (error) {
+    console.error('No se pudo leer el usuario de la sesión:', error);
+    return {};
+  }
+};
 
 const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
 
@@ -46,15 +55,27 @@ const obtenerNombreDeEntidad = (entidad, fallback = 'Familiar') => {
   if (typeof entidad === 'string') return entidad;
   return normalizarTexto(
     entidad.nombreUsuario ||
-    entidad.nickname ||
     entidad.nombre ||
     entidad.nombreCompleto ||
     entidad.usuario?.nombreUsuario ||
-    entidad.usuario?.nickname ||
     entidad.usuario?.nombre ||
     entidad.id?.nombreUsuario ||
+    entidad.nickname ||
+    entidad.usuario?.nickname ||
     fallback
   );
+};
+
+const obtenerNicknameDeEntidad = (entidad) => {
+  if (!entidad || typeof entidad === 'string') return '';
+
+  return normalizarTexto(
+    entidad.nickname ||
+    entidad.usuario?.nickname ||
+    entidad.autor?.nickname ||
+    entidad.id?.nickname ||
+    ''
+  ).replace(/^@+/, '');
 };
 
 const obtenerUrlImagenPerfil = (imagen, nombreFallback = 'Usuario') => {
@@ -531,6 +552,7 @@ const obtenerArbolAudienciaDePublicacion = (pub = {}) => {
 
 export default function Inicio() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { textoBusqueda = '' } = useOutletContext() || {};
   const { idioma, zonaHoraria } = usePreferencias();
   const [marcaTiempoActual, setMarcaTiempoActual] = useState(Date.now());
@@ -546,6 +568,17 @@ export default function Inicio() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [selectorTipoAbierto, setSelectorTipoAbierto] = useState(false);
   const [tipoPublicacion, setTipoPublicacion] = useState('historico');
+
+  useEffect(() => {
+    if (!location.state?.abrirPublicador) return;
+
+    setSelectorTipoAbierto(true);
+
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: null
+    });
+  }, [location.hash, location.pathname, location.search, location.state?.abrirPublicador, navigate]);
   const [textoPublicacion, setTextoPublicacion] = useState('');
 
   const [panelHerramientaActivo, setPanelHerramientaActivo] = useState(null);
@@ -580,8 +613,32 @@ export default function Inicio() {
   const overlayRef = useRef(null);
 
   const token = localStorage.getItem('token');
-  const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+  const [usuarioLogueado, setUsuarioLogueado] = useState(leerUsuarioSesion);
   const API_BASE_URL = API_BASE_URL_CONFIG;
+
+  useEffect(() => {
+    const actualizarUsuarioSesion = (evento) => {
+      const usuarioActualizado = evento?.detail && typeof evento.detail === 'object'
+        ? evento.detail
+        : leerUsuarioSesion();
+
+      setUsuarioLogueado(usuarioActualizado);
+    };
+
+    const manejarCambioStorage = (evento) => {
+      if (evento.key === 'usuario') {
+        setUsuarioLogueado(leerUsuarioSesion());
+      }
+    };
+
+    window.addEventListener('legacy:usuario-actualizado', actualizarUsuarioSesion);
+    window.addEventListener('storage', manejarCambioStorage);
+
+    return () => {
+      window.removeEventListener('legacy:usuario-actualizado', actualizarUsuarioSesion);
+      window.removeEventListener('storage', manejarCambioStorage);
+    };
+  }, []);
 
   const [publicaciones, setPublicaciones] = useState([]);
   const [cargando, setCargando] = useState(token ? true : false);
@@ -1281,8 +1338,14 @@ export default function Inicio() {
       });
       const datos = await respuesta.json().catch(() => ({}));
       if (respuesta.ok) {
+        const autorRespuesta = datos.publicacion?.autor;
+        const autorPublicacionCreada = autorRespuesta && typeof autorRespuesta === 'object'
+          ? { ...(usuarioLogueado || {}), ...autorRespuesta }
+          : (usuarioLogueado || autorRespuesta);
+
         const publicacionCreada = {
           ...datos.publicacion,
+          autor: autorPublicacionCreada,
           ubicacionTexto: datos.publicacion?.ubicacionTexto || ubicacionPublicacion,
           menciones: datos.publicacion?.menciones || mencionesPublicacion,
           eventoRelacionado: datos.publicacion?.eventoRelacionado || eventoRelacionadoPublicacion,
@@ -2288,13 +2351,14 @@ export default function Inicio() {
             const autorId = obtenerIdPersonaPerfil(pub.autor) || obtenerIdPersonaPerfil(pub.usuario);
             const imagenAutor = obtenerImagenDeEntidad(pub.autor) || obtenerImagenDeEntidad(pub.usuario);
             const nombreAutor = obtenerNombreDeEntidad(pub.autor) || obtenerNombreDeEntidad(pub.usuario, 'Familiar');
+            const nicknameAutor = obtenerNicknameDeEntidad(pub.autor) || obtenerNicknameDeEntidad(pub.usuario);
             const srcAvatarAutor = obtenerUrlImagenPerfil(imagenAutor, nombreAutor);
 
             return (
               <div key={pub._id} className="tarjeta tarjeta-publicacion shadow-sm mb-4">
                 <PublicacionHeader
                   nombre={nombreAutor}
-                  nombreUsuario={nombreAutor}
+                  nombreUsuario={nicknameAutor || nombreAutor}
                   avatarUrl={srcAvatarAutor}
                   fecha={fechaFormateada}
                   fechaISO={pub.createdAt}

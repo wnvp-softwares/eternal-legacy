@@ -496,3 +496,42 @@ body {
         height: 46px;
     }
 }
+
+
+/* =========================================
+   BOTÓN PUBLICAR DE LA NAVEGACIÓN MÓVIL
+   ========================================= */
+.boton-publicar-nav-movil {
+    min-width: 48px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--texto-secundario);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    font-family: inherit;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.boton-publicar-nav-movil span {
+    font-size: 0.7rem;
+    font-weight: 400;
+}
+
+.boton-publicar-nav-movil:hover,
+.boton-publicar-nav-movil:active {
+    color: var(--dorado-oscuro);
+}
+
+.boton-publicar-nav-movil:focus-visible {
+    color: var(--dorado-oscuro);
+    outline: 2px solid var(--dorado);
+    outline-offset: 3px;
+    border-radius: 7px;
+}

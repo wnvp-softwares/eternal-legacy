@@ -580,7 +580,9 @@ const formatearHoraEventoParaInput = (fecha, valorPorDefecto = '', preferencias 
 const construirFechaHoraEvento = (fecha, hora, todoElDia = false) => {
   if (!fecha) return null;
 
-  const horaFinal = todoElDia ? '12:00' : (hora || '09:00');
+  // El backend interpreta esta fecha en la zona horaria enviada. Los eventos de
+  // todo el día comienzan a las 00:00 y permanecen vigentes hasta el final del día.
+  const horaFinal = todoElDia ? '00:00' : (hora || '09:00');
 
   return `${fecha}T${horaFinal}:00`;
 };
@@ -605,6 +607,7 @@ const normalizarEventoFamiliar = (evento = {}) => ({
   tipoEvento: evento.tipoEvento || 'otro',
   fechaInicio: evento.fechaInicio || null,
   fechaFin: evento.fechaFin || null,
+  fechaReferencia: evento.fechaReferencia || evento.fechaFin || evento.fechaInicio || null,
   todoElDia: Boolean(evento.todoElDia),
   zonaHoraria: evento.zonaHoraria || 'America/Mexico_City',
   ubicacion: {
@@ -616,8 +619,49 @@ const normalizarEventoFamiliar = (evento = {}) => ({
     proveedor: evento.ubicacion?.proveedor || 'manual',
     placeId: evento.ubicacion?.placeId || ''
   },
-  estado: evento.estado || 'Activo'
+  estado: evento.estado || 'Activo',
+  esPasado: Boolean(evento.esPasado),
+  puedeGestionar: Boolean(evento.puedeGestionar),
+  totalPublicaciones: Number(evento.totalPublicaciones || 0),
+  totalMultimedia: Number(evento.totalMultimedia || 0)
 });
+
+const obtenerFechaReferenciaEventoCliente = (evento = {}) => {
+  if (evento.fechaReferencia) {
+    const referencia = new Date(evento.fechaReferencia);
+    if (!Number.isNaN(referencia.getTime())) return referencia;
+  }
+
+  if (evento.fechaFin) {
+    const fin = new Date(evento.fechaFin);
+    if (!Number.isNaN(fin.getTime())) return fin;
+  }
+
+  if (!evento.fechaInicio) return null;
+
+  const inicio = new Date(evento.fechaInicio);
+  if (Number.isNaN(inicio.getTime())) return null;
+
+  if (evento.todoElDia) {
+    return new Date(inicio.getTime() + (24 * 60 * 60 * 1000) - 1);
+  }
+
+  return inicio;
+};
+
+const esEventoPasadoCliente = (evento = {}) => {
+  if (typeof evento.esPasado === 'boolean') return evento.esPasado;
+  if (evento.estado === 'Cancelado') return true;
+
+  const referencia = obtenerFechaReferenciaEventoCliente(evento);
+  return !referencia || referencia.getTime() < Date.now();
+};
+
+const obtenerEstadoVisualEvento = (evento = {}) => {
+  if (evento.estado === 'Cancelado') return { etiqueta: 'Cancelado', clase: 'cancelado' };
+  if (esEventoPasadoCliente(evento)) return { etiqueta: 'Finalizado', clase: 'finalizado' };
+  return { etiqueta: 'Próximo', clase: 'proximo' };
+};
 
 const obtenerTextoEstadoUnion = (tipoUnion, nombrePareja) => {
   const tipo = tipoUnion || 'pareja';
@@ -1300,13 +1344,27 @@ export default function ArbolGenealogico() {
   const [mostrarInvitar, establecerMostrarInvitar] = useState(false);
   const [mostrarEventos, establecerMostrarEventos] = useState(false);
   const [eventosFamiliares, establecerEventosFamiliares] = useState([]);
+  const [eventosPasados, establecerEventosPasados] = useState([]);
+  const [pestanaEventos, establecerPestanaEventos] = useState('proximos');
   const [cargandoEventos, establecerCargandoEventos] = useState(false);
-  const [guardandoEvento, establecerGuardandoEvento] = useState(false);
+  const [cargandoEventosPasados, establecerCargandoEventosPasados] = useState(false);
+  const [cargandoMasEventosPasados, establecerCargandoMasEventosPasados] = useState(false);
+  const [cursorEventosPasados, establecerCursorEventosPasados] = useState(null);
   const [errorEventos, establecerErrorEventos] = useState('');
+  const [errorEventosPasados, establecerErrorEventosPasados] = useState('');
+  const [guardandoEvento, establecerGuardandoEvento] = useState(false);
   const [mostrarFormularioEvento, establecerMostrarFormularioEvento] = useState(false);
   const [modoFormularioEvento, establecerModoFormularioEvento] = useState('crear');
   const [eventoEditando, establecerEventoEditando] = useState(null);
   const [formularioEvento, establecerFormularioEvento] = useState(FORMULARIO_EVENTO_FAMILIAR_INICIAL);
+  const [modalDetalleEventoAbierto, establecerModalDetalleEventoAbierto] = useState(false);
+  const [eventoDetalle, establecerEventoDetalle] = useState(null);
+  const [cargandoDetalleEvento, establecerCargandoDetalleEvento] = useState(false);
+  const [pestanaDetalleEvento, establecerPestanaDetalleEvento] = useState('informacion');
+  const [publicacionesDetalleEvento, establecerPublicacionesDetalleEvento] = useState([]);
+  const [resumenDetalleEvento, establecerResumenDetalleEvento] = useState({ totalPublicaciones: 0, totalMultimedia: 0 });
+  const [cargandoRecuerdosEvento, establecerCargandoRecuerdosEvento] = useState(false);
+  const [errorRecuerdosEvento, establecerErrorRecuerdosEvento] = useState('');
   const [mostrandoFormularioPerfilSinCuenta, establecerMostrandoFormularioPerfilSinCuenta] = useState(false);
   const [formularioPerfilSinCuenta, establecerFormularioPerfilSinCuenta] = useState(FORMULARIO_PERFIL_SIN_CUENTA_INICIAL);
   const [procesandoFotosPerfilSinCuenta, establecerProcesandoFotosPerfilSinCuenta] = useState(false);
@@ -3274,7 +3332,7 @@ export default function ArbolGenealogico() {
   }, [filtrosAplicados]);
 
   const cargarEventosFamiliares = async (arbolId = arbol?._id) => {
-    if (!arbolId || !token) return;
+    if (!arbolId || !token) return [];
 
     try {
       establecerCargandoEventos(true);
@@ -3282,16 +3340,90 @@ export default function ArbolGenealogico() {
 
       const data = await apiFetch(`/api/eventos-familiares/arbol/${arbolId}/proximos?limite=30`);
       const eventos = Array.isArray(data.eventos) ? data.eventos : [];
+      const normalizados = eventos.map(normalizarEventoFamiliar);
 
-      establecerEventosFamiliares(eventos.map(normalizarEventoFamiliar));
+      establecerEventosFamiliares(normalizados);
+      return normalizados;
     } catch (error) {
       console.error('Error al cargar eventos familiares:', error);
       establecerEventosFamiliares([]);
       establecerErrorEventos(error.message || 'No se pudieron cargar los eventos familiares.');
+      return [];
     } finally {
       establecerCargandoEventos(false);
     }
   };
+
+  const cargarEventosPasados = async ({
+    arbolId = arbol?._id,
+    reiniciar = false
+  } = {}) => {
+    if (!arbolId || !token) return [];
+
+    const cursor = reiniciar ? null : cursorEventosPasados;
+
+    try {
+      if (reiniciar) {
+        establecerCargandoEventosPasados(true);
+        establecerErrorEventosPasados('');
+      } else {
+        establecerCargandoMasEventosPasados(true);
+      }
+
+      const parametroCursor = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+      const data = await apiFetch(`/api/eventos-familiares/arbol/${arbolId}/pasados?limite=20${parametroCursor}`);
+      const nuevosEventos = (Array.isArray(data.eventos) ? data.eventos : []).map(normalizarEventoFamiliar);
+
+      establecerEventosPasados(prev => {
+        const base = reiniciar ? [] : prev;
+        return Array.from(new Map(
+          [...base, ...nuevosEventos].map(evento => [String(evento.id), evento])
+        ).values());
+      });
+      establecerCursorEventosPasados(data.siguienteCursor || null);
+      return nuevosEventos;
+    } catch (error) {
+      console.error('Error al cargar eventos pasados:', error);
+      if (reiniciar) establecerEventosPasados([]);
+      establecerErrorEventosPasados(error.message || 'No se pudieron cargar los eventos pasados.');
+      return [];
+    } finally {
+      establecerCargandoEventosPasados(false);
+      establecerCargandoMasEventosPasados(false);
+    }
+  };
+
+  const seleccionarPestanaEventos = (pestana) => {
+    establecerPestanaEventos(pestana);
+    establecerErrorEventos('');
+    establecerErrorEventosPasados('');
+
+    if (pestana === 'pasados' && eventosPasados.length === 0 && !cargandoEventosPasados) {
+      cargarEventosPasados({ reiniciar: true });
+    }
+  };
+
+  const recargarPestanaEventos = () => {
+    if (pestanaEventos === 'pasados') {
+      return cargarEventosPasados({ reiniciar: true });
+    }
+
+    return cargarEventosFamiliares(arbol?._id);
+  };
+
+  const eventosPasadosPorAnio = useMemo(() => {
+    return eventosPasados.reduce((grupos, evento) => {
+      const fecha = evento.fechaInicio ? new Date(evento.fechaInicio) : null;
+      const partes = fecha && !Number.isNaN(fecha.getTime())
+        ? obtenerPartesFechaHoraEnZona(fecha, preferenciasRegion)
+        : null;
+      const anio = String(partes?.year || 'Sin fecha');
+
+      if (!grupos[anio]) grupos[anio] = [];
+      grupos[anio].push(evento);
+      return grupos;
+    }, {});
+  }, [eventosPasados, preferenciasRegion]);
 
   const restablecerFormularioEvento = () => {
     establecerFormularioEvento(FORMULARIO_EVENTO_FAMILIAR_INICIAL);
@@ -3312,6 +3444,7 @@ export default function ArbolGenealogico() {
     const hoy = new Date();
     const fechaHoy = formatearFechaEventoParaInput(hoy, preferenciasRegion);
 
+    establecerModalDetalleEventoAbierto(false);
     establecerModoFormularioEvento('crear');
     establecerEventoEditando(null);
     establecerFormularioEvento({
@@ -3325,18 +3458,15 @@ export default function ArbolGenealogico() {
 
   const usuarioPuedeGestionarEventoLocal = (evento) => {
     if (!evento || !usuarioActualId) return false;
-
+    if (typeof evento.puedeGestionar === 'boolean') return evento.puedeGestionar;
     if (esUsuarioAdmin) return true;
-
     return String(evento.creadoPorId || obtenerId(evento.creadoPor)) === String(usuarioActualId);
   };
 
-  const abrirDetalleEvento = (evento) => {
+  const cargarEventoEnFormulario = (evento) => {
     if (!evento) return;
 
-    const puedeGestionar = usuarioPuedeGestionarEventoLocal(evento);
-
-    establecerModoFormularioEvento(puedeGestionar ? 'editar' : 'ver');
+    establecerModoFormularioEvento('editar');
     establecerEventoEditando(evento);
     establecerFormularioEvento({
       titulo: evento.titulo || '',
@@ -3357,7 +3487,151 @@ export default function ArbolGenealogico() {
     establecerErrorEventos('');
   };
 
+  const cerrarModalDetalleEvento = () => {
+    establecerModalDetalleEventoAbierto(false);
+    establecerEventoDetalle(null);
+    establecerPestanaDetalleEvento('informacion');
+    establecerPublicacionesDetalleEvento([]);
+    establecerResumenDetalleEvento({ totalPublicaciones: 0, totalMultimedia: 0 });
+    establecerErrorRecuerdosEvento('');
+    establecerCargandoDetalleEvento(false);
+    establecerCargandoRecuerdosEvento(false);
+  };
+
+  const cargarRecuerdosEvento = async (evento = eventoDetalle, { forzar = false } = {}) => {
+    const eventoId = obtenerId(evento);
+    if (!eventoId || !token) return [];
+    if (!forzar && publicacionesDetalleEvento.length > 0) return publicacionesDetalleEvento;
+
+    try {
+      establecerCargandoRecuerdosEvento(true);
+      establecerErrorRecuerdosEvento('');
+
+      const data = await apiFetch(`/api/publicaciones/evento/${eventoId}`);
+      const publicaciones = Array.isArray(data.publicaciones) ? data.publicaciones : [];
+      const totalMultimedia = Number(
+        data.resumen?.totalMultimedia ??
+        publicaciones.reduce((total, publicacion) => (
+          total + (Array.isArray(publicacion.multimedia) ? publicacion.multimedia.filter(Boolean).length : 0)
+        ), 0)
+      );
+
+      establecerPublicacionesDetalleEvento(publicaciones);
+      establecerResumenDetalleEvento({
+        totalPublicaciones: Number(data.resumen?.totalPublicaciones ?? publicaciones.length),
+        totalMultimedia
+      });
+      return publicaciones;
+    } catch (error) {
+      console.error('Error al cargar recuerdos del evento:', error);
+      establecerPublicacionesDetalleEvento([]);
+      establecerErrorRecuerdosEvento(error.message || 'No se pudieron cargar los recuerdos de este evento.');
+      return [];
+    } finally {
+      establecerCargandoRecuerdosEvento(false);
+    }
+  };
+
+  const abrirDetalleEvento = async (evento) => {
+    if (!evento) return;
+
+    const normalizadoInicial = normalizarEventoFamiliar(evento);
+    establecerEventoDetalle(normalizadoInicial);
+    establecerModalDetalleEventoAbierto(true);
+    establecerPestanaDetalleEvento('informacion');
+    establecerPublicacionesDetalleEvento([]);
+    establecerResumenDetalleEvento({
+      totalPublicaciones: normalizadoInicial.totalPublicaciones || 0,
+      totalMultimedia: normalizadoInicial.totalMultimedia || 0
+    });
+    establecerErrorRecuerdosEvento('');
+
+    const eventoId = normalizadoInicial.id;
+    if (!eventoId) return;
+
+    try {
+      establecerCargandoDetalleEvento(true);
+      const data = await apiFetch(`/api/eventos-familiares/${eventoId}`);
+      if (data.evento) {
+        const eventoCompleto = normalizarEventoFamiliar(data.evento);
+        establecerEventoDetalle(eventoCompleto);
+        establecerResumenDetalleEvento({
+          totalPublicaciones: eventoCompleto.totalPublicaciones || 0,
+          totalMultimedia: eventoCompleto.totalMultimedia || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error al cargar el detalle del evento:', error);
+      establecerErrorRecuerdosEvento(error.message || 'No se pudo actualizar toda la información del evento.');
+    } finally {
+      establecerCargandoDetalleEvento(false);
+    }
+  };
+
+  const abrirRecuerdosDetalleEvento = () => {
+    establecerPestanaDetalleEvento('recuerdos');
+    cargarRecuerdosEvento(eventoDetalle);
+  };
+
+  const editarEventoDesdeDetalle = () => {
+    if (!eventoDetalle || !usuarioPuedeGestionarEventoLocal(eventoDetalle)) return;
+    const evento = eventoDetalle;
+    cerrarModalDetalleEvento();
+    cargarEventoEnFormulario(evento);
+  };
+
+  const cancelarEventoDesdeDetalle = async () => {
+    if (!eventoDetalle?.id || !usuarioPuedeGestionarEventoLocal(eventoDetalle)) return;
+
+    const confirmado = window.confirm(`¿Deseas cancelar el evento "${eventoDetalle.titulo}"?`);
+    if (!confirmado) return;
+
+    try {
+      establecerGuardandoEvento(true);
+      const data = await apiFetch(`/api/eventos-familiares/${eventoDetalle.id}/cancelar`, {
+        method: 'PATCH'
+      });
+      const eventoCancelado = normalizarEventoFamiliar(data.evento || {
+        ...eventoDetalle,
+        estado: 'Cancelado',
+        esPasado: true
+      });
+
+      establecerEventoDetalle(eventoCancelado);
+      establecerPestanaEventos('pasados');
+      establecerMensajeSistema('Evento cancelado correctamente.');
+      await Promise.all([
+        cargarEventosFamiliares(arbol?._id),
+        cargarEventosPasados({ reiniciar: true })
+      ]);
+    } catch (error) {
+      console.error('Error al cancelar evento familiar:', error);
+      window.alert(error.message || 'No se pudo cancelar el evento familiar.');
+    } finally {
+      establecerGuardandoEvento(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!modalDetalleEventoAbierto) return undefined;
+
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const manejarEscape = (evento) => {
+      if (evento.key === 'Escape') cerrarModalDetalleEvento();
+    };
+
+    document.addEventListener('keydown', manejarEscape);
+
+    return () => {
+      document.body.style.overflow = overflowAnterior;
+      document.removeEventListener('keydown', manejarEscape);
+    };
+  }, [modalDetalleEventoAbierto]);
+
   const cerrarPanelEventos = () => {
+    cerrarModalDetalleEvento();
     establecerMostrarEventos(false);
     restablecerFormularioEvento();
   };
@@ -3402,7 +3676,7 @@ export default function ArbolGenealogico() {
       fechaInicio,
       fechaFin,
       todoElDia: Boolean(formularioEvento.todoElDia),
-      zonaHoraria: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City',
+      zonaHoraria: preferenciasRegion.zonaHoraria || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City',
       ubicacion: {
         texto: formularioEvento.ubicacionTexto.trim(),
         direccion: formularioEvento.ubicacionDireccion.trim(),
@@ -3418,36 +3692,43 @@ export default function ArbolGenealogico() {
   };
 
   const guardarEventoFamiliar = async () => {
-    if (!arbol?._id || modoFormularioEvento === 'ver') return;
+    if (!arbol?._id) return;
 
     const payload = construirPayloadEvento();
-
     if (!payload) return;
 
     try {
       establecerGuardandoEvento(true);
       establecerErrorEventos('');
+      let eventoGuardado = null;
 
       if (modoFormularioEvento === 'editar' && eventoEditando?.id) {
         const { arbolId, ...payloadActualizacion } = payload;
-
-        await apiFetch(`/api/eventos-familiares/${eventoEditando.id}`, {
+        const data = await apiFetch(`/api/eventos-familiares/${eventoEditando.id}`, {
           method: 'PATCH',
           body: JSON.stringify(payloadActualizacion)
         });
-
+        eventoGuardado = data.evento ? normalizarEventoFamiliar(data.evento) : null;
         establecerMensajeSistema('Evento actualizado correctamente.');
       } else {
-        await apiFetch('/api/eventos-familiares/crear', {
+        const data = await apiFetch('/api/eventos-familiares/crear', {
           method: 'POST',
           body: JSON.stringify(payload)
         });
-
+        eventoGuardado = data.evento ? normalizarEventoFamiliar(data.evento) : null;
         establecerMensajeSistema('Evento familiar creado correctamente.');
       }
 
       restablecerFormularioEvento();
-      await cargarEventosFamiliares(arbol._id);
+      await Promise.all([
+        cargarEventosFamiliares(arbol._id),
+        cargarEventosPasados({ arbolId: arbol._id, reiniciar: true })
+      ]);
+
+      if (eventoGuardado) {
+        establecerPestanaEventos(esEventoPasadoCliente(eventoGuardado) ? 'pasados' : 'proximos');
+        await abrirDetalleEvento(eventoGuardado);
+      }
     } catch (error) {
       console.error('Error al guardar evento familiar:', error);
       establecerErrorEventos(error.message || 'No se pudo guardar el evento familiar.');
@@ -3461,7 +3742,6 @@ export default function ArbolGenealogico() {
     if (!eventoEditando?.id) return;
 
     const confirmado = window.confirm(`¿Deseas eliminar el evento "${eventoEditando.titulo}"?`);
-
     if (!confirmado) return;
 
     try {
@@ -3472,7 +3752,10 @@ export default function ArbolGenealogico() {
 
       establecerMensajeSistema('Evento eliminado correctamente.');
       restablecerFormularioEvento();
-      await cargarEventosFamiliares(arbol._id);
+      await Promise.all([
+        cargarEventosFamiliares(arbol._id),
+        cargarEventosPasados({ arbolId: arbol._id, reiniciar: true })
+      ]);
     } catch (error) {
       console.error('Error al eliminar evento familiar:', error);
       establecerErrorEventos(error.message || 'No se pudo eliminar el evento familiar.');
@@ -6524,7 +6807,11 @@ La persona seguirá dentro del árbol como miembro normal.`
           </div>
 
           {/* CONTROLES ZOOM Y EXPORTAR */}
-          <div className="controles-zoom">
+          <div
+            className={`controles-zoom ${
+              esModoEdicion && !modoColocacion ? 'con-barra-edicion' : ''
+            }`}
+          >
             <div style={{ position: 'relative' }}>
               <button
                 className="boton-zoom mb-2"
@@ -6710,7 +6997,7 @@ La persona seguirá dentro del árbol como miembro normal.`
                       const procesandoEsteNodo = procesandoAdminNodoId && String(procesandoAdminNodoId) === String(nodoSeleccionado.id);
 
                       return (
-                        <div className="bloque-admin-arbol mt-3">
+                        <div className="bloque-admin-arbol mt-2">
                           <div className="bloque-admin-arbol-info">
                             <span className={`estado-admin-arbol ${yaEsAdminNodo ? 'activo' : ''}`}>
                               <i className={`bi ${yaEsAdminNodo ? 'bi-shield-fill-check' : 'bi-shield'}`}></i>
@@ -6753,7 +7040,7 @@ La persona seguirá dentro del árbol como miembro normal.`
                     })()}
                   </div>
 
-                  <hr className="my-4 text-muted" style={{ opacity: 0.2 }} />
+                  <hr className="my-3 text-muted" style={{ opacity: 0.2 }} />
 
                   <div className="mb-4">
                     <h6 className="fw-bold mb-2 small text-uppercase text-muted" style={{ letterSpacing: '1px' }}>Sobre Mí</h6>
@@ -7232,13 +7519,13 @@ La persona seguirá dentro del árbol como miembro normal.`
                     <h5 className="fw-bold m-0" style={{ color: 'var(--texto-principal)' }}>
                       <i className="bi bi-calendar-event me-2"></i>
                       {mostrarFormularioEvento
-                        ? (modoFormularioEvento === 'crear' ? 'Crear evento familiar' : modoFormularioEvento === 'ver' ? 'Detalle del evento' : 'Editar evento familiar')
+                        ? (modoFormularioEvento === 'crear' ? 'Crear evento familiar' : 'Editar evento familiar')
                         : 'Eventos Familiares'}
                     </h5>
                     <p className="text-muted small mb-0 mt-1">
                       {mostrarFormularioEvento
                         ? 'Registra fecha, ubicación manual y detalles del evento.'
-                        : 'Consulta y organiza los próximos momentos importantes del árbol.'}
+                        : 'Consulta próximos eventos y vuelve a los recuerdos del pasado.'}
                     </p>
                   </div>
                   <button className="boton-cerrar-panel" onClick={cerrarPanelEventos}><i className="bi bi-x-lg"></i></button>
@@ -7260,7 +7547,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                           <input
                             type="text"
                             value={formularioEvento.titulo}
-                            disabled={modoFormularioEvento === 'ver'}
                             placeholder="Ej. Cumpleaños familiar"
                             onChange={(e) => actualizarCampoEvento('titulo', e.target.value)}
                           />
@@ -7270,7 +7556,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                           <label>Tipo de evento</label>
                           <select
                             value={formularioEvento.tipoEvento}
-                            disabled={modoFormularioEvento === 'ver'}
                             onChange={(e) => actualizarCampoEvento('tipoEvento', e.target.value)}
                           >
                             {TIPOS_EVENTO_FAMILIAR.map(tipo => (
@@ -7283,7 +7568,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                           <input
                             type="checkbox"
                             checked={formularioEvento.todoElDia}
-                            disabled={modoFormularioEvento === 'ver'}
                             onChange={(e) => actualizarCampoEvento('todoElDia', e.target.checked)}
                           />
                           <span>Evento de todo el día</span>
@@ -7295,7 +7579,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                             <input
                               type="date"
                               value={formularioEvento.fechaInicio}
-                              disabled={modoFormularioEvento === 'ver'}
                               onChange={(e) => actualizarCampoEvento('fechaInicio', e.target.value)}
                             />
                           </div>
@@ -7306,7 +7589,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                               <input
                                 type="time"
                                 value={formularioEvento.horaInicio}
-                                disabled={modoFormularioEvento === 'ver'}
                                 onChange={(e) => actualizarCampoEvento('horaInicio', e.target.value)}
                               />
                             </div>
@@ -7319,7 +7601,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                             <input
                               type="date"
                               value={formularioEvento.fechaFin}
-                              disabled={modoFormularioEvento === 'ver'}
                               onChange={(e) => actualizarCampoEvento('fechaFin', e.target.value)}
                             />
                           </div>
@@ -7330,7 +7611,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                               <input
                                 type="time"
                                 value={formularioEvento.horaFin}
-                                disabled={modoFormularioEvento === 'ver'}
                                 onChange={(e) => actualizarCampoEvento('horaFin', e.target.value)}
                               />
                             </div>
@@ -7345,7 +7625,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                             <input
                               type="text"
                               value={formularioEvento.ubicacionTexto}
-                              disabled={modoFormularioEvento === 'ver'}
                               placeholder="Ej. Casa de la abuela, Salón Principal"
                               onChange={(e) => actualizarCampoEvento('ubicacionTexto', e.target.value)}
                             />
@@ -7356,7 +7635,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                             <input
                               type="text"
                               value={formularioEvento.ubicacionDireccion}
-                              disabled={modoFormularioEvento === 'ver'}
                               placeholder="Ej. Ameca, Jalisco"
                               onChange={(e) => actualizarCampoEvento('ubicacionDireccion', e.target.value)}
                             />
@@ -7367,7 +7645,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                             <input
                               type="text"
                               value={formularioEvento.ubicacionReferencia}
-                              disabled={modoFormularioEvento === 'ver'}
                               placeholder="Ej. Cerca del centro"
                               onChange={(e) => actualizarCampoEvento('ubicacionReferencia', e.target.value)}
                             />
@@ -7378,7 +7655,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                           <label>Descripción <span>opcional</span></label>
                           <textarea
                             value={formularioEvento.descripcion}
-                            disabled={modoFormularioEvento === 'ver'}
                             rows="4"
                             placeholder="Agrega detalles importantes del evento..."
                             onChange={(e) => actualizarCampoEvento('descripcion', e.target.value)}
@@ -7389,7 +7665,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                           <label>Recordatorio</label>
                           <select
                             value={formularioEvento.recordatorioMinutosAntes}
-                            disabled={modoFormularioEvento === 'ver'}
                             onChange={(e) => actualizarCampoEvento('recordatorioMinutosAntes', e.target.value)}
                           >
                             <option value="60">1 hora antes</option>
@@ -7418,80 +7693,183 @@ La persona seguirá dentro del árbol como miembro normal.`
                           className="btn-evento-peligro"
                           onClick={eliminarEventoFamiliar}
                           disabled={guardandoEvento}
+                          aria-label="Eliminar evento"
+                          title="Eliminar evento"
                         >
                           <i className="bi bi-trash"></i>
                         </button>
                       )}
 
-                      {modoFormularioEvento !== 'ver' && (
-                        <button
-                          type="button"
-                          className="btn-evento-principal"
-                          onClick={guardarEventoFamiliar}
-                          disabled={guardandoEvento}
-                        >
-                          {guardandoEvento ? (
-                            <>
-                              <span className="spinner-border spinner-border-sm"></span>
-                              Guardando...
-                            </>
-                          ) : (
-                            <>
-                              <i className="bi bi-check2-circle"></i>
-                              {modoFormularioEvento === 'editar' ? 'Actualizar' : 'Crear evento'}
-                            </>
-                          )}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        className="btn-evento-principal"
+                        onClick={guardarEventoFamiliar}
+                        disabled={guardandoEvento}
+                      >
+                        {guardandoEvento ? (
+                          <>
+                            <span className="spinner-border spinner-border-sm"></span>
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <i className="bi bi-check2-circle"></i>
+                            {modoFormularioEvento === 'editar' ? 'Actualizar' : 'Crear evento'}
+                          </>
+                        )}
+                      </button>
                     </div>
                   </>
                 ) : (
                   <>
+                    <div className="selector-pestanas-eventos" role="tablist" aria-label="Clasificación de eventos familiares">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={pestanaEventos === 'proximos'}
+                        className={pestanaEventos === 'proximos' ? 'activo' : ''}
+                        onClick={() => seleccionarPestanaEventos('proximos')}
+                      >
+                        <i className="bi bi-calendar2-week"></i>
+                        Próximos
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={pestanaEventos === 'pasados'}
+                        className={pestanaEventos === 'pasados' ? 'activo' : ''}
+                        onClick={() => seleccionarPestanaEventos('pasados')}
+                      >
+                        <i className="bi bi-clock-history"></i>
+                        Pasados
+                      </button>
+                    </div>
+
                     <div className="scroll-contenido p-4 flex-grow-1">
-                      <div className="d-flex justify-content-between align-items-center mb-3">
-                        <p className="text-muted fw-bold mb-0 text-uppercase" style={{ fontSize: '0.65rem', letterSpacing: '1px' }}>Próximos Eventos</p>
-                        <button className="btn-recargar-eventos" onClick={() => cargarEventosFamiliares(arbol?._id)} disabled={cargandoEventos} title="Actualizar eventos">
-                          <i className={`bi ${cargandoEventos ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
+                      <div className="encabezado-lista-eventos-panel">
+                        <div>
+                          <p>{pestanaEventos === 'proximos' ? 'Próximos eventos' : 'Historia familiar'}</p>
+                          <span>{pestanaEventos === 'proximos' ? 'Ordenados por cercanía' : 'Del más reciente al más antiguo'}</span>
+                        </div>
+                        <button
+                          className="btn-recargar-eventos"
+                          onClick={recargarPestanaEventos}
+                          disabled={cargandoEventos || cargandoEventosPasados}
+                          title="Actualizar eventos"
+                        >
+                          <i className={`bi ${(cargandoEventos || cargandoEventosPasados) ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
                         </button>
                       </div>
 
-                      {errorEventos && (
-                        <div className="alerta-eventos error mb-3">
-                          <i className="bi bi-exclamation-triangle"></i>
-                          <span>{errorEventos}</span>
-                        </div>
-                      )}
-
-                      {cargandoEventos ? (
-                        <div className="estado-eventos-vacio">
-                          <div className="spinner-border spinner-border-sm" role="status"></div>
-                          <p>Cargando eventos familiares...</p>
-                        </div>
-                      ) : eventosFamiliares.length > 0 ? (
-                        eventosFamiliares.map(evento => {
-                          const configEvento = obtenerConfigEvento(evento.tipoEvento);
-                          const puedeGestionar = usuarioPuedeGestionarEventoLocal(evento);
-
-                          return (
-                            <div key={evento.id} className="tarjeta-evento" onClick={() => abrirDetalleEvento(evento)}>
-                              <div className="d-flex justify-content-between align-items-start gap-2 mb-1">
-                                <div className="evento-fecha">{formatearFechaEventoCorta(evento.fechaInicio, preferenciasRegion)}</div>
-                                <span className="etiqueta-tipo-evento"><i className={`bi ${configEvento.icono}`}></i> {configEvento.etiqueta}</span>
-                              </div>
-                              <div className="evento-titulo">{evento.titulo}</div>
-                              <div className="evento-detalle"><i className="bi bi-clock"></i> {formatearFechaEventoCompleta(evento.fechaInicio, preferenciasRegion)} · {formatearHoraEvento(evento.fechaInicio, evento.todoElDia, preferenciasRegion)}</div>
-                              <div className="evento-detalle"><i className="bi bi-geo-alt"></i> {obtenerTextoUbicacionEvento(evento)}</div>
-                              {evento.descripcion && <p className="evento-descripcion-corta">{evento.descripcion}</p>}
-                              {puedeGestionar && <span className="evento-puede-editar"><i className="bi bi-pencil-square"></i> Editar</span>}
+                      {pestanaEventos === 'proximos' ? (
+                        <>
+                          {errorEventos && (
+                            <div className="alerta-eventos error mb-3">
+                              <i className="bi bi-exclamation-triangle"></i>
+                              <span>{errorEventos}</span>
                             </div>
-                          );
-                        })
+                          )}
+
+                          {cargandoEventos ? (
+                            <div className="estado-eventos-vacio">
+                              <div className="spinner-border spinner-border-sm" role="status"></div>
+                              <p>Cargando eventos familiares...</p>
+                            </div>
+                          ) : eventosFamiliares.length > 0 ? (
+                            eventosFamiliares.map(evento => {
+                              const configEvento = obtenerConfigEvento(evento.tipoEvento);
+                              const estadoVisual = obtenerEstadoVisualEvento(evento);
+
+                              return (
+                                <button key={evento.id} type="button" className="tarjeta-evento" onClick={() => abrirDetalleEvento(evento)}>
+                                  <div className="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                    <div className="evento-fecha">{formatearFechaEventoCorta(evento.fechaInicio, preferenciasRegion)}</div>
+                                    <span className={`estado-temporal-evento ${estadoVisual.clase}`}>{estadoVisual.etiqueta}</span>
+                                  </div>
+                                  <div className="evento-titulo">{evento.titulo}</div>
+                                  <span className="etiqueta-tipo-evento"><i className={`bi ${configEvento.icono}`}></i> {configEvento.etiqueta}</span>
+                                  <div className="evento-detalle"><i className="bi bi-clock"></i> {formatearFechaEventoCompleta(evento.fechaInicio, preferenciasRegion)} · {formatearHoraEvento(evento.fechaInicio, evento.todoElDia, preferenciasRegion)}</div>
+                                  <div className="evento-detalle"><i className="bi bi-geo-alt"></i> {obtenerTextoUbicacionEvento(evento)}</div>
+                                  {evento.descripcion && <p className="evento-descripcion-corta">{evento.descripcion}</p>}
+                                  <div className="pie-tarjeta-evento">
+                                    <span><i className="bi bi-images"></i> {evento.totalPublicaciones || 0} recuerdos</span>
+                                    {usuarioPuedeGestionarEventoLocal(evento) && <span className="evento-puede-editar"><i className="bi bi-pencil-square"></i> Administrar</span>}
+                                  </div>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="estado-eventos-vacio">
+                              <i className="bi bi-calendar-plus"></i>
+                              <h6>No hay eventos próximos</h6>
+                              <p>Crea cumpleaños, reuniones, aniversarios o recordatorios para este árbol familiar.</p>
+                            </div>
+                          )}
+                        </>
                       ) : (
-                        <div className="estado-eventos-vacio">
-                          <i className="bi bi-calendar-plus"></i>
-                          <h6>No hay eventos próximos</h6>
-                          <p>Crea cumpleaños, reuniones, aniversarios o recordatorios para este árbol familiar.</p>
-                        </div>
+                        <>
+                          {errorEventosPasados && (
+                            <div className="alerta-eventos error mb-3">
+                              <i className="bi bi-exclamation-triangle"></i>
+                              <span>{errorEventosPasados}</span>
+                            </div>
+                          )}
+
+                          {cargandoEventosPasados ? (
+                            <div className="estado-eventos-vacio">
+                              <div className="spinner-border spinner-border-sm" role="status"></div>
+                              <p>Cargando la historia de eventos...</p>
+                            </div>
+                          ) : eventosPasados.length > 0 ? (
+                            <div className="historial-eventos-familiares">
+                              {Object.entries(eventosPasadosPorAnio)
+                                .sort(([anioA], [anioB]) => Number(anioB) - Number(anioA))
+                                .map(([anio, eventosAnio]) => (
+                                  <section className="grupo-anio-eventos" key={anio}>
+                                    <h6>{anio}</h6>
+                                    {eventosAnio.map(evento => {
+                                      const configEvento = obtenerConfigEvento(evento.tipoEvento);
+                                      const estadoVisual = obtenerEstadoVisualEvento(evento);
+
+                                      return (
+                                        <button key={evento.id} type="button" className="tarjeta-evento tarjeta-evento-pasado" onClick={() => abrirDetalleEvento(evento)}>
+                                          <div className="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                            <div className="evento-fecha">{formatearFechaEventoCorta(evento.fechaInicio, preferenciasRegion)}</div>
+                                            <span className={`estado-temporal-evento ${estadoVisual.clase}`}>{estadoVisual.etiqueta}</span>
+                                          </div>
+                                          <div className="evento-titulo">{evento.titulo}</div>
+                                          <span className="etiqueta-tipo-evento"><i className={`bi ${configEvento.icono}`}></i> {configEvento.etiqueta}</span>
+                                          <div className="evento-detalle"><i className="bi bi-calendar3"></i> {formatearFechaEventoCompleta(evento.fechaInicio, preferenciasRegion)}</div>
+                                          <div className="resumen-recuerdos-tarjeta">
+                                            <span><i className="bi bi-file-earmark-post"></i> {evento.totalPublicaciones || 0} publicaciones</span>
+                                            <span><i className="bi bi-images"></i> {evento.totalMultimedia || 0} archivos</span>
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </section>
+                                ))}
+
+                              {cursorEventosPasados && (
+                                <button
+                                  type="button"
+                                  className="btn-cargar-mas-eventos"
+                                  onClick={() => cargarEventosPasados({ reiniciar: false })}
+                                  disabled={cargandoMasEventosPasados}
+                                >
+                                  {cargandoMasEventosPasados ? <span className="spinner-border spinner-border-sm"></span> : <i className="bi bi-chevron-down"></i>}
+                                  {cargandoMasEventosPasados ? 'Cargando...' : 'Cargar más eventos'}
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="estado-eventos-vacio">
+                              <i className="bi bi-clock-history"></i>
+                              <h6>Aún no hay eventos pasados</h6>
+                              <p>Cuando finalicen los eventos familiares, podrás volver a sus publicaciones y fotografías desde aquí.</p>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -7511,6 +7889,274 @@ La persona seguirá dentro del árbol como miembro normal.`
           </div>
         )}
       </div>
+      {modalDetalleEventoAbierto && eventoDetalle && createPortal((
+        <div
+          className="modal-backdrop-detalle-evento"
+          role="presentation"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) cerrarModalDetalleEvento();
+          }}
+        >
+          <section
+            className="modal-detalle-evento"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-detalle-evento"
+            onMouseDown={(evento) => evento.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="btn-cerrar-detalle-evento"
+              onClick={cerrarModalDetalleEvento}
+              aria-label="Cerrar detalle del evento"
+            >
+              <i className="bi bi-x-lg"></i>
+            </button>
+
+            {(() => {
+              const configEvento = obtenerConfigEvento(eventoDetalle.tipoEvento);
+              const estadoVisual = obtenerEstadoVisualEvento(eventoDetalle);
+              const puedeGestionar = usuarioPuedeGestionarEventoLocal(eventoDetalle);
+              const nombreCreador = eventoDetalle.creadoPor?.nombreUsuario || 'Familiar';
+              const imagenCreador = resolverUrlImagen(
+                eventoDetalle.creadoPor?.imagenPerfil?.urlArchivo ||
+                eventoDetalle.creadoPor?.imagenPerfil
+              ) || `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreCreador)}&background=0D1B2A&color=fff`;
+
+              return (
+                <>
+                  <header className="hero-detalle-evento">
+                    <div className="icono-hero-detalle-evento"><i className={`bi ${configEvento.icono}`}></i></div>
+                    <div className="texto-hero-detalle-evento">
+                      <div className="kicker-detalle-evento">
+                        <span>EVENTO FAMILIAR</span>
+                        <span className={`estado-temporal-evento ${estadoVisual.clase}`}>{estadoVisual.etiqueta}</span>
+                      </div>
+                      <h2 id="titulo-detalle-evento">{eventoDetalle.titulo}</h2>
+                      <p>
+                        {formatearFechaEventoCompleta(eventoDetalle.fechaInicio, preferenciasRegion)}
+                        {' · '}
+                        {formatearHoraEvento(eventoDetalle.fechaInicio, eventoDetalle.todoElDia, preferenciasRegion)}
+                      </p>
+                    </div>
+                  </header>
+
+                  <div className="pestanas-detalle-evento" role="tablist" aria-label="Contenido del evento">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={pestanaDetalleEvento === 'informacion'}
+                      className={pestanaDetalleEvento === 'informacion' ? 'activo' : ''}
+                      onClick={() => establecerPestanaDetalleEvento('informacion')}
+                    >
+                      <i className="bi bi-info-circle"></i>
+                      Información
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={pestanaDetalleEvento === 'recuerdos'}
+                      className={pestanaDetalleEvento === 'recuerdos' ? 'activo' : ''}
+                      onClick={abrirRecuerdosDetalleEvento}
+                    >
+                      <i className="bi bi-images"></i>
+                      Recuerdos
+                      {(resumenDetalleEvento.totalPublicaciones > 0) && (
+                        <span>{resumenDetalleEvento.totalPublicaciones}</span>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="cuerpo-detalle-evento">
+                    {cargandoDetalleEvento && (
+                      <div className="indicador-cargando-detalle-evento">
+                        <span className="spinner-border spinner-border-sm"></span>
+                        Actualizando información...
+                      </div>
+                    )}
+
+                    {pestanaDetalleEvento === 'informacion' ? (
+                      <div className="vista-informacion-evento">
+                        <div className="grid-informacion-evento">
+                          <article className="dato-detalle-evento">
+                            <i className="bi bi-calendar3"></i>
+                            <div>
+                              <span>Fecha y hora</span>
+                              <strong>{formatearFechaEventoCompleta(eventoDetalle.fechaInicio, preferenciasRegion)}</strong>
+                              <small>{formatearHoraEvento(eventoDetalle.fechaInicio, eventoDetalle.todoElDia, preferenciasRegion)}</small>
+                            </div>
+                          </article>
+
+                          <article className="dato-detalle-evento">
+                            <i className="bi bi-geo-alt"></i>
+                            <div>
+                              <span>Ubicación</span>
+                              <strong>{obtenerTextoUbicacionEvento(eventoDetalle)}</strong>
+                              {eventoDetalle.ubicacion?.direccion && <small>{eventoDetalle.ubicacion.direccion}</small>}
+                              {eventoDetalle.ubicacion?.referencia && <small>{eventoDetalle.ubicacion.referencia}</small>}
+                            </div>
+                          </article>
+
+                          <article className="dato-detalle-evento">
+                            <i className={`bi ${configEvento.icono}`}></i>
+                            <div>
+                              <span>Tipo de evento</span>
+                              <strong>{configEvento.etiqueta}</strong>
+                              <small>{eventoDetalle.todoElDia ? 'Evento de todo el día' : 'Evento con horario definido'}</small>
+                            </div>
+                          </article>
+
+                          <article className="dato-detalle-evento">
+                            <img src={imagenCreador} alt="" />
+                            <div>
+                              <span>Creado por</span>
+                              <strong>{nombreCreador}</strong>
+                              <small>{puedeGestionar ? 'Puedes administrar este evento' : 'Miembro de la familia'}</small>
+                            </div>
+                          </article>
+                        </div>
+
+                        {eventoDetalle.descripcion ? (
+                          <section className="descripcion-detalle-evento">
+                            <span>Descripción</span>
+                            <p>{eventoDetalle.descripcion}</p>
+                          </section>
+                        ) : (
+                          <section className="descripcion-detalle-evento vacia">
+                            <span>Descripción</span>
+                            <p>Este evento no tiene una descripción adicional.</p>
+                          </section>
+                        )}
+
+                        {Array.isArray(eventoDetalle.nodosRelacionados) && eventoDetalle.nodosRelacionados.length > 0 && (
+                          <section className="personas-detalle-evento">
+                            <span>Personas relacionadas</span>
+                            <div>
+                              {eventoDetalle.nodosRelacionados.map(nodo => (
+                                <span key={obtenerId(nodo) || nodo.nombre}>
+                                  {nodo.iniciales || obtenerIniciales(nodo.nombre || 'Familiar')}
+                                  <strong>{nodo.nombre || 'Familiar'}</strong>
+                                </span>
+                              ))}
+                            </div>
+                          </section>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="vista-recuerdos-evento">
+                        <div className="resumen-album-detalle-evento">
+                          <div>
+                            <strong>{resumenDetalleEvento.totalPublicaciones}</strong>
+                            <span>{resumenDetalleEvento.totalPublicaciones === 1 ? 'publicación relacionada' : 'publicaciones relacionadas'}</span>
+                          </div>
+                          <div>
+                            <strong>{resumenDetalleEvento.totalMultimedia}</strong>
+                            <span>{resumenDetalleEvento.totalMultimedia === 1 ? 'archivo multimedia' : 'archivos multimedia'}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => cargarRecuerdosEvento(eventoDetalle, { forzar: true })}
+                            disabled={cargandoRecuerdosEvento}
+                            aria-label="Actualizar recuerdos"
+                          >
+                            <i className={`bi ${cargandoRecuerdosEvento ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
+                            Actualizar
+                          </button>
+                        </div>
+
+                        {errorRecuerdosEvento && (
+                          <div className="alerta-eventos error">
+                            <i className="bi bi-exclamation-triangle"></i>
+                            <span>{errorRecuerdosEvento}</span>
+                          </div>
+                        )}
+
+                        {cargandoRecuerdosEvento ? (
+                          <div className="estado-recuerdos-evento">
+                            <span className="spinner-border spinner-border-sm"></span>
+                            <p>Cargando publicaciones y fotografías...</p>
+                          </div>
+                        ) : publicacionesDetalleEvento.length > 0 ? (
+                          <div className="lista-recuerdos-detalle-evento">
+                            {publicacionesDetalleEvento.map(publicacion => {
+                              const nombreAutor = obtenerNombreAutorMomento(publicacion);
+                              const avatarAutor = obtenerAvatarAutorMomento(publicacion);
+                              const tieneMultimedia = Array.isArray(publicacion.multimedia)
+                                ? publicacion.multimedia.some(Boolean)
+                                : Boolean(publicacion.multimedia);
+
+                              return (
+                                <article className="publicacion-recuerdo-evento" key={obtenerId(publicacion)}>
+                                  <PublicacionHeader
+                                    nombre={nombreAutor}
+                                    nombreUsuario={nombreAutor}
+                                    avatarUrl={avatarAutor}
+                                    fecha={formatearFechaPublicacionMomento(publicacion.createdAt, idioma, zonaHoraria)}
+                                    fechaISO={publicacion.createdAt}
+                                    tipo="familiar"
+                                    privacidad="familia"
+                                    nombreFamilia={publicacion.arbolAudiencia?.nombreFamilia || publicacion.nombreFamiliaAudienciaSnapshot || arbol?.nombreFamilia || 'Familia'}
+                                    ubicacion={publicacion.ubicacionTexto || ''}
+                                  />
+
+                                  {publicacion.contenido && <p className="texto-publicacion-recuerdo-evento">{publicacion.contenido}</p>}
+
+                                  {tieneMultimedia && (
+                                    <PublicacionMediaCarousel
+                                      multimedia={publicacion.multimedia}
+                                      tipo="familiar"
+                                      compacto
+                                      ajuste="contain"
+                                      alt={`Recuerdo de ${eventoDetalle.titulo}`}
+                                      className="carrusel-recuerdo-detalle-evento"
+                                    />
+                                  )}
+                                </article>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="estado-recuerdos-evento vacio">
+                            <i className="bi bi-images"></i>
+                            <strong>Aún no hay recuerdos vinculados.</strong>
+                            <p>Publica un Momento Familiar y selecciona este evento para que las fotos y videos aparezcan aquí.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {puedeGestionar && (
+                    <footer className="acciones-detalle-evento">
+                      {eventoDetalle.estado === 'Activo' && !esEventoPasadoCliente(eventoDetalle) && (
+                        <button
+                          type="button"
+                          className="btn-cancelar-evento-detalle"
+                          onClick={cancelarEventoDesdeDetalle}
+                          disabled={guardandoEvento}
+                        >
+                          <i className="bi bi-calendar-x"></i>
+                          Cancelar evento
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn-editar-evento-detalle"
+                        onClick={editarEventoDesdeDetalle}
+                        disabled={guardandoEvento || eventoDetalle.estado === 'Cancelado'}
+                      >
+                        <i className="bi bi-pencil-square"></i>
+                        Editar evento
+                      </button>
+                    </footer>
+                  )}
+                </>
+              );
+            })()}
+          </section>
+        </div>
+      ), document.body)}
+
       {modalMomentosFamiliaresAbierto && publicacionMomentoActiva && nodoSeleccionado && createPortal((
         <div
           className="modal-backdrop-momentos-familiares"

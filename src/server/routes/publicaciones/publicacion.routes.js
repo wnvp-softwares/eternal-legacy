@@ -13,6 +13,7 @@ const {
 const {
     crearPublicacion,
     obtenerPublicaciones,
+    obtenerPublicacionesPorUsuario,
     buscarTodo,
     obtenerPublicacionesPorEvento,
     obtenerMomentosFamiliaresPorNodo,
@@ -77,6 +78,9 @@ router.post('/crear', verificarToken, manejarCargaPublicacion, crearPublicacion)
 
 // Ruta para obtener el muro.
 router.get('/muro', verificarToken, obtenerPublicaciones);
+
+// Publicaciones visibles de un perfil concreto.
+router.get('/usuario/:usuarioId', verificarToken, obtenerPublicacionesPorUsuario);
 
 // Ruta para obtener publicaciones relacionadas a un evento familiar.
 router.get('/evento/:eventoId', verificarToken, obtenerPublicacionesPorEvento);

@@ -10,6 +10,32 @@ const CLAVE_BUSQUEDAS_RECIENTES = 'legacy_busquedas_recientes';
 
 const normalizarTexto = (texto = '') => String(texto || '').trim();
 
+const leerUsuarioSesion = () => {
+  try {
+    return JSON.parse(localStorage.getItem('usuario') || '{}');
+  } catch (error) {
+    console.error('No se pudo leer el usuario de la sesión:', error);
+    return {};
+  }
+};
+
+const normalizarHandlePerfil = (valor = '') => String(valor || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/^@+/, '')
+  .trim()
+  .replace(/\s+/g, '_')
+  .replace(/[^A-Za-z0-9._-]/g, '')
+  .replace(/_+/g, '_')
+  .replace(/^[_\-.]+|[_\-.]+$/g, '')
+  .toLowerCase();
+
+const obtenerNicknameVisible = (usuario = {}) => (
+  normalizarHandlePerfil(usuario?.nickname) ||
+  normalizarHandlePerfil(usuario?.nombreUsuario) ||
+  'usuario'
+);
+
 const obtenerId = (valor) => {
   if (!valor) return null;
   if (typeof valor === 'string') return valor;
@@ -133,12 +159,36 @@ export default function Layout() {
   const [busquedasRecientes, setBusquedasRecientes] = useState(leerBusquedasRecientes);
 
   const [mensajesNoLeidos, setMensajesNoLeidos] = useState(0);
+  const [usuarioLogueado, setUsuarioLogueado] = useState(leerUsuarioSesion);
 
-  const usuarioLogueado = JSON.parse(localStorage.getItem('usuario') || '{}');
   const token = localStorage.getItem('token');
   const queryBusqueda = textoBusqueda.trim();
 
   const esActiva = (ruta) => location.pathname.includes(ruta);
+
+  useEffect(() => {
+    const actualizarUsuarioSesion = (evento) => {
+      const usuarioActualizado = evento?.detail && typeof evento.detail === 'object'
+        ? evento.detail
+        : leerUsuarioSesion();
+
+      setUsuarioLogueado(usuarioActualizado);
+    };
+
+    const manejarCambioStorage = (evento) => {
+      if (evento.key === 'usuario') {
+        setUsuarioLogueado(leerUsuarioSesion());
+      }
+    };
+
+    window.addEventListener('legacy:usuario-actualizado', actualizarUsuarioSesion);
+    window.addEventListener('storage', manejarCambioStorage);
+
+    return () => {
+      window.removeEventListener('legacy:usuario-actualizado', actualizarUsuarioSesion);
+      window.removeEventListener('storage', manejarCambioStorage);
+    };
+  }, []);
 
   const guardarBusquedasRecientes = (nuevasBusquedas) => {
     const limitadas = nuevasBusquedas.slice(0, 8);
@@ -179,6 +229,15 @@ export default function Layout() {
       setTextoBusqueda('');
       setResultadosBusquedaGlobal({ personas: [], publicaciones: [] });
     }
+  };
+
+  const abrirPublicadorMovil = () => {
+    setDropdownAbierto(false);
+    cerrarBuscador({ limpiarTexto: true });
+
+    navigate('/inicio', {
+      state: { abrirPublicador: Date.now() }
+    });
   };
 
   const abrirBuscadorMovil = () => {
@@ -586,7 +645,7 @@ export default function Layout() {
                     {usuarioLogueado?.nombreUsuario || 'Usuario'}
                   </p>
                   <p className="small text-muted m-0">
-                    @{usuarioLogueado?.nombreUsuario?.toLowerCase() || 'usuario'}
+                    @{obtenerNicknameVisible(usuarioLogueado)}
                   </p>
                 </div>
 
@@ -683,9 +742,19 @@ export default function Layout() {
             <i className={`bi bi-diagram-3${esActiva('/arbol-genealogico') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/arbol-genealogico') ? 'bold' : 'normal' }}>Árbol</span>
           </Link>
 
-          <Link to="#" className="text-secondary d-flex flex-column align-items-center text-decoration-none">
-            <i className="bi bi-plus-square fs-5"></i><span style={{ fontSize: '0.7rem' }}>Publicar</span>
-          </Link>
+          <button
+            type="button"
+            className="boton-publicar-nav-movil"
+            onClick={abrirPublicadorMovil}
+            aria-label="Crear una publicación"
+            title="Publicar"
+            data-track
+            data-seccion="navegacion_movil"
+            data-accion="abrir_publicador"
+          >
+            <i className="bi bi-plus-square fs-5" aria-hidden="true"></i>
+            <span>Publicar</span>
+          </button>
 
           <Link to="/red" className={`${esActiva('/red') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>
             <i className={`bi bi-people${esActiva('/red') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/red') ? 'bold' : 'normal' }}>Red</span>

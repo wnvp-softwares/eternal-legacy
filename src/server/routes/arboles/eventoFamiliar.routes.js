@@ -7,6 +7,7 @@ const {
     crearEventoFamiliar,
     obtenerEventosPorArbol,
     obtenerProximosEventos,
+    obtenerEventosPasados,
     obtenerEventoPorId,
     actualizarEventoFamiliar,
     cancelarEventoFamiliar,
@@ -18,6 +19,8 @@ router.post('/crear', verificarToken, crearEventoFamiliar);
 router.get('/arbol/:arbolId', verificarToken, obtenerEventosPorArbol);
 
 router.get('/arbol/:arbolId/proximos', verificarToken, obtenerProximosEventos);
+
+router.get('/arbol/:arbolId/pasados', verificarToken, obtenerEventosPasados);
 
 router.get('/:eventoId', verificarToken, obtenerEventoPorId);
 

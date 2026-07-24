@@ -4,8 +4,160 @@ import { usePreferencias } from '../context/PreferenciasContext';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import ImageCropperModal from '../components/ImageCropperModal';
 import PublicacionMediaCarousel from '../components/PublicacionMediaCarousel';
+import PublicacionHeader from '../components/PublicacionHeader';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Perfil.css';
+
+
+const obtenerIdEntidad = (valor) => {
+  if (!valor) return null;
+  if (typeof valor === 'string') return valor;
+  return valor._id || valor.id || valor.usuarioId || valor.autorId || null;
+};
+
+const normalizarTexto = (valor = '') => String(valor || '').trim();
+
+const normalizarHandleMencion = (valor = '', { minusculas = false } = {}) => {
+  let handle = String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^@+/, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Za-z0-9._-]/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^[_\-.]+|[_\-.]+$/g, '');
+
+  if (minusculas) handle = handle.toLowerCase();
+  return handle;
+};
+
+const obtenerImagenDeEntidad = (entidad) => {
+  if (!entidad) return null;
+  if (typeof entidad === 'string') return entidad;
+  return (
+    entidad.imagenPerfil ||
+    entidad.fotoPerfil ||
+    entidad.imagen ||
+    entidad.foto ||
+    entidad.avatar ||
+    entidad.usuario?.imagenPerfil ||
+    entidad.autor?.imagenPerfil ||
+    null
+  );
+};
+
+const obtenerNombreDeEntidad = (entidad, fallback = 'Familiar') => {
+  if (!entidad) return fallback;
+  if (typeof entidad === 'string') return entidad;
+  return normalizarTexto(
+    entidad.nombreUsuario ||
+    entidad.nombre ||
+    entidad.nombreCompleto ||
+    entidad.usuario?.nombreUsuario ||
+    entidad.autor?.nombreUsuario ||
+    fallback
+  );
+};
+
+const obtenerNicknameDeEntidad = (entidad) => {
+  if (!entidad || typeof entidad === 'string') return '';
+  return normalizarTexto(
+    entidad.nickname ||
+    entidad.usuario?.nickname ||
+    entidad.autor?.nickname ||
+    ''
+  ).replace(/^@+/, '');
+};
+
+const obtenerIdPersonaPerfil = (persona = {}) => {
+  if (!persona) return null;
+  if (typeof persona === 'string') return persona;
+  return (
+    obtenerIdEntidad(persona) ||
+    obtenerIdEntidad(persona.usuario) ||
+    obtenerIdEntidad(persona.autor) ||
+    null
+  );
+};
+
+const buscarPersonaPorMencion = (textoMencion = '', menciones = []) => {
+  if (!Array.isArray(menciones) || menciones.length === 0) return null;
+  const mencionNormalizada = normalizarHandleMencion(textoMencion, { minusculas: true });
+
+  return menciones.find((persona) => {
+    const handles = [
+      persona?.handle,
+      persona?.nickname,
+      persona?.usuario?.nickname,
+      persona?.nombreUsuario,
+      persona?.usuario?.nombreUsuario,
+      persona?.nombre,
+      persona?.nombreCompleto
+    ].filter(Boolean);
+
+    return handles.some((valor) => (
+      normalizarHandleMencion(valor, { minusculas: true }) === mencionNormalizada
+    ));
+  }) || null;
+};
+
+const obtenerArbolAudienciaDePublicacion = (publicacion = {}) => {
+  const arbol = publicacion.arbolAudiencia || publicacion.eventoRelacionado?.arbol || null;
+  const nombreFamilia = normalizarTexto(
+    arbol?.nombreFamilia ||
+    arbol?.nombre ||
+    arbol?.titulo ||
+    publicacion.nombreFamiliaAudienciaSnapshot ||
+    publicacion.eventoRelacionado?.nombreFamiliaSnapshot ||
+    ''
+  );
+
+  if (!arbol && !nombreFamilia) return null;
+  return {
+    id: obtenerIdEntidad(arbol),
+    nombreFamilia: nombreFamilia || 'Familia'
+  };
+};
+
+const obtenerEventoRelacionadoDePublicacion = (publicacion = {}) => {
+  const relacion = publicacion.eventoRelacionado || null;
+  if (!relacion) return null;
+
+  const evento = relacion.evento && typeof relacion.evento === 'object'
+    ? relacion.evento
+    : {};
+  const arbol = relacion.arbol && typeof relacion.arbol === 'object'
+    ? relacion.arbol
+    : {};
+
+  const id = obtenerIdEntidad(evento) || obtenerIdEntidad(relacion.evento);
+  const titulo = normalizarTexto(
+    evento.titulo || relacion.tituloSnapshot || relacion.titulo || ''
+  );
+  const fechaInicio = evento.fechaInicio || relacion.fechaInicioSnapshot || relacion.fechaInicio || null;
+  const tipoEvento = normalizarTexto(
+    evento.tipoEvento || relacion.tipoEventoSnapshot || relacion.tipoEvento || 'otro'
+  );
+  const nombreFamilia = normalizarTexto(
+    arbol.nombreFamilia || arbol.nombre || arbol.titulo ||
+    relacion.nombreFamiliaSnapshot || relacion.nombreFamilia || ''
+  );
+
+  if (!id && !titulo) return null;
+  return { id, titulo: titulo || 'Evento familiar', fechaInicio, tipoEvento, nombreFamilia };
+};
+
+const ETIQUETAS_EVENTO_PERFIL = {
+  cumpleanos: 'Cumpleaños',
+  aniversario: 'Aniversario',
+  reunion: 'Reunión familiar',
+  conmemoracion: 'Conmemoración',
+  graduacion: 'Graduación',
+  boda: 'Boda',
+  nacimiento: 'Nacimiento',
+  otro: 'Evento familiar'
+};
 
 const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
 
@@ -283,6 +435,7 @@ const normalizarUsuarioPerfil = (usuario = {}, usuarioFallback = {}) => {
     ...usuarioSeguro,
     id: usuarioSeguro.id || usuarioSeguro._id || fallbackSeguro.id || fallbackSeguro._id || null,
     _id: usuarioSeguro._id || usuarioSeguro.id || fallbackSeguro._id || fallbackSeguro.id || null,
+    nickname: normalizarTexto(usuarioSeguro.nickname || fallbackSeguro.nickname || '').replace(/^@+/, ''),
     imagenPerfil:
       obtenerUrlImagenUsuario(usuarioSeguro.imagenPerfil) ||
       obtenerUrlImagenUsuario(fallbackSeguro.imagenPerfil) ||
@@ -292,6 +445,15 @@ const normalizarUsuarioPerfil = (usuario = {}, usuarioFallback = {}) => {
       obtenerUrlImagenUsuario(fallbackSeguro.imagenPortada) ||
       null
   };
+};
+
+const sincronizarUsuarioSesion = (usuario) => {
+  if (!usuario || typeof usuario !== 'object' || typeof window === 'undefined') return;
+
+  localStorage.setItem('usuario', JSON.stringify(usuario));
+  window.dispatchEvent(new CustomEvent('legacy:usuario-actualizado', {
+    detail: usuario
+  }));
 };
 
 const obtenerFormatoMultimediaPublicacion = (multimedia) => {
@@ -472,6 +634,14 @@ export default function Perfil() {
           ? `${API_BASE_URL}/perfil/mi-perfil`
           : `${API_BASE_URL}/perfil/${id}`;
 
+        const targetId = esMiPerfil
+          ? (usuarioLogueado?.id || usuarioLogueado?._id)
+          : id;
+
+        if (!targetId) {
+          throw new Error('No se pudo identificar al dueño del perfil.');
+        }
+
         const [resPerfil, resPublicaciones] = await Promise.all([
           fetch(urlPerfilEndpoint, {
             method: 'GET',
@@ -480,7 +650,7 @@ export default function Perfil() {
               'Authorization': `Bearer ${token}`
             }
           }),
-          fetch(`${API_BASE_URL}/publicaciones/muro`, {
+          fetch(`${API_BASE_URL}/publicaciones/usuario/${targetId}`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -509,7 +679,7 @@ export default function Perfil() {
         setUsuarioPerfil(usuarioNormalizadoPerfil);
 
         if (esMiPerfil) {
-          localStorage.setItem('usuario', JSON.stringify(usuarioNormalizadoPerfil));
+          sincronizarUsuarioSesion(usuarioNormalizadoPerfil);
         } else {
           setEstaSiguiendo(datosPerfil.siguiendo || false);
           // 🌟 Nuevos mapeos:
@@ -522,15 +692,12 @@ export default function Perfil() {
           ? datosPublicaciones
           : (datosPublicaciones.publicaciones || datosPublicaciones.posts || []);
 
-        // Cambiamos el filtro para que use las publicaciones del dueño del perfil actual
-        const targetId = esMiPerfil ? (usuarioLogueado?.id || usuarioLogueado?._id) : id;
-        const misPublicaciones = listaPosts.filter(post => {
-          const autorId = post.autor?._id || post.autor?.id || post.autor;
-          return String(autorId) === String(targetId);
-        });
+        const publicacionesOrdenadas = [...listaPosts].sort((a, b) => (
+          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        ));
 
-        setPublicaciones(misPublicaciones);
-        await cargarComentariosDePublicaciones(misPublicaciones);
+        setPublicaciones(publicacionesOrdenadas);
+        await cargarComentariosDePublicaciones(publicacionesOrdenadas);
         setError('');
       } catch (err) {
         console.error("Error cargando datos del perfil:", err);
@@ -736,7 +903,7 @@ export default function Perfil() {
         }
       }
 
-      localStorage.setItem('usuario', JSON.stringify(usuarioActualizadoLocal));
+      sincronizarUsuarioSesion(usuarioActualizadoLocal);
       setUsuarioPerfil(usuarioActualizadoLocal);
 
       if (vistaPreviaPerfil && vistaPreviaPerfil.startsWith('blob:')) URL.revokeObjectURL(vistaPreviaPerfil);
@@ -945,9 +1112,82 @@ export default function Perfil() {
     }
   };
 
-  const publicacionesFiltradas = publicaciones;
-  const publicacionesHistoricas = publicaciones.filter(post => post.tipo === 'historico');
-  const fotosGaleria = publicaciones.filter(post => Boolean(obtenerUrlMultimediaPublicacion(post.multimedia)));
+  const irAPerfil = (persona) => {
+    const personaId = obtenerIdPersonaPerfil(persona);
+    if (!personaId) return;
+
+    const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+    navigate(miId && String(personaId) === String(miId) ? '/perfil' : `/perfil/${personaId}`);
+  };
+
+  const renderTextoConMenciones = (texto = '', menciones = []) => {
+    const partes = String(texto || '').split(/(@[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]+)/g);
+
+    return partes.map((parte, index) => {
+      if (!parte.startsWith('@')) return parte;
+
+      const personaMencionada = buscarPersonaPorMencion(parte, menciones);
+      const entidadPerfil = personaMencionada?.usuario || personaMencionada;
+      const puedeAbrirPerfil = Boolean(obtenerIdPersonaPerfil(entidadPerfil));
+
+      return (
+        <span
+          key={`mencion-${index}`}
+          className={`mencion-dorada ${puedeAbrirPerfil ? 'mencion-clickeable' : ''}`}
+          role={puedeAbrirPerfil ? 'button' : undefined}
+          tabIndex={puedeAbrirPerfil ? 0 : undefined}
+          onClick={puedeAbrirPerfil ? () => irAPerfil(entidadPerfil) : undefined}
+          onKeyDown={puedeAbrirPerfil ? (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              irAPerfil(entidadPerfil);
+            }
+          } : undefined}
+        >
+          {parte}
+        </span>
+      );
+    });
+  };
+
+  const formatearDetalleEventoPerfil = (evento = {}) => {
+    const detalles = [];
+
+    if (evento.fechaInicio) {
+      const fecha = new Date(evento.fechaInicio);
+      if (!Number.isNaN(fecha.getTime())) {
+        detalles.push(new Intl.DateTimeFormat(preferenciasRegion.idioma, {
+          timeZone: preferenciasRegion.zonaHoraria,
+          day: '2-digit',
+          month: 'short'
+        }).format(fecha).replace('.', '').toUpperCase());
+      }
+    }
+
+    detalles.push(ETIQUETAS_EVENTO_PERFIL[evento.tipoEvento] || 'Evento familiar');
+    if (evento.nombreFamilia) detalles.push(evento.nombreFamilia);
+    return detalles.filter(Boolean).join(' · ');
+  };
+
+  const renderChipEventoPublicacion = (evento) => {
+    if (!evento) return null;
+
+    return (
+      <div className="evento-post-render perfil-evento-publicacion">
+        <i className="bi bi-calendar-heart-fill" aria-hidden="true"></i>
+        <div>
+          <strong>{evento.titulo || 'Evento familiar'}</strong>
+          <span>{formatearDetalleEventoPerfil(evento)}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const publicacionesFiltradas = [...publicaciones].sort((a, b) => (
+    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  ));
+  const publicacionesHistoricas = publicacionesFiltradas.filter(post => post.tipo === 'historico');
+  const fotosGaleria = publicacionesFiltradas.filter(post => Boolean(obtenerUrlMultimediaPublicacion(post.multimedia)));
 
   if (cargando) {
     return (
@@ -974,10 +1214,10 @@ export default function Perfil() {
         descripcion={cropperPerfilEsPortada
           ? 'Mueve la imagen y ajusta el zoom para elegir el encuadre horizontal de tu portada.'
           : 'Mueve la imagen y ajusta el zoom para elegir cómo se verá tu foto de perfil.'}
-        aspectRatio={cropperPerfilEsPortada ? 8 / 3 : 1}
+        aspectRatio={cropperPerfilEsPortada ? 3 : 1}
         forma={cropperPerfilEsPortada ? 'rect' : 'circle'}
-        outputWidth={cropperPerfilEsPortada ? 1600 : 900}
-        outputHeight={cropperPerfilEsPortada ? 600 : 900}
+        outputWidth={cropperPerfilEsPortada ? 1500 : 400}
+        outputHeight={cropperPerfilEsPortada ? 500 : 400}
         sufijoArchivo={cropperPerfilEsPortada ? 'portada' : 'perfil'}
         onCancelar={cerrarCropperPerfil}
         onConfirmar={confirmarCropperPerfil}
@@ -1188,232 +1428,224 @@ export default function Perfil() {
       }
 
       {/* =========================================
-          CABECERA DEL PERFIL (REAL)
+          CABECERA SOCIAL DEL PERFIL
           ========================================= */}
-      <div className="cabecera-perfil shadow-sm">
-        <div className="portada-contenedor">
-          <img
-            src={urlImagenPortada}
-            alt="Portada"
-            className="portada-perfil"
-          />
-        </div>
+      <section className="perfil-social-shell">
+        <div className="cabecera-perfil shadow-sm">
+          <div className="portada-contenedor">
+            <img
+              src={urlImagenPortada}
+              alt={`Portada de ${nombreAvatar}`}
+              className="portada-perfil"
+            />
+          </div>
 
-        <div className="info-usuario-container">
-          <div className="fila-superior-info">
-            <img src={urlImagenPerfil} alt="Perfil" className="foto-perfil-grande imagen-crop-perfil" />
+          <div className="info-usuario-container">
+            <div className="perfil-identidad-acciones">
+              <img
+                src={urlImagenPerfil}
+                alt={`Foto de perfil de ${nombreAvatar}`}
+                className="foto-perfil-grande imagen-crop-perfil"
+              />
 
-            {/* CONDICIONAL: Botón de edición si es mi perfil, botón de Seguir/Siguiendo si es ajeno */}
-            {esMiPerfil ? (
-              <button className="boton-editar-perfil" title="Editar Perfil" onClick={toggleEdicion}>
-                <i className="bi bi-pencil"></i>
-              </button>
-            ) : (
-              <button
-                className={`btn boton-relacion-perfil rounded-pill px-4 fw-bold ${estaSiguiendo ? 'btn-outline-secondary' : 'btn-warning'}`}
-                onClick={manejarToggleSeguir}
-                style={{ transition: 'all 0.2s ease' }}
-              >
-                <i className={`bi ${estaSiguiendo ? 'bi-person-check-fill' : 'bi-person-plus-fill'} me-2`}></i>
-                {estaSiguiendo ? 'Siguiendo' : 'Seguir'}
-              </button>
-            )}
-            {/* Si NO es mi perfil y además son AMIGOS (seguidores mutuos), evaluamos el estado familiar */}
-            {!esMiPerfil && sonAmigos && (
-              <div className="acciones-familia-perfil ms-2 d-inline-block">
-                {estadoFamilia === null && (
+              <div className="perfil-acciones-superiores">
+                {esMiPerfil ? (
+                  <button className="boton-editar-perfil perfil-boton-accion" type="button" onClick={toggleEdicion}>
+                    <i className="bi bi-pencil" aria-hidden="true"></i>
+                    <span>Editar perfil</span>
+                  </button>
+                ) : (
                   <button
-                    className="btn btn-outline-warning rounded-pill fw-bold"
-                    onClick={() => setMostrarSelectorFamilia(!mostrarSelectorFamilia)}
+                    type="button"
+                    className={`boton-relacion-perfil perfil-boton-accion ${estaSiguiendo ? 'siguiendo' : 'seguir'}`}
+                    onClick={manejarToggleSeguir}
                   >
-                    <i className="bi bi-tree-fill me-1"></i> Agregar a familia
+                    <i className={`bi ${estaSiguiendo ? 'bi-person-check-fill' : 'bi-person-plus-fill'}`} aria-hidden="true"></i>
+                    <span>{estaSiguiendo ? 'Siguiendo' : 'Seguir'}</span>
                   </button>
                 )}
 
-                {estadoFamilia === 'Pendiente' && esInvitadoPorMi && (
-                  <button className="btn btn-secondary rounded-pill fw-bold" disabled>
-                    <i className="bi bi-clock-history me-1"></i> Invitación Pendiente
-                  </button>
+                {!esMiPerfil && sonAmigos && (
+                  <div className="acciones-familia-perfil">
+                    {estadoFamilia === null && (
+                      <button
+                        type="button"
+                        className="perfil-boton-accion familia"
+                        onClick={() => setMostrarSelectorFamilia(!mostrarSelectorFamilia)}
+                      >
+                        <i className="bi bi-tree-fill" aria-hidden="true"></i>
+                        <span>Agregar a familia</span>
+                      </button>
+                    )}
+                    {estadoFamilia === 'Pendiente' && esInvitadoPorMi && (
+                      <button type="button" className="perfil-boton-accion estado" disabled>
+                        <i className="bi bi-clock-history" aria-hidden="true"></i>
+                        <span>Invitación pendiente</span>
+                      </button>
+                    )}
+                    {estadoFamilia === 'Pendiente' && !esInvitadoPorMi && (
+                      <button type="button" className="perfil-boton-accion estado" disabled>
+                        <i className="bi bi-exclamation-circle-fill" aria-hidden="true"></i>
+                        <span>Te invitó a su familia</span>
+                      </button>
+                    )}
+                    {estadoFamilia === 'Aceptado' && (
+                      <button type="button" className="perfil-boton-accion familiar" disabled>
+                        <i className="bi bi-heart-fill" aria-hidden="true"></i>
+                        <span>Familiar</span>
+                      </button>
+                    )}
+                  </div>
                 )}
-
-                {estadoFamilia === 'Pendiente' && !esInvitadoPorMi && (
-                  <button className="btn btn-info text-white rounded-pill fw-bold" disabled title="Revisa tus notificaciones o sección de Red para aceptar">
-                    <i className="bi bi-exclamation-circle-fill me-1"></i> Te invitó a su familia
-                  </button>
-                )}
-
-                {estadoFamilia === 'Aceptado' && (
-                  <button className="btn btn-success rounded-pill fw-bold" disabled>
-                    <i className="bi bi-heart-fill me-1"></i> Familiar
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Desplegable interactivo para elegir el parentesco */}
-          {mostrarSelectorFamilia && (
-            <div className="card selector-parentesco-card p-3 mt-2 shadow-sm border-warning">
-              <label className="form-label fw-bold text-dark mb-2">¿Qué parentesco tienes con este usuario?</label>
-              <div className="d-flex gap-2">
-                <select
-                  className="form-select form-select-sm"
-                  value={parentescoSeleccionado}
-                  onChange={(e) => setParentescoSeleccionado(e.target.value)}
-                >
-                  <option value="">-- Seleccionar --</option>
-                  <option value="Padre/Madre">Padre / Madre</option>
-                  <option value="Hijo/a">Hijo / a</option>
-                  <option value="Hermano/a">Hermano / a</option>
-                  <option value="Abuelo/a">Abuelo / a</option>
-                  <option value="Tío/a">Tío / a</option>
-                  <option value="Primo/a">Primo / a</option>
-                  <option value="Pareja">Pareja</option>
-                </select>
-
-                <button
-                  className="btn btn-warning btn-sm fw-bold px-3"
-                  onClick={manejarEnviarInvitacionFamilia}
-                >
-                  Enviar
-                </button>
-                <button
-                  className="btn btn-light btn-sm border"
-                  onClick={() => setMostrarSelectorFamilia(false)}
-                >
-                  X
-                </button>
               </div>
             </div>
-          )}
 
-          <h2 className="fuente-elegante fw-bold nombre-perfil">{usuarioPerfil?.nombreUsuario || 'Usuario'}</h2>
-          <p className="usuario-tag">
-            @{usuarioPerfil?.nickname || usuarioPerfil?.nombreUsuario?.toLowerCase().replace(/\s+/g, '') || 'sin_usuario'}
-          </p>
-          <p className="bio-perfil">{perfilBd?.biografia || 'Sin biografía aún.'}</p>
+            {mostrarSelectorFamilia && (
+              <div className="selector-parentesco-card">
+                <label className="form-label fw-bold mb-2">¿Qué parentesco tienes con este usuario?</label>
+                <div className="selector-parentesco-controles">
+                  <select
+                    className="form-select form-select-sm"
+                    value={parentescoSeleccionado}
+                    onChange={(event) => setParentescoSeleccionado(event.target.value)}
+                  >
+                    <option value="">-- Seleccionar --</option>
+                    <option value="Padre/Madre">Padre / Madre</option>
+                    <option value="Hijo/a">Hijo / a</option>
+                    <option value="Hermano/a">Hermano / a</option>
+                    <option value="Abuelo/a">Abuelo / a</option>
+                    <option value="Tío/a">Tío / a</option>
+                    <option value="Primo/a">Primo / a</option>
+                    <option value="Pareja">Pareja</option>
+                  </select>
+                  <button type="button" className="btn btn-warning btn-sm fw-bold" onClick={manejarEnviarInvitacionFamilia}>Enviar</button>
+                  <button type="button" className="btn btn-light btn-sm border" onClick={() => setMostrarSelectorFamilia(false)} aria-label="Cerrar selector">
+                    <i className="bi bi-x-lg"></i>
+                  </button>
+                </div>
+              </div>
+            )}
 
-          <div className="datos-extra-perfil">
-            {perfilBd?.ubicacionActual && (
-              <span>
-                <i className="bi bi-geo-alt-fill"></i> Vive en <strong>{perfilBd.ubicacionActual}</strong>
-              </span>
-            )}
-            {perfilBd?.lugarNacimiento && (
-              <span>
-                <i className="bi bi-house-door-fill"></i> De <strong>{perfilBd.lugarNacimiento}</strong>
-              </span>
-            )}
-            {perfilBd?.ocupacionEducacion && (
-              <span>
-                <i className="bi bi-briefcase-fill"></i> Trabaja/Estudia <strong>{perfilBd.ocupacionEducacion}</strong>
-              </span>
-            )}
-            {perfilBd?.genero && (
-              <span>
-                <i className="bi bi-gender-ambiguous"></i> Género: <strong>{perfilBd.genero}</strong>
-              </span>
-            )}
-            {perfilBd?.fechaNacimiento && (
-              <span>
-                <i className="bi bi-cake2-fill"></i> Cumpleaños: <strong>
-                  {formatearCumpleanos(perfilBd.fechaNacimiento)}
-                </strong>
-              </span>
-            )}
-            <span>
-              <i className="bi bi-calendar3"></i> Miembro desde <strong>{formatearFecha(perfilBd?.createdAt, 'completo')}</strong>
-            </span>
-          </div>
-
-          {Array.isArray(perfilBd?.intereses) && perfilBd.intereses.length > 0 && (
-            <div className="intereses-perfil-contenedor mt-3">
-              <p className="small text-muted mb-2 fw-bold text-uppercase" style={{ fontSize: '0.75rem', letterSpacing: '0.5px' }}>
-                <i className="bi bi-heart-pulse-fill text-danger me-1"></i> Intereses y Pasiones
+            <div className="perfil-textos-principales">
+              <h1 className="fuente-elegante nombre-perfil">{usuarioPerfil?.nombreUsuario || 'Usuario'}</h1>
+              <p className="usuario-tag">
+                @{usuarioPerfil?.nickname || usuarioPerfil?.nombreUsuario?.toLowerCase().replace(/\s+/g, '_') || 'sin_usuario'}
               </p>
-              <div className="d-flex flex-wrap gap-2">
-                {perfilBd.intereses.map((interes, index) => (
-                  <span key={index} className="badge bg-light text-dark border py-2 px-3 rounded-pill shadow-xs" style={{ fontSize: '0.85rem', fontWeight: '500' }}>
-                    #{interes}
-                  </span>
-                ))}
-              </div>
+              <p className="bio-perfil">{perfilBd?.biografia || 'Sin biografía aún.'}</p>
             </div>
-          )}
 
-          <div className="contenedor-etiquetas">
-            <div className="etiqueta-item">
-              <div className="burbuja-etiqueta burbuja-crear" style={{ margin: '0.5rem' }}>
-                <i className="bi bi-plus-lg"></i>
-                <span className="mt-1" style={{ fontSize: '0.70rem' }}>NUEVA</span>
+            <div className="datos-extra-perfil">
+              {perfilBd?.ubicacionActual && (
+                <span><i className="bi bi-geo-alt-fill"></i> Vive en <strong>{perfilBd.ubicacionActual}</strong></span>
+              )}
+              {perfilBd?.lugarNacimiento && (
+                <span><i className="bi bi-house-door-fill"></i> De <strong>{perfilBd.lugarNacimiento}</strong></span>
+              )}
+              {perfilBd?.ocupacionEducacion && (
+                <span><i className="bi bi-briefcase-fill"></i> Trabaja/Estudia <strong>{perfilBd.ocupacionEducacion}</strong></span>
+              )}
+              {perfilBd?.genero && (
+                <span><i className="bi bi-gender-ambiguous"></i> Género: <strong>{perfilBd.genero}</strong></span>
+              )}
+              {perfilBd?.fechaNacimiento && (
+                <span><i className="bi bi-cake2-fill"></i> Cumpleaños: <strong>{formatearCumpleanos(perfilBd.fechaNacimiento)}</strong></span>
+              )}
+              <span><i className="bi bi-calendar3"></i> Miembro desde <strong>{formatearFecha(perfilBd?.createdAt, 'completo')}</strong></span>
+            </div>
+
+            {Array.isArray(perfilBd?.intereses) && perfilBd.intereses.length > 0 && (
+              <div className="intereses-perfil-contenedor">
+                <p className="perfil-subtitulo-seccion"><i className="bi bi-heart-pulse-fill"></i> Intereses y pasiones</p>
+                <div className="perfil-intereses-lista">
+                  {perfilBd.intereses.map((interes, index) => (
+                    <span key={`${interes}-${index}`} className="perfil-interes-chip">#{interes}</span>
+                  ))}
+                </div>
               </div>
+            )}
+
+            <div className="contenedor-etiquetas perfil-destacados-compactos">
+              <button type="button" className="perfil-destacado-nuevo" title="Crear un nuevo destacado">
+                <span className="perfil-destacado-icono"><i className="bi bi-plus-lg"></i></span>
+                <span>Nuevo</span>
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* PESTAÑAS INFERIORES */}
-        <div className="tabs-perfil">
-          <button className={`tab-perfil ${tabActiva === 'memories' ? 'activo' : ''}`} onClick={() => setTabActiva('memories')}>
-            <span className="d-sm-inline">Recuerdos ({publicacionesFiltradas.length})</span>
-          </button>
-          <button className={`tab-perfil ${tabActiva === 'timeline' ? 'activo' : ''}`} onClick={() => setTabActiva('timeline')}>
-            <span className="d-sm-inline">Línea de Tiempo</span>
-          </button>
-          <button className={`tab-perfil ${tabActiva === 'photos' ? 'activo' : ''}`} onClick={() => setTabActiva('photos')}>
-            <span className="d-sm-inline">Fotos</span>
-          </button>
+          <nav className="tabs-perfil" aria-label="Secciones del perfil">
+            <button type="button" className={`tab-perfil ${tabActiva === 'memories' ? 'activo' : ''}`} onClick={() => setTabActiva('memories')}>
+              Recuerdos ({publicacionesFiltradas.length})
+            </button>
+            <button type="button" className={`tab-perfil ${tabActiva === 'timeline' ? 'activo' : ''}`} onClick={() => setTabActiva('timeline')}>
+              Línea de Tiempo
+            </button>
+            <button type="button" className={`tab-perfil ${tabActiva === 'photos' ? 'activo' : ''}`} onClick={() => setTabActiva('photos')}>
+              Fotos
+            </button>
+          </nav>
         </div>
-      </div>
+      </section>
 
       {/* =========================================
           CONTENIDO DINÁMICO DESDE BASE DE DATOS
           ========================================= */}
-      <div className="row">
+      <div className="row perfil-contenido-dinamico">
         {error && (
           <div className="alert alert-warning text-center mx-3" role="alert">
             {error}
           </div>
         )}
 
-        {/* PESTAÑA 1: RECUERDOS (FEED REAL) */}
+        {/* PESTAÑA 1: RECUERDOS (MISMO FORMATO QUE INICIO) */}
         {tabActiva === 'memories' && (
           <div className="col-12 perfil-recuerdos-feed">
             {publicacionesFiltradas.length > 0 ? (
               publicacionesFiltradas.map((post) => {
                 const esHistorico = post.tipo === 'historico';
-                return (
-                  <div key={post._id} className="tarjeta tarjeta-publicacion-perfil shadow-sm pb-3 px-3 px-sm-4">
-                    <div className="d-flex justify-content-between align-items-start mb-2">
-                      <div className="d-flex gap-3 align-items-center">
-                        <img
-                          src={post.autor?.imagenPerfil?.urlArchivo ? resolverUrlBackend(post.autor.imagenPerfil.urlArchivo) : urlAvatar}
-                          alt="Avatar"
-                          className="foto-perfil-post"
-                          style={{ objectFit: 'cover' }} // Evita que la foto se deforme si no es perfectamente cuadrada
-                        />
-                        <div>
-                          <div className="etiqueta-tipo-publicacion">
-                            <span>{esHistorico ? 'RECUERDO HISTÓRICO' : 'MOMENTO FAMILIAR'}</span>
-                          </div>
-                          <div className="d-flex align-items-baseline gap-2 mt-1">
-                            <p className="nombre-autor fs-5 mb-0">{post.autor?.nombreUsuario || usuarioLogueado?.nombreUsuario}</p>
-                            <span className="info-autor mb-0">{formatearFecha(post.createdAt)}</span>
-                          </div>
-                          <div className="etiqueta-historica-inferior">
-                            <i className={`bi ${esHistorico ? 'bi-globe-americas' : 'bi-shield-lock-fill'} text-muted`}></i>
-                            <span>{post.categoria || post.etiquetaNombre || 'General'}</span>
-                            {post.anio && <span className="anio-historico">• {post.anio}</span>}
-                          </div>
-                        </div>
-                      </div>
-                      <button className="btn btn-link text-secondary p-0 text-decoration-none mt-1"><i className="bi bi-three-dots"></i></button>
-                    </div>
+                const tieneMultimedia = Array.isArray(post.multimedia)
+                  ? post.multimedia.some(Boolean)
+                  : Boolean(post.multimedia);
+                const autor = post.autor || usuarioPerfil || usuarioLogueado || {};
+                const autorId = obtenerIdPersonaPerfil(autor);
+                const nombreAutor = obtenerNombreDeEntidad(autor, nombreAvatar);
+                const nicknameAutor = obtenerNicknameDeEntidad(autor);
+                const avatarAutor = obtenerUrlImagenUsuario(obtenerImagenDeEntidad(autor)) || urlAvatar;
+                const arbolAudiencia = obtenerArbolAudienciaDePublicacion(post);
+                const eventoRelacionado = obtenerEventoRelacionadoDePublicacion(post);
+                const contenidoPost = post.contenido || post.texto || '';
+                const etiquetasMultimedia = Array.isArray(post.etiquetasMultimedia) ? post.etiquetasMultimedia : [];
 
-                    {(post.texto || post.contenido) && (
-                      <p className="texto-post historico">{post.texto || post.contenido}</p>
+                return (
+                  <article key={post._id} className="tarjeta tarjeta-publicacion perfil-publicacion-card shadow-sm">
+                    <PublicacionHeader
+                      nombre={nombreAutor}
+                      nombreUsuario={nicknameAutor || nombreAutor}
+                      avatarUrl={avatarAutor}
+                      fecha={formatearFecha(post.createdAt)}
+                      fechaISO={post.createdAt}
+                      tipo={esHistorico ? 'historico' : 'familiar'}
+                      privacidad={post.privacidad || (esHistorico ? 'publico' : 'familia')}
+                      nombreFamilia={arbolAudiencia?.nombreFamilia || post.nombreFamiliaAudienciaSnapshot || 'Familia'}
+                      etiqueta={post.etiqueta?.nombre || post.categoria || post.etiquetaNombre || ''}
+                      anio={post.anio || ''}
+                      ubicacion={post.ubicacionTexto || post.ubicacion?.texto || post.ubicacion?.direccion || ''}
+                      onAutorClick={autorId ? () => irAPerfil(autor) : undefined}
+                      onMenuClick={() => {}}
+                    />
+
+                    {!esHistorico && eventoRelacionado && (
+                      <div className="publicacion-evento-debajo-header">
+                        {renderChipEventoPublicacion(eventoRelacionado)}
+                      </div>
                     )}
 
-                    {obtenerUrlMultimediaPublicacion(post.multimedia) && (
+                    {contenidoPost && (
+                      <p className="texto-post historico perfil-publicacion-texto">
+                        {renderTextoConMenciones(contenidoPost, post.menciones)}
+                      </p>
+                    )}
+
+                    {tieneMultimedia && (
                       <PublicacionMediaCarousel
                         multimedia={post.multimedia}
                         tipo={esHistorico ? 'historico' : 'familiar'}
@@ -1421,80 +1653,82 @@ export default function Perfil() {
                       />
                     )}
 
-                    {/* --- BOTONES DE INTERACCIÓN (LIKE Y COMENTARIOS) --- */}
-                    <div className="acciones-post-perfil d-flex justify-content-between mt-3 pt-2 border-top">
-                      <div className="d-flex gap-4">
-                        {/* Botón de Reacciones (Likes) */}
-                        <button
-                          className="boton-interaccion border-0 bg-transparent"
-                          onClick={() => manejarLike(post._id)}
-                        >
-                          <i className={`bi ${usuarioHaReaccionado(post) ? 'bi-heart-fill text-danger' : 'bi-heart'}`}></i>{' '}
-                          {post.reacciones?.length || 0}
-                        </button>
+                    {etiquetasMultimedia.length > 0 && (
+                      <div className="etiquetas-post-render">
+                        <i className="bi bi-person-bounding-box" aria-hidden="true"></i>
+                        <span>
+                          {etiquetasMultimedia
+                            .map((persona) => persona?.nombre || persona?.usuario?.nombreUsuario || persona?.nickname || persona?.nombreUsuario || persona)
+                            .filter(Boolean)
+                            .join(', ')}
+                        </span>
+                      </div>
+                    )}
 
-                        {/* Botón de Comentarios (Usa el estado reactivo precargado) */}
-                        <button
-                          className="boton-interaccion border-0 bg-transparent"
-                          onClick={() => toggleComentarios(post._id)}
-                        >
+                    <div className="acciones-post d-flex justify-content-between mt-3 pt-2 border-top">
+                      <div className="d-flex gap-4">
+                        <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarLike(post._id)}>
+                          <i className={`bi ${usuarioHaReaccionado(post) ? 'bi-heart-fill text-danger' : 'bi-heart'}`}></i> {post.reacciones?.length || 0}
+                        </button>
+                        <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => toggleComentarios(post._id)}>
                           <i className="bi bi-chat"></i> {comentariosPorPub[post._id]?.length ?? 0}
+                        </button>
+                      </div>
+                      <div className="d-flex gap-3">
+                        <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Guardar recuerdo" aria-label="Guardar recuerdo">
+                          <i className="bi bi-bookmark"></i>
+                        </button>
+                        <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Compartir" aria-label="Compartir">
+                          <i className="bi bi-share"></i> {post.compartido || 0}
                         </button>
                       </div>
                     </div>
 
-                    {/* --- SECCIÓN DESPLEGABLE DE COMENTARIOS --- */}
                     {comentariosAbiertos[post._id] && (
-                      <div className="seccion-comentarios mt-3 pt-3 border-top bg-light p-3 rounded-3">
-
-                        {/* Lista de comentarios cargados dinámicamente */}
-                        <div className="lista-comentarios mb-3" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                          {comentariosPorPub[post._id] && comentariosPorPub[post._id].length > 0 ? (
-                            comentariosPorPub[post._id].map((com) => (
-                              <div key={com._id} className="d-flex align-items-start mb-2 bg-white p-2 rounded shadow-sm">
-                                <img
-                                  src={com.autor?.imagenPerfil?.urlArchivo ? resolverUrlBackend(com.autor.imagenPerfil.urlArchivo) : urlAvatar}
-                                  alt="Avatar comentario"
-                                  className="rounded-circle me-2 object-fit-cover"
-                                  style={{ width: '30px', height: '30px', border: '1px solid #dee2e6' }}
-                                />
-                                <div className="flex-grow-1">
-                                  <span className="fw-bold small d-block">{com.autor?.nombreUsuario || 'Familiar'}</span>
-                                  <p className="small m-0 text-secondary">{com.texto}</p>
+                      <div className="perfil-comentarios-panel">
+                        <div className="lista-comentarios">
+                          {comentariosPorPub[post._id]?.length > 0 ? (
+                            comentariosPorPub[post._id].map((comentario) => {
+                              const nombreComentario = comentario.autor?.nombreUsuario || 'Familiar';
+                              const avatarComentario = obtenerUrlImagenUsuario(comentario.autor?.imagenPerfil) || `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreComentario)}&background=0D1B2A&color=fff`;
+                              return (
+                                <div key={comentario._id} className="perfil-comentario-item">
+                                  <img src={avatarComentario} alt="" />
+                                  <div>
+                                    <strong>{nombreComentario}</strong>
+                                    <p>{comentario.texto}</p>
+                                  </div>
                                 </div>
-                              </div>
-                            ))
+                              );
+                            })
                           ) : (
-                            <p className="small text-muted my-2 ps-1">Aún no hay comentarios en este recuerdo. ¡Sé el primero!</p>
+                            <p className="perfil-comentarios-vacio">Aún no hay comentarios en esta historia familiar...</p>
                           )}
                         </div>
-
-                        {/* Formulario para añadir nuevo comentario */}
-                        <div className="d-flex gap-2">
+                        <div className="perfil-comentario-form">
                           <input
                             type="text"
-                            className="form-control form-control-sm border-secondary-subtle"
-                            placeholder="Escribe un comentario familiar..."
+                            className="form-control form-control-sm"
+                            placeholder="Escribe un comentario..."
                             value={nuevoComentarioTexto[post._id] || ''}
-                            onChange={(e) => setNuevoComentarioTexto(prev => ({ ...prev, [post._id]: e.target.value }))}
-                            onKeyDown={(e) => e.key === 'Enter' && manejarEnviarComentario(post._id)}
+                            onChange={(event) => setNuevoComentarioTexto((prev) => ({ ...prev, [post._id]: event.target.value }))}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                manejarEnviarComentario(post._id);
+                              }
+                            }}
                           />
-                          <button
-                            className="btn btn-sm text-white px-3"
-                            onClick={() => manejarEnviarComentario(post._id)}
-                            style={{ backgroundColor: 'var(--dorado)', border: 'none' }}
-                          >
-                            Enviar
-                          </button>
+                          <button type="button" className="btn btn-sm perfil-comentario-enviar" onClick={() => manejarEnviarComentario(post._id)}>Enviar</button>
                         </div>
                       </div>
                     )}
-                  </div>
+                  </article>
                 );
               })
             ) : (
-              <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm border border-light">
-                <i className="bi bi-journal-x fs-1 mb-3 d-block"></i>
+              <div className="perfil-estado-vacio">
+                <i className="bi bi-journal-x"></i>
                 <h5>No hay publicaciones disponibles</h5>
                 <p>Crea un nuevo recuerdo familiar para inaugurar tu muro.</p>
               </div>

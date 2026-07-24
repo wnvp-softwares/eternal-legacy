@@ -654,6 +654,43 @@ const obtenerPublicaciones = async (req, res) => {
     }
 };
 
+// OBTENER PUBLICACIONES VISIBLES DE UN PERFIL CONCRETO
+const obtenerPublicacionesPorUsuario = async (req, res) => {
+    try {
+        const { usuarioId } = req.params;
+
+        if (!esObjectIdValido(usuarioId)) {
+            return res.status(400).json({
+                mensaje: 'El identificador del usuario no es válido.'
+            });
+        }
+
+        const usuarioExiste = await Usuario.exists({ _id: usuarioId });
+        if (!usuarioExiste) {
+            return res.status(404).json({
+                mensaje: 'No se encontró el usuario solicitado.'
+            });
+        }
+
+        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(req.usuario.id);
+        const publicaciones = await poblarConsultaPublicaciones(
+            Publicacion.find({
+                $and: [
+                    filtroVisibilidad,
+                    { autor: usuarioId }
+                ]
+            }).sort({ createdAt: -1 })
+        );
+
+        return res.status(200).json(publicaciones);
+    } catch (error) {
+        console.error('❌ Error al obtener publicaciones del perfil:', error);
+        return res.status(500).json({
+            mensaje: 'Error al obtener las publicaciones de este perfil.'
+        });
+    }
+};
+
 // BÚSQUEDA GLOBAL DE PUBLICACIONES Y PERSONAS
 const buscarTodo = async (req, res) => {
     try {
@@ -773,9 +810,18 @@ const obtenerPublicacionesPorEvento = async (req, res) => {
                 .sort({ createdAt: -1 })
         );
 
+        const totalMultimedia = publicaciones.reduce((acumulado, publicacion) => {
+            const multimedia = Array.isArray(publicacion?.multimedia) ? publicacion.multimedia : [];
+            return acumulado + multimedia.filter(Boolean).length;
+        }, 0);
+
         res.status(200).json({
             mensaje: 'Publicaciones del evento recuperadas correctamente.',
             total: publicaciones.length,
+            resumen: {
+                totalPublicaciones: publicaciones.length,
+                totalMultimedia
+            },
             publicaciones
         });
     } catch (error) {
@@ -961,6 +1007,7 @@ const reaccionarPublicacion = async (req, res) => {
 module.exports = {
     crearPublicacion,
     obtenerPublicaciones,
+    obtenerPublicacionesPorUsuario,
     buscarTodo,
     obtenerPublicacionesPorEvento,
     obtenerMomentosFamiliaresPorNodo,

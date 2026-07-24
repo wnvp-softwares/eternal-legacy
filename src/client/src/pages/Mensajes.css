@@ -257,17 +257,35 @@
 }
 
 .separador-fecha {
-    text-align: center;
-    margin: 10px 0;
+    width: 100%;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 12px 0 4px;
+    color: var(--texto-secundario);
+    user-select: none;
+}
+
+.separador-fecha::before,
+.separador-fecha::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-color: var(--borde-color);
 }
 
 .separador-fecha span {
+    flex-shrink: 0;
     background-color: var(--fondo-tarjeta);
     color: var(--texto-secundario);
     font-size: 0.75rem;
-    padding: 4px 12px;
-    border-radius: 12px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 6px 13px;
+    border-radius: 999px;
     border: 1px solid var(--borde-color);
+    box-shadow: 0 2px 7px rgba(13, 27, 42, 0.04);
 }
 
 /* Burbujas de Chat */
@@ -460,6 +478,21 @@
    automático en inputs de Android/iOS.
    ========================================================= */
 @media (max-width: 576px) {
+    .historial-mensajes {
+        padding: 18px 14px;
+        gap: 12px;
+    }
+
+    .separador-fecha {
+        gap: 9px;
+        margin: 10px 0 2px;
+    }
+
+    .separador-fecha span {
+        font-size: 0.72rem;
+        padding: 5px 11px;
+    }
+
     body {
         font-size: 14.75px;
     }

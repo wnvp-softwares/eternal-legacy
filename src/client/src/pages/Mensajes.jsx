@@ -14,6 +14,160 @@ const obtenerId = (valor) => {
   return valor._id || valor.id || null;
 };
 
+
+const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
+const ZONA_HORARIA_PREDETERMINADA = 'America/Mexico_City';
+
+const obtenerFechaValida = (valor) => {
+  if (!valor) return null;
+
+  const fecha = valor instanceof Date ? valor : new Date(valor);
+  return Number.isNaN(fecha.getTime()) ? null : fecha;
+};
+
+const obtenerPartesFechaEnZona = (valor, zonaHoraria = ZONA_HORARIA_PREDETERMINADA) => {
+  const fecha = obtenerFechaValida(valor);
+  if (!fecha) return null;
+
+  try {
+    const partes = new Intl.DateTimeFormat('en-CA', {
+      timeZone: zonaHoraria || ZONA_HORARIA_PREDETERMINADA,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(fecha).reduce((acumulado, parte) => {
+      if (parte.type !== 'literal') acumulado[parte.type] = parte.value;
+      return acumulado;
+    }, {});
+
+    return {
+      year: Number(partes.year),
+      month: Number(partes.month),
+      day: Number(partes.day)
+    };
+  } catch (error) {
+    return {
+      year: fecha.getFullYear(),
+      month: fecha.getMonth() + 1,
+      day: fecha.getDate()
+    };
+  }
+};
+
+const obtenerClaveDiaMensaje = (valor, zonaHoraria) => {
+  const partes = obtenerPartesFechaEnZona(valor, zonaHoraria);
+  if (!partes) return '';
+
+  return [
+    String(partes.year).padStart(4, '0'),
+    String(partes.month).padStart(2, '0'),
+    String(partes.day).padStart(2, '0')
+  ].join('-');
+};
+
+const obtenerIndiceDiaMensaje = (valor, zonaHoraria) => {
+  const partes = obtenerPartesFechaEnZona(valor, zonaHoraria);
+  if (!partes) return null;
+
+  return Math.floor(Date.UTC(partes.year, partes.month - 1, partes.day) / MILISEGUNDOS_POR_DIA);
+};
+
+const formatearEtiquetaDiaMensaje = (valor, idioma = 'es-MX', zonaHoraria = ZONA_HORARIA_PREDETERMINADA) => {
+  const fecha = obtenerFechaValida(valor);
+  if (!fecha) return '';
+
+  const idiomaSeguro = idioma || 'es-MX';
+  const esIngles = String(idiomaSeguro).toLowerCase().startsWith('en');
+  const indiceMensaje = obtenerIndiceDiaMensaje(fecha, zonaHoraria);
+  const indiceHoy = obtenerIndiceDiaMensaje(new Date(), zonaHoraria);
+  const diferenciaDias = indiceMensaje !== null && indiceHoy !== null
+    ? indiceHoy - indiceMensaje
+    : null;
+
+  if (diferenciaDias === 0) return esIngles ? 'Today' : 'Hoy';
+  if (diferenciaDias === 1) return esIngles ? 'Yesterday' : 'Ayer';
+
+  if (diferenciaDias !== null && diferenciaDias >= 2 && diferenciaDias <= 6) {
+    try {
+      const nombreDia = new Intl.DateTimeFormat(idiomaSeguro, {
+        timeZone: zonaHoraria || ZONA_HORARIA_PREDETERMINADA,
+        weekday: 'long'
+      }).format(fecha);
+
+      return nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1);
+    } catch (error) {
+      // Continúa con la fecha numérica como respaldo.
+    }
+  }
+
+  try {
+    return new Intl.DateTimeFormat(idiomaSeguro, {
+      timeZone: zonaHoraria || ZONA_HORARIA_PREDETERMINADA,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(fecha);
+  } catch (error) {
+    const partes = obtenerPartesFechaEnZona(fecha, zonaHoraria);
+    if (!partes) return '';
+
+    return `${String(partes.day).padStart(2, '0')}/${String(partes.month).padStart(2, '0')}/${partes.year}`;
+  }
+};
+
+const formatearHoraMensaje = (valor, idioma = 'es-MX', zonaHoraria = ZONA_HORARIA_PREDETERMINADA) => {
+  const fecha = obtenerFechaValida(valor);
+  if (!fecha) return '';
+
+  try {
+    return new Intl.DateTimeFormat(idioma || 'es-MX', {
+      timeZone: zonaHoraria || ZONA_HORARIA_PREDETERMINADA,
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(fecha);
+  } catch (error) {
+    return fecha.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+};
+
+const construirElementosConversacion = (mensajes = [], idioma, zonaHoraria) => {
+  const mensajesOrdenados = (Array.isArray(mensajes) ? mensajes : [])
+    .map((mensaje, indiceOriginal) => ({ mensaje, indiceOriginal }))
+    .sort((a, b) => {
+      const fechaA = obtenerFechaValida(a.mensaje?.createdAt);
+      const fechaB = obtenerFechaValida(b.mensaje?.createdAt);
+
+      if (fechaA && fechaB) return fechaA.getTime() - fechaB.getTime();
+      if (fechaA) return -1;
+      if (fechaB) return 1;
+      return a.indiceOriginal - b.indiceOriginal;
+    });
+
+  const elementos = [];
+  let claveDiaAnterior = null;
+
+  mensajesOrdenados.forEach(({ mensaje, indiceOriginal }) => {
+    const claveDia = obtenerClaveDiaMensaje(mensaje?.createdAt, zonaHoraria);
+
+    if (claveDia && claveDia !== claveDiaAnterior) {
+      elementos.push({
+        tipoElemento: 'fecha',
+        clave: `fecha-${claveDia}`,
+        etiqueta: formatearEtiquetaDiaMensaje(mensaje.createdAt, idioma, zonaHoraria)
+      });
+      claveDiaAnterior = claveDia;
+    }
+
+    elementos.push({
+      tipoElemento: 'mensaje',
+      clave: `mensaje-${mensaje?.id || indiceOriginal}-${indiceOriginal}`,
+      mensaje
+    });
+  });
+
+  return elementos;
+};
+
 export default function Mensajes() {
   const { idioma, zonaHoraria } = usePreferencias();
   const [contactos, setContactos] = useState([]);
@@ -198,6 +352,12 @@ export default function Mensajes() {
     return nombre.toLowerCase().includes(busquedaPersona.toLowerCase());
   });
 
+  const elementosConversacion = construirElementosConversacion(
+    mensajes,
+    idioma || 'es-MX',
+    zonaHoraria || ZONA_HORARIA_PREDETERMINADA
+  );
+
   return (
     <div className="contenedor-mensajes">
       <div className="tarjeta-mensajes">
@@ -333,25 +493,39 @@ export default function Mensajes() {
                     Inicia la conversación. Los mensajes que envíes serán cifrados.
                   </div>
                 ) : (
-                  mensajes.map((msg) => (
-                    <div key={msg.id} className={`fila-mensaje ${msg.tipo}`}>
-                      <div className={`burbuja ${msg.tipo}`}>
-                        {msg.texto}
-                        <div className="d-flex align-items-center justify-content-end mt-1 opacity-75" style={{ fontSize: '0.7rem' }}>
-                          <span className="me-1">
-                            {msg.createdAt && !isNaN(new Date(msg.createdAt))
-                              ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                              : ''}
-                          </span>
+                  elementosConversacion.map((elemento) => {
+                    if (elemento.tipoElemento === 'fecha') {
+                      return (
+                        <div key={elemento.clave} className="separador-fecha" role="separator" aria-label={elemento.etiqueta}>
+                          <span>{elemento.etiqueta}</span>
+                        </div>
+                      );
+                    }
 
-                          {/* Si el mensaje fue enviado por mí, muestra el estatus de lectura */}
-                          {msg.tipo === 'enviado' && (
-                            <i className={`bi ${msg.leido ? 'bi-check-all text-info' : 'bi-check'} fs-6`} style={{ marginLeft: '4px' }}></i>
-                          )}
+                    const msg = elemento.mensaje;
+
+                    return (
+                      <div key={elemento.clave} className={`fila-mensaje ${msg.tipo}`}>
+                        <div className={`burbuja ${msg.tipo}`}>
+                          {msg.texto}
+                          <div className="d-flex align-items-center justify-content-end mt-1 opacity-75" style={{ fontSize: '0.7rem' }}>
+                            <span className="me-1">
+                              {formatearHoraMensaje(
+                                msg.createdAt,
+                                idioma || 'es-MX',
+                                zonaHoraria || ZONA_HORARIA_PREDETERMINADA
+                              )}
+                            </span>
+
+                            {/* Si el mensaje fue enviado por mí, muestra el estatus de lectura */}
+                            {msg.tipo === 'enviado' && (
+                              <i className={`bi ${msg.leido ? 'bi-check-all text-info' : 'bi-check'} fs-6`} style={{ marginLeft: '4px' }}></i>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
                 <div ref={finMensajesRef} />
               </div>
