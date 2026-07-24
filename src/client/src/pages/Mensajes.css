@@ -608,3 +608,146 @@
         font-size: 0.82rem;
     }
 }
+
+
+/* =========================================================
+   FIX: CABECERA VISIBLE + SCROLL ESTABLE EN CONVERSACIONES
+   El historial es la única zona desplazable. La cabecera,
+   el aviso E2E y el compositor permanecen dentro del viewport.
+   ========================================================= */
+.contenedor-mensajes {
+    min-height: 0;
+    overflow: hidden;
+    height: calc(100vh - 70px - 80px);
+    height: calc(100dvh - 70px - 80px);
+}
+
+.tarjeta-mensajes,
+.columna-lista-chats,
+.columna-chat-activo {
+    min-height: 0;
+}
+
+.columna-chat-activo {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.cabecera-conversacion-fija {
+    position: relative;
+    z-index: 20;
+    flex: 0 0 auto;
+    min-width: 0;
+    background-color: var(--fondo-tarjeta);
+    box-shadow: 0 3px 10px rgba(13, 27, 42, 0.06);
+}
+
+.cabecera-chat-activo,
+.banner-e2e,
+.area-escribir {
+    flex: 0 0 auto;
+}
+
+.cabecera-chat-activo {
+    min-width: 0;
+    background-color: var(--fondo-tarjeta);
+}
+
+.info-cabecera,
+.detalles-cabecera {
+    min-width: 0;
+}
+
+.detalles-cabecera h5 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.historial-mensajes {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    overflow-anchor: none;
+    scroll-behavior: auto;
+}
+
+.area-escribir {
+    position: relative;
+    z-index: 20;
+}
+
+@media (min-width: 1200px) {
+    .contenedor-mensajes {
+        height: calc(100vh - 70px);
+        height: calc(100dvh - 70px);
+    }
+}
+
+@media (max-width: 576px) {
+    .cabecera-chat-activo {
+        padding: 10px 12px;
+    }
+
+    .info-cabecera {
+        width: 100%;
+        gap: 9px;
+    }
+
+    .boton-atras-movil {
+        flex: 0 0 38px;
+        width: 38px;
+        height: 38px;
+        margin-right: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .cabecera-chat-activo .foto-avatar {
+        flex: 0 0 36px;
+        width: 36px !important;
+        height: 36px !important;
+    }
+
+    .detalles-cabecera {
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+
+    .detalles-cabecera h5 {
+        font-size: 0.95rem;
+    }
+
+    .detalles-cabecera p {
+        font-size: 0.72rem;
+    }
+
+    .banner-e2e {
+        padding: 6px 12px;
+        font-size: 0.74rem;
+    }
+
+    .banner-e2e.minimizado {
+        min-height: 32px;
+        padding: 4px 12px;
+    }
+
+    .contenido-banner {
+        min-width: 0;
+    }
+
+    .contenido-banner>span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .area-escribir {
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+        gap: 9px;
+    }
+}

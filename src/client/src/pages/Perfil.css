@@ -145,7 +145,10 @@
    ========================================= */
 .modal-backdrop-edicion {
     position: fixed;
-    top: 0; left: 0; width: 100%; height: 100vh;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
     z-index: 1050;
@@ -164,7 +167,8 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    max-height: 90vh; /* Permite scroll interno si la pantalla es chica */
+    max-height: 90vh;
+    /* Permite scroll interno si la pantalla es chica */
 }
 
 .modal-cabecera-x {
@@ -208,7 +212,8 @@
 
 .btn-guardar-x {
     background-color: var(--texto-principal);
-    color: var(--fondo-tarjeta); /* Invertido para que resalte */
+    color: var(--fondo-tarjeta);
+    /* Invertido para que resalte */
     border: none;
     border-radius: 20px;
     padding: 6px 16px;
@@ -239,7 +244,8 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    filter: brightness(0.6); /* Oscurece la imagen un poco */
+    filter: brightness(0.6);
+    /* Oscurece la imagen un poco */
 }
 
 .camara-icono-x {
@@ -247,7 +253,7 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background-color: rgba(0,0,0,0.5);
+    background-color: rgba(0, 0, 0, 0.5);
     color: white;
     border-radius: 50%;
     width: 44px;
@@ -261,7 +267,7 @@
 }
 
 .camara-icono-x:hover {
-    background-color: rgba(0,0,0,0.7);
+    background-color: rgba(0, 0, 0, 0.7);
 }
 
 .foto-perfil-edicion-container {
@@ -314,7 +320,8 @@
     justify-content: space-between;
 }
 
-.input-x, .textarea-x {
+.input-x,
+.textarea-x {
     background-color: transparent !important;
     border: none !important;
     color: var(--texto-principal) !important;
@@ -325,7 +332,8 @@
     box-shadow: none !important;
 }
 
-.input-x:focus, .textarea-x:focus {
+.input-x:focus,
+.textarea-x:focus {
     box-shadow: none !important;
 }
 
@@ -492,81 +500,190 @@
 /* =========================================
    DISEÑO UNIFICADO DE PUBLICACIONES
    ========================================= */
-.foto-perfil-post { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; }
-.nombre-autor { font-weight: 600; color: var(--texto-principal); margin: 0; }
-.info-autor { font-size: 0.8rem; color: var(--texto-secundario); margin: 0; }
+.foto-perfil-post {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.nombre-autor {
+    font-weight: 600;
+    color: var(--texto-principal);
+    margin: 0;
+}
+
+.info-autor {
+    font-size: 0.8rem;
+    color: var(--texto-secundario);
+    margin: 0;
+}
 
 .etiqueta-tipo-publicacion {
-    font-size: 0.70rem; font-weight: 800; color: var(--texto-secundario);
-    letter-spacing: 2px; text-transform: uppercase;
-    display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
+    font-size: 0.70rem;
+    font-weight: 800;
+    color: var(--texto-secundario);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
 }
 
 .etiqueta-historica-inferior {
-    font-size: 0.75rem; font-weight: 700; color: var(--dorado-oscuro);
-    letter-spacing: 3px; text-transform: uppercase;
-    display: flex; align-items: center; gap: 8px; margin-top: 2px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--dorado-oscuro);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
 }
-.etiqueta-historica-inferior i { font-size: 0.85rem; letter-spacing: normal; }
-.etiqueta-historica-inferior .anio-historico { color: var(--texto-secundario); font-weight: 500; letter-spacing: 1px; }
+
+.etiqueta-historica-inferior i {
+    font-size: 0.85rem;
+    letter-spacing: normal;
+}
+
+.etiqueta-historica-inferior .anio-historico {
+    color: var(--texto-secundario);
+    font-weight: 500;
+    letter-spacing: 1px;
+}
 
 .etiqueta-contexto-familiar {
-    font-size: 0.75rem; font-weight: 600; color: var(--texto-principal);
-    display: flex; align-items: center; gap: 6px; margin-top: 2px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--texto-principal);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
 }
-.etiqueta-contexto-familiar .resaltado { color: var(--dorado-oscuro); cursor: pointer; }
-.etiqueta-contexto-familiar .resaltado:hover { text-decoration: underline; }
+
+.etiqueta-contexto-familiar .resaltado {
+    color: var(--dorado-oscuro);
+    cursor: pointer;
+}
+
+.etiqueta-contexto-familiar .resaltado:hover {
+    text-decoration: underline;
+}
 
 .texto-post.historico {
-    font-size: 1rem; font-weight: 400; line-height: 1.5;
-    color: var(--texto-principal); margin-top: 15px; margin-bottom: 20px;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--texto-principal);
+    margin-top: 15px;
+    margin-bottom: 20px;
 }
 
 .contenedor-polaroid {
-    background-color: #ffffff; padding: 12px 12px 35px 12px;
-    border-radius: 4px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
-    margin-top: 10px; position: relative; overflow: hidden;
+    background-color: #ffffff;
+    padding: 12px 12px 35px 12px;
+    border-radius: 4px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+    margin-top: 10px;
+    position: relative;
+    overflow: hidden;
 }
+
 .imagen-post-historico {
-    width: 100%; max-height: 600px; border-radius: 2px;
-    object-fit: cover; aspect-ratio: 4/5; display: block; transition: transform 0.4s ease;
+    width: 100%;
+    max-height: 600px;
+    border-radius: 2px;
+    object-fit: cover;
+    aspect-ratio: 4/5;
+    display: block;
+    transition: transform 0.4s ease;
 }
-.contenedor-polaroid:hover .imagen-post-historico { transform: scale(1.03); }
+
+.contenedor-polaroid:hover .imagen-post-historico {
+    transform: scale(1.03);
+}
 
 .contenedor-moderno {
-    position: relative; margin-top: 10px; border-radius: 12px;
-    overflow: hidden; background-color: var(--borde-color);
+    position: relative;
+    margin-top: 10px;
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: var(--borde-color);
 }
+
 .imagen-post-moderna {
-    width: 100%; max-height: 600px; display: block;
-    object-fit: cover; aspect-ratio: 4/5;
+    width: 100%;
+    max-height: 600px;
+    display: block;
+    object-fit: cover;
+    aspect-ratio: 4/5;
 }
 
 .carrusel-indicadores {
-    position: absolute; bottom: 12px; left: 0; width: 100%;
-    display: flex; justify-content: center; gap: 6px; z-index: 2;
+    position: absolute;
+    bottom: 12px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    z-index: 2;
 }
+
 .carrusel-dot {
-    width: 6px; height: 6px; background-color: var(--borde-color);
-    border-radius: 50%; transition: background-color 0.2s;
+    width: 6px;
+    height: 6px;
+    background-color: var(--borde-color);
+    border-radius: 50%;
+    transition: background-color 0.2s;
 }
-.carrusel-dot.activo { background-color: var(--dorado); }
+
+.carrusel-dot.activo {
+    background-color: var(--dorado);
+}
 
 .carrusel-indicadores-moderno {
-    position: absolute; bottom: 12px; left: 0; width: 100%;
-    display: flex; justify-content: center; gap: 6px; z-index: 2;
+    position: absolute;
+    bottom: 12px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    z-index: 2;
 }
+
 .carrusel-dot-moderno {
-    width: 6px; height: 6px; background-color: rgba(255, 255, 255, 0.4);
-    border-radius: 50%; transition: background-color 0.2s;
+    width: 6px;
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    transition: background-color 0.2s;
 }
-.carrusel-dot-moderno.activo { background-color: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+
+.carrusel-dot-moderno.activo {
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
 
 .boton-interaccion {
-    background: none; border: none; color: var(--texto-secundario);
-    font-size: 1rem; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: color 0.2s;
+    background: none;
+    border: none;
+    color: var(--texto-secundario);
+    font-size: 1rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: color 0.2s;
 }
-.boton-interaccion:hover { color: var(--dorado); }
+
+.boton-interaccion:hover {
+    color: var(--dorado);
+}
 
 /* =========================================
    LÍ কমপক্ষে TIEMPO (HILO DORADO)
@@ -575,7 +692,7 @@
     position: relative;
     padding: 20px 0 60px 0;
     margin: 20px auto 0;
-    max-width: 850px; 
+    max-width: 850px;
 }
 
 .timeline-hilo {
@@ -584,7 +701,7 @@
     bottom: 50px;
     left: 20%;
     width: 4px;
-    background: linear-gradient(180deg, rgba(203,161,53,0) 0%, rgba(203,161,53,0.8) 5%, rgba(203,161,53,1) 50%, rgba(203,161,53,0.8) 95%, rgba(203,161,53,0) 100%);
+    background: linear-gradient(180deg, rgba(203, 161, 53, 0) 0%, rgba(203, 161, 53, 0.8) 5%, rgba(203, 161, 53, 1) 50%, rgba(203, 161, 53, 0.8) 95%, rgba(203, 161, 53, 0) 100%);
     transform: translateX(-50%);
     border-radius: 2px;
     z-index: 1;
@@ -592,8 +709,15 @@
 }
 
 @keyframes resplandor-hilo {
-    0% { box-shadow: 0 0 8px rgba(203, 161, 53, 0.4), 0 0 2px rgba(255, 255, 255, 0.2); opacity: 0.8; }
-    100% { box-shadow: 0 0 20px rgba(203, 161, 53, 1), 0 0 8px rgba(255, 255, 255, 0.8); opacity: 1; }
+    0% {
+        box-shadow: 0 0 8px rgba(203, 161, 53, 0.4), 0 0 2px rgba(255, 255, 255, 0.2);
+        opacity: 0.8;
+    }
+
+    100% {
+        box-shadow: 0 0 20px rgba(203, 161, 53, 1), 0 0 8px rgba(255, 255, 255, 0.8);
+        opacity: 1;
+    }
 }
 
 .timeline-item {
@@ -602,14 +726,14 @@
     margin-left: 20%;
     margin-bottom: 60px;
     z-index: 2;
-    padding-left: 45px; 
+    padding-left: 45px;
     padding-right: 0;
 }
 
 .timeline-nodo {
     position: absolute;
     top: 30px;
-    left: -35px; 
+    left: -35px;
     width: 70px;
     height: 70px;
     background: rgba(255, 255, 255, 0.7);
@@ -629,8 +753,15 @@
 }
 
 @keyframes latido-nodo {
-    0% { transform: scale(1); box-shadow: 0 4px 15px rgba(203, 161, 53, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.7); }
-    100% { transform: scale(1.08); box-shadow: 0 4px 25px rgba(203, 161, 53, 0.8), inset 0 0 20px rgba(255, 255, 255, 1); }
+    0% {
+        transform: scale(1);
+        box-shadow: 0 4px 15px rgba(203, 161, 53, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.7);
+    }
+
+    100% {
+        transform: scale(1.08);
+        box-shadow: 0 4px 25px rgba(203, 161, 53, 0.8), inset 0 0 20px rgba(255, 255, 255, 1);
+    }
 }
 
 /* =========================================
@@ -643,14 +774,16 @@
 .galeria-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px; /* Espaciado entre fotos en PC */
+    gap: 8px;
+    /* Espaciado entre fotos en PC */
 }
 
 .galeria-item {
     position: relative;
-    aspect-ratio: 1 / 1; /* Cuadrado perfecto siempre */
+    aspect-ratio: 1 / 1;
+    /* Cuadrado perfecto siempre */
     overflow: hidden;
-    border-radius: 8px; 
+    border-radius: 8px;
     cursor: pointer;
     background-color: var(--borde-color);
 }
@@ -658,7 +791,8 @@
 .galeria-img {
     width: 100%;
     height: 100%;
-    object-fit: cover; /* Centra y recorta la foto para llenar el cuadrado */
+    object-fit: cover;
+    /* Centra y recorta la foto para llenar el cuadrado */
     transition: transform 0.4s ease;
 }
 
@@ -673,16 +807,16 @@
     right: 12px;
     color: white;
     font-size: 1.2rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
     z-index: 2;
 }
 
 /* Overlay Oscuro con Contadores (Hover) */
 .galeria-overlay {
     position: absolute;
-    top: 0; 
-    left: 0; 
-    right: 0; 
+    top: 0;
+    left: 0;
+    right: 0;
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.5);
     display: flex;
@@ -709,25 +843,69 @@
 
 /* Responsividad general */
 @media (max-width: 768px) {
-    .boton-editar-portada { opacity: 1; }
-    
-    .timeline-contenedor { max-width: 100%; }
-    .timeline-hilo { left: 35px; }
-    .timeline-item { width: 100%; margin-left: 0; margin-bottom: 40px; padding-left: 90px; padding-right: 0; }
-    .timeline-nodo { left: 0; }
+    .boton-editar-portada {
+        opacity: 1;
+    }
+
+    .timeline-contenedor {
+        max-width: 100%;
+    }
+
+    .timeline-hilo {
+        left: 35px;
+    }
+
+    .timeline-item {
+        width: 100%;
+        margin-left: 0;
+        margin-bottom: 40px;
+        padding-left: 90px;
+        padding-right: 0;
+    }
+
+    .timeline-nodo {
+        left: 0;
+    }
 }
 
 @media (max-width: 576px) {
-    .fila-superior-info { flex-direction: row; align-items: flex-end; }
-    .tabs-perfil { padding: 0 10px; overflow-x: auto; }
-    .contenedor-polaroid { padding: 8px 8px 28px 8px; }
-    
+    .fila-superior-info {
+        flex-direction: row;
+        align-items: flex-end;
+    }
+
+    .tabs-perfil {
+        padding: 0 10px;
+        overflow-x: auto;
+    }
+
+    .contenedor-polaroid {
+        padding: 8px 8px 28px 8px;
+    }
+
     /* Adaptación de Galería para móviles */
-    .galeria-grid { gap: 3px; }
-    .galeria-item { border-radius: 2px; } 
-    .galeria-icono-multi { top: 6px; right: 8px; font-size: 1rem; }
-    .galeria-overlay { gap: 10px; }
-    .galeria-estilos-texto { font-size: 0.95rem; gap: 4px; }
+    .galeria-grid {
+        gap: 3px;
+    }
+
+    .galeria-item {
+        border-radius: 2px;
+    }
+
+    .galeria-icono-multi {
+        top: 6px;
+        right: 8px;
+        font-size: 1rem;
+    }
+
+    .galeria-overlay {
+        gap: 10px;
+    }
+
+    .galeria-estilos-texto {
+        font-size: 0.95rem;
+        gap: 4px;
+    }
 }
 
 .texto-post {
@@ -794,22 +972,22 @@
         border-width: 4px;
     }
 
-    .fila-superior-info > .boton-editar-perfil {
+    .fila-superior-info>.boton-editar-perfil {
         margin-left: auto;
         margin-bottom: 10px;
         flex: 0 0 42px;
     }
 
-    .fila-superior-info > .boton-relacion-perfil,
-    .fila-superior-info > .acciones-familia-perfil {
+    .fila-superior-info>.boton-relacion-perfil,
+    .fila-superior-info>.acciones-familia-perfil {
         flex: 1 1 118px;
         margin-left: 0 !important;
         margin-bottom: 8px;
         min-width: 0;
     }
 
-    .fila-superior-info > .boton-relacion-perfil,
-    .acciones-familia-perfil > .btn {
+    .fila-superior-info>.boton-relacion-perfil,
+    .acciones-familia-perfil>.btn {
         width: 100%;
         min-height: 44px;
         padding: 8px 10px !important;
@@ -929,8 +1107,8 @@
    Usa el mismo render 4:5 que Inicio para que la imagen no se
    muestre con fondo gris ni se recorte diferente en PC/móvil.
    ========================================================= */
-.contenedor-polaroid > .overflow-hidden,
-.contenedor-moderno > .overflow-hidden {
+.contenedor-polaroid>.overflow-hidden,
+.contenedor-moderno>.overflow-hidden {
     width: min(100%, 560px);
     aspect-ratio: 4 / 5;
     margin: 0 auto;
@@ -958,8 +1136,9 @@
 }
 
 @media (max-width: 576px) {
-    .contenedor-polaroid > .overflow-hidden,
-    .contenedor-moderno > .overflow-hidden,
+
+    .contenedor-polaroid>.overflow-hidden,
+    .contenedor-moderno>.overflow-hidden,
     .contenedor-moderno {
         width: 100%;
         max-width: 100%;
@@ -1105,7 +1284,7 @@
         flex: 0 0 96px !important;
     }
 
-    .fila-superior-info > .boton-relacion-perfil {
+    .fila-superior-info>.boton-relacion-perfil {
         flex: 1 1 calc(100% - 112px) !important;
         width: auto !important;
         max-width: 190px !important;
@@ -1119,7 +1298,7 @@
         margin-bottom: 7px !important;
     }
 
-    .fila-superior-info > .acciones-familia-perfil {
+    .fila-superior-info>.acciones-familia-perfil {
         flex: 0 1 auto !important;
         width: auto !important;
         max-width: 100% !important;
@@ -1128,7 +1307,7 @@
         justify-content: flex-start !important;
     }
 
-    .acciones-familia-perfil > .btn {
+    .acciones-familia-perfil>.btn {
         width: auto !important;
         max-width: 210px !important;
         min-height: 36px !important;
@@ -1172,7 +1351,7 @@
         margin-top: -44px !important;
     }
 
-    .fila-superior-info > .boton-relacion-perfil {
+    .fila-superior-info>.boton-relacion-perfil {
         max-width: 165px !important;
         height: 34px !important;
         min-height: 34px !important;
@@ -1180,7 +1359,7 @@
         font-size: 0.76rem !important;
     }
 
-    .acciones-familia-perfil > .btn {
+    .acciones-familia-perfil>.btn {
         max-width: 180px !important;
         height: 34px !important;
         min-height: 34px !important;
@@ -1308,6 +1487,7 @@
         opacity: 0;
         transform: translateY(12px) scale(0.98);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -1377,6 +1557,7 @@
 }
 
 @media (max-width: 640px) {
+
     .perfil-recuerdos-feed,
     .perfil-recuerdos-feed .tarjeta-publicacion-perfil {
         width: 100%;
@@ -1777,11 +1958,11 @@
     color: var(--texto-principal);
 }
 
-.perfil-evento-publicacion > i {
+.perfil-evento-publicacion>i {
     color: var(--dorado-oscuro);
 }
 
-.perfil-evento-publicacion > div {
+.perfil-evento-publicacion>div {
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -2064,7 +2245,7 @@
         gap: 12px;
     }
 
-    .acciones-post > .d-flex {
+    .acciones-post>.d-flex {
         gap: 16px !important;
     }
 }
@@ -2083,5 +2264,327 @@
 
     .publicacion-evento-debajo-header {
         margin-left: 0;
+    }
+}
+
+/* =========================================================
+   AJUSTE FINAL: ANCHO Y CENTRADO DEL CONTENIDO DEL PERFIL
+   - Escritorio: cabecera, publicaciones, timeline y galería
+     comparten el ancho útil de 1100 px.
+   - Móvil: elimina gutters/desbordamientos laterales y mantiene
+     las tarjetas centradas dentro del viewport.
+   ========================================================= */
+.perfil-page.max-w-custom {
+    width: min(100%, 1100px);
+    max-width: 1100px;
+    margin-inline: auto;
+}
+
+.perfil-page .perfil-social-shell,
+.perfil-page .perfil-contenido-dinamico,
+.perfil-page .perfil-recuerdos-feed,
+.perfil-page .galeria-contenedor,
+.perfil-page .timeline-contenedor {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+/* Neutraliza los gutters de Bootstrap que pueden desplazar las pestañas. */
+.perfil-page .perfil-contenido-dinamico {
+    --bs-gutter-x: 0;
+    margin-inline: 0;
+}
+
+.perfil-page .perfil-contenido-dinamico>.col-12 {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    padding-inline: 0;
+    box-sizing: border-box;
+}
+
+/* Las tarjetas del feed ya no quedan limitadas a 600 px en escritorio. */
+.perfil-page .perfil-recuerdos-feed {
+    margin-inline: 0;
+    padding-inline: 0 !important;
+}
+
+.perfil-page .perfil-recuerdos-feed .tarjeta-publicacion,
+.perfil-page .perfil-publicacion-card {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    box-sizing: border-box;
+}
+
+/* Timeline: reserva espacio para el nodo sin aumentar el ancho real. */
+.perfil-page .timeline-contenedor {
+    margin-inline: 0;
+}
+
+.perfil-page .timeline-hilo {
+    left: 48px;
+}
+
+.perfil-page .timeline-item {
+    width: 100%;
+    margin-left: 0;
+    padding-left: 104px;
+    padding-right: 0;
+    box-sizing: border-box;
+}
+
+.perfil-page .timeline-nodo {
+    left: 13px;
+}
+
+.perfil-page .timeline-item>.tarjeta {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    .perfil-page.max-w-custom {
+        width: 100%;
+        max-width: 100%;
+        margin-inline: auto;
+        overflow-x: hidden;
+        overflow-x: clip;
+    }
+
+    .perfil-page .perfil-contenido-dinamico,
+    .perfil-page .perfil-contenido-dinamico>.col-12,
+    .perfil-page .perfil-recuerdos-feed,
+    .perfil-page .perfil-publicacion-card {
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .perfil-page .timeline-contenedor {
+        padding: 16px 0 40px;
+        overflow-x: hidden;
+        overflow-x: clip;
+    }
+
+    .perfil-page .timeline-hilo {
+        left: 27px;
+    }
+
+    .perfil-page .timeline-item {
+        width: 100%;
+        margin-left: 0;
+        padding-left: 68px;
+        padding-right: 0;
+        box-sizing: border-box;
+    }
+
+    .perfil-page .timeline-nodo {
+        top: 24px;
+        left: 2px;
+        width: 52px;
+        height: 52px;
+        font-size: 0.82rem;
+    }
+}
+
+@media (max-width: 576px) {
+
+    .perfil-page .perfil-recuerdos-feed .tarjeta-publicacion,
+    .perfil-page .perfil-publicacion-card {
+        width: 100%;
+        max-width: 100%;
+        margin-inline: 0;
+    }
+}
+
+/* =========================================================
+   PUBLICACIONES DE PERFIL EN DOS COLUMNAS (SOLO ESCRITORIO)
+   - Izquierda: autor, contexto, descripción, acciones y comentarios.
+   - Derecha: multimedia limitada a menos de la mitad de la tarjeta.
+   - Móvil conserva el flujo vertical anterior.
+   ========================================================= */
+.perfil-page .perfil-publicacion-layout {
+    min-width: 0;
+}
+
+.perfil-page .perfil-publicacion-area-header {
+    grid-area: header;
+    min-width: 0;
+}
+
+.perfil-page .perfil-publicacion-area-evento {
+    grid-area: evento;
+    min-width: 0;
+}
+
+.perfil-page .perfil-publicacion-area-texto {
+    grid-area: texto;
+    min-width: 0;
+}
+
+.perfil-page .perfil-publicacion-area-media {
+    grid-area: media;
+    min-width: 0;
+    width: 100%;
+}
+
+.perfil-page .perfil-publicacion-area-etiquetas {
+    grid-area: etiquetas;
+    min-width: 0;
+}
+
+.perfil-page .perfil-publicacion-area-acciones {
+    grid-area: acciones;
+    min-width: 0;
+}
+
+.perfil-page .perfil-publicacion-area-comentarios {
+    grid-area: comentarios;
+    min-width: 0;
+}
+
+@media (min-width: 992px) {
+    .perfil-page .perfil-publicacion-layout.con-multimedia {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 46%);
+        grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+        grid-template-areas:
+            "header media"
+            "evento media"
+            "texto media"
+            "etiquetas media"
+            "acciones media"
+            "comentarios media";
+        column-gap: 24px;
+        row-gap: 0;
+        align-items: stretch;
+    }
+
+    .perfil-page .perfil-publicacion-layout.sin-multimedia {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "header"
+            "evento"
+            "texto"
+            "etiquetas"
+            "acciones"
+            "comentarios";
+    }
+
+    .perfil-page .perfil-publicacion-area-media {
+        align-self: start;
+        padding-left: 24px;
+        border-left: 1px solid var(--borde-color);
+        box-sizing: border-box;
+    }
+
+    .perfil-page .perfil-publicacion-area-media > * {
+        width: 100%;
+        max-width: 100%;
+        margin-inline: 0;
+    }
+
+    .perfil-page .perfil-publicacion-area-media .contenedor-polaroid,
+    .perfil-page .perfil-publicacion-area-media .contenedor-moderno,
+    .perfil-page .perfil-publicacion-area-media .overflow-hidden {
+        width: 100%;
+        max-width: 100%;
+        margin-inline: 0;
+        box-sizing: border-box;
+    }
+
+    /* Mantiene toda la información agrupada en la parte superior. */
+    .perfil-page .perfil-publicacion-area-header,
+    .perfil-page .perfil-publicacion-area-evento,
+    .perfil-page .perfil-publicacion-area-texto,
+    .perfil-page .perfil-publicacion-area-etiquetas,
+    .perfil-page .perfil-publicacion-area-acciones {
+        align-self: start;
+    }
+
+    .perfil-page .perfil-publicacion-area-texto {
+        margin-top: 10px;
+        margin-bottom: 8px;
+    }
+
+    .perfil-page .perfil-publicacion-area-etiquetas {
+        margin-top: 4px;
+        margin-bottom: 2px;
+    }
+
+    .perfil-page .perfil-publicacion-area-acciones {
+        margin-top: 8px !important;
+        padding-top: 10px !important;
+    }
+
+    /*
+     * En escritorio los comentarios permanecen abiertos y absorben la altura
+     * restante de la columna izquierda. El formulario queda siempre abajo.
+     */
+    .perfil-page .perfil-publicacion-area-comentarios {
+        display: flex;
+        flex-direction: column;
+        align-self: stretch;
+        min-height: 0;
+        height: 100%;
+        margin-top: 12px;
+        padding-top: 12px;
+    }
+
+    .perfil-page .perfil-publicacion-area-comentarios .lista-comentarios {
+        flex: 1 1 auto;
+        min-height: 120px;
+        max-height: none;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+
+    .perfil-page .perfil-publicacion-area-comentarios .perfil-comentario-form {
+        flex: 0 0 auto;
+        margin-top: 10px;
+    }
+
+    .perfil-page .perfil-comentarios-vacio {
+        min-height: 68px;
+        margin: 0;
+        padding: 18px 14px;
+        border: 1px dashed var(--borde-color);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--fondo-app);
+        color: var(--texto-secundario);
+        text-align: center;
+        font-size: 0.82rem;
+        line-height: 1.45;
+    }
+}
+
+@media (max-width: 991.98px) {
+    .perfil-page .perfil-publicacion-layout {
+        display: block;
+    }
+
+    .perfil-page .perfil-publicacion-area-media {
+        width: 100%;
+        padding-left: 0;
+        border-left: 0;
+    }
+
+    /*
+     * En móvil se conserva el comportamiento anterior:
+     * el botón de comentarios abre y cierra el panel.
+     */
+    .perfil-page .perfil-publicacion-area-comentarios {
+        display: none;
+    }
+
+    .perfil-page .perfil-publicacion-area-comentarios.abierto-movil {
+        display: block;
     }
 }

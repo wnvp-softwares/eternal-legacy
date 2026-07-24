@@ -1206,7 +1206,7 @@ export default function Perfil() {
   const cropperPerfilEsPortada = cropperPerfil.tipo === 'portada';
 
   return (
-    <div className="container-fluid max-w-custom p-0">
+    <div className="container-fluid max-w-custom perfil-page p-0">
       <ImageCropperModal
         abierto={cropperPerfil.abierto}
         archivo={cropperPerfil.archivo}
@@ -1616,76 +1616,91 @@ export default function Perfil() {
                 const etiquetasMultimedia = Array.isArray(post.etiquetasMultimedia) ? post.etiquetasMultimedia : [];
 
                 return (
-                  <article key={post._id} className="tarjeta tarjeta-publicacion perfil-publicacion-card shadow-sm">
-                    <PublicacionHeader
-                      nombre={nombreAutor}
-                      nombreUsuario={nicknameAutor || nombreAutor}
-                      avatarUrl={avatarAutor}
-                      fecha={formatearFecha(post.createdAt)}
-                      fechaISO={post.createdAt}
-                      tipo={esHistorico ? 'historico' : 'familiar'}
-                      privacidad={post.privacidad || (esHistorico ? 'publico' : 'familia')}
-                      nombreFamilia={arbolAudiencia?.nombreFamilia || post.nombreFamiliaAudienciaSnapshot || 'Familia'}
-                      etiqueta={post.etiqueta?.nombre || post.categoria || post.etiquetaNombre || ''}
-                      anio={post.anio || ''}
-                      ubicacion={post.ubicacionTexto || post.ubicacion?.texto || post.ubicacion?.direccion || ''}
-                      onAutorClick={autorId ? () => irAPerfil(autor) : undefined}
-                      onMenuClick={() => {}}
-                    />
-
-                    {!esHistorico && eventoRelacionado && (
-                      <div className="publicacion-evento-debajo-header">
-                        {renderChipEventoPublicacion(eventoRelacionado)}
+                  <article
+                    key={post._id}
+                    className={`tarjeta tarjeta-publicacion perfil-publicacion-card shadow-sm ${tieneMultimedia ? 'con-multimedia' : 'sin-multimedia'}`}
+                  >
+                    <div className={`perfil-publicacion-layout ${tieneMultimedia ? 'con-multimedia' : 'sin-multimedia'}`}>
+                      <div className="perfil-publicacion-area-header">
+                        <PublicacionHeader
+                          nombre={nombreAutor}
+                          nombreUsuario={nicknameAutor || nombreAutor}
+                          avatarUrl={avatarAutor}
+                          fecha={formatearFecha(post.createdAt)}
+                          fechaISO={post.createdAt}
+                          tipo={esHistorico ? 'historico' : 'familiar'}
+                          privacidad={post.privacidad || (esHistorico ? 'publico' : 'familia')}
+                          nombreFamilia={arbolAudiencia?.nombreFamilia || post.nombreFamiliaAudienciaSnapshot || 'Familia'}
+                          etiqueta={post.etiqueta?.nombre || post.categoria || post.etiquetaNombre || ''}
+                          anio={post.anio || ''}
+                          ubicacion={post.ubicacionTexto || post.ubicacion?.texto || post.ubicacion?.direccion || ''}
+                          onAutorClick={autorId ? () => irAPerfil(autor) : undefined}
+                          onMenuClick={() => { }}
+                        />
                       </div>
-                    )}
 
-                    {contenidoPost && (
-                      <p className="texto-post historico perfil-publicacion-texto">
-                        {renderTextoConMenciones(contenidoPost, post.menciones)}
-                      </p>
-                    )}
+                      {!esHistorico && eventoRelacionado && (
+                        <div className="perfil-publicacion-area-evento">
+                          <div className="publicacion-evento-debajo-header">
+                            {renderChipEventoPublicacion(eventoRelacionado)}
+                          </div>
+                        </div>
+                      )}
 
-                    {tieneMultimedia && (
-                      <PublicacionMediaCarousel
-                        multimedia={post.multimedia}
-                        tipo={esHistorico ? 'historico' : 'familiar'}
-                        alt={esHistorico ? 'Recuerdo histórico' : 'Momento familiar'}
-                      />
-                    )}
+                      {contenidoPost && (
+                        <p className="texto-post historico perfil-publicacion-texto perfil-publicacion-area-texto">
+                          {renderTextoConMenciones(contenidoPost, post.menciones)}
+                        </p>
+                      )}
 
-                    {etiquetasMultimedia.length > 0 && (
-                      <div className="etiquetas-post-render">
-                        <i className="bi bi-person-bounding-box" aria-hidden="true"></i>
-                        <span>
-                          {etiquetasMultimedia
-                            .map((persona) => persona?.nombre || persona?.usuario?.nombreUsuario || persona?.nickname || persona?.nombreUsuario || persona)
-                            .filter(Boolean)
-                            .join(', ')}
-                        </span>
+                      {tieneMultimedia && (
+                        <div className="perfil-publicacion-area-media">
+                          <PublicacionMediaCarousel
+                            multimedia={post.multimedia}
+                            tipo={esHistorico ? 'historico' : 'familiar'}
+                            alt={esHistorico ? 'Recuerdo histórico' : 'Momento familiar'}
+                          />
+                        </div>
+                      )}
+
+                      {etiquetasMultimedia.length > 0 && (
+                        <div className="etiquetas-post-render perfil-publicacion-area-etiquetas">
+                          <i className="bi bi-person-bounding-box" aria-hidden="true"></i>
+                          <span>
+                            {etiquetasMultimedia
+                              .map((persona) => persona?.nombre || persona?.usuario?.nombreUsuario || persona?.nickname || persona?.nombreUsuario || persona)
+                              .filter(Boolean)
+                              .join(', ')}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="acciones-post perfil-publicacion-area-acciones d-flex justify-content-between mt-3 pt-2 border-top">
+                        <div className="d-flex gap-4">
+                          <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarLike(post._id)}>
+                            <i className={`bi ${usuarioHaReaccionado(post) ? 'bi-heart-fill text-danger' : 'bi-heart'}`}></i> {post.reacciones?.length || 0}
+                          </button>
+                          <button
+                            className="boton-interaccion border-0 bg-transparent p-0"
+                            type="button"
+                            onClick={() => toggleComentarios(post._id)}
+                          >
+                            <i className="bi bi-chat"></i> {comentariosPorPub[post._id]?.length ?? 0}
+                          </button>
+                        </div>
+                        <div className="d-flex gap-3">
+                          <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Guardar recuerdo" aria-label="Guardar recuerdo">
+                            <i className="bi bi-bookmark"></i>
+                          </button>
+                          <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Compartir" aria-label="Compartir">
+                            <i className="bi bi-share"></i> {post.compartido || 0}
+                          </button>
+                        </div>
                       </div>
-                    )}
 
-                    <div className="acciones-post d-flex justify-content-between mt-3 pt-2 border-top">
-                      <div className="d-flex gap-4">
-                        <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarLike(post._id)}>
-                          <i className={`bi ${usuarioHaReaccionado(post) ? 'bi-heart-fill text-danger' : 'bi-heart'}`}></i> {post.reacciones?.length || 0}
-                        </button>
-                        <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => toggleComentarios(post._id)}>
-                          <i className="bi bi-chat"></i> {comentariosPorPub[post._id]?.length ?? 0}
-                        </button>
-                      </div>
-                      <div className="d-flex gap-3">
-                        <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Guardar recuerdo" aria-label="Guardar recuerdo">
-                          <i className="bi bi-bookmark"></i>
-                        </button>
-                        <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Compartir" aria-label="Compartir">
-                          <i className="bi bi-share"></i> {post.compartido || 0}
-                        </button>
-                      </div>
-                    </div>
-
-                    {comentariosAbiertos[post._id] && (
-                      <div className="perfil-comentarios-panel">
+                      <div
+                        className={`perfil-comentarios-panel perfil-publicacion-area-comentarios ${comentariosAbiertos[post._id] ? 'abierto-movil' : ''}`}
+                      >
                         <div className="lista-comentarios">
                           {comentariosPorPub[post._id]?.length > 0 ? (
                             comentariosPorPub[post._id].map((comentario) => {
@@ -1702,7 +1717,9 @@ export default function Perfil() {
                               );
                             })
                           ) : (
-                            <p className="perfil-comentarios-vacio">Aún no hay comentarios en esta historia familiar...</p>
+                            <p className="perfil-comentarios-vacio">
+                              Sin comentarios aún... ¡Sé el primero en comentar!
+                            </p>
                           )}
                         </div>
                         <div className="perfil-comentario-form">
@@ -1722,7 +1739,7 @@ export default function Perfil() {
                           <button type="button" className="btn btn-sm perfil-comentario-enviar" onClick={() => manejarEnviarComentario(post._id)}>Enviar</button>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </article>
                 );
               })

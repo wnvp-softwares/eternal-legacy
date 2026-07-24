@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { obtenerOGenerarLlavesE2E, encriptarMensaje, desencriptarMensaje } from '../utils/e2eCrypto';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
@@ -179,8 +179,29 @@ export default function Mensajes() {
   const [cargandoMensajes, setCargandoMensajes] = useState(false);
   const [miPublicKey, setMiPublicKey] = useState(null);
 
-  const finMensajesRef = useRef(null);
+  const historialMensajesRef = useRef(null);
+  const accionScrollPendienteRef = useRef(null);
   const token = localStorage.getItem('token');
+
+  const prepararRestauracionScroll = (forzarFinal = false) => {
+    const historial = historialMensajesRef.current;
+
+    // Una acción explícita (abrir chat o enviar) siempre tiene prioridad
+    // frente a una actualización automática que llegue al mismo tiempo.
+    if (!forzarFinal && accionScrollPendienteRef.current?.modo === 'final') return;
+
+    if (forzarFinal || !historial) {
+      accionScrollPendienteRef.current = { modo: 'final' };
+      return;
+    }
+
+    const distanciaAlFinal = historial.scrollHeight - historial.scrollTop - historial.clientHeight;
+    const estaCercaDelFinal = distanciaAlFinal <= 80;
+
+    accionScrollPendienteRef.current = estaCercaDelFinal
+      ? { modo: 'final' }
+      : { modo: 'preservar', scrollTop: historial.scrollTop };
+  };
 
   // 1. Inicializar Claves E2E
   // IMPORTANTE: ya no reemplazamos la llave pública cada vez que se abre Mensajes.
@@ -230,7 +251,7 @@ export default function Mensajes() {
   }, [token]);
 
   // 3. Cargar y Descifrar Mensajes del Chat Seleccionado
-  const cargarMensajesConversacion = async (contactoId) => {
+  const cargarMensajesConversacion = async (contactoId, { desplazarAlFinal = false } = {}) => {
     if (!contactoId || !token) return;
 
     try {
@@ -262,6 +283,9 @@ export default function Mensajes() {
           })
         );
 
+        // Tomamos la posición justo antes de actualizar el DOM, no antes
+        // de la petición, para respetar cualquier scroll hecho mientras cargaba.
+        prepararRestauracionScroll(desplazarAlFinal);
         setMensajes(mensajesDescifrados);
       }
     } catch (error) {
@@ -289,7 +313,8 @@ export default function Mensajes() {
 
     // Leemos y cargamos al entrar
     marcarConversacionComoLeida(contactoId);
-    cargarMensajesConversacion(contactoId).finally(() => setCargandoMensajes(false));
+    cargarMensajesConversacion(contactoId, { desplazarAlFinal: true })
+      .finally(() => setCargandoMensajes(false));
 
     const intervalo = setInterval(() => {
       marcarConversacionComoLeida(contactoId); // Sigue marcando como leído si llegan nuevos estando adentro
@@ -299,9 +324,20 @@ export default function Mensajes() {
     return () => clearInterval(intervalo);
   }, [chatSeleccionado, token]);
 
-  useEffect(() => {
-    finMensajesRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [mensajes]);
+  useLayoutEffect(() => {
+    const historial = historialMensajesRef.current;
+    const accion = accionScrollPendienteRef.current;
+
+    if (!historial || !accion || cargandoMensajes) return;
+
+    if (accion.modo === 'final') {
+      historial.scrollTop = historial.scrollHeight;
+    } else if (accion.modo === 'preservar') {
+      historial.scrollTop = accion.scrollTop;
+    }
+
+    accionScrollPendienteRef.current = null;
+  }, [mensajes, cargandoMensajes]);
 
   // 4. Enviar Mensaje Cifrado
   const manejarEnviarMensaje = async () => {
@@ -336,7 +372,7 @@ export default function Mensajes() {
       });
 
       if (res.ok) {
-        cargarMensajesConversacion(contactoId);
+        await cargarMensajesConversacion(contactoId, { desplazarAlFinal: true });
       } else {
         const errorData = await res.json();
         alert(errorData.mensaje || 'Error al enviar mensaje');
@@ -443,8 +479,9 @@ export default function Mensajes() {
         <div className={`columna-chat-activo ${!chatSeleccionado ? 'd-none d-lg-flex' : 'd-flex'}`}>
           {chatSeleccionado ? (
             <>
-              {/* Cabecera del Chat */}
-              <div className="cabecera-chat-activo">
+              <div className="cabecera-conversacion-fija">
+                {/* Cabecera del Chat */}
+                <div className="cabecera-chat-activo">
                 <div className="info-cabecera">
                   <button className="boton-atras-movil d-lg-none" onClick={() => setChatSeleccionado(null)}>
                     <i className="bi bi-arrow-left"></i>
@@ -482,10 +519,11 @@ export default function Mensajes() {
                 >
                   <i className={`bi bi-chevron-${bannerMinimizado ? 'down' : 'up'}`}></i>
                 </button>
+                </div>
               </div>
 
               {/* Historial de Mensajes Descifrados */}
-              <div className="historial-mensajes">
+              <div ref={historialMensajesRef} className="historial-mensajes">
                 {cargandoMensajes ? (
                   <div className="text-center my-auto text-muted">Cargando mensajes cifrados...</div>
                 ) : mensajes.length === 0 ? (
@@ -527,7 +565,6 @@ export default function Mensajes() {
                     );
                   })
                 )}
-                <div ref={finMensajesRef} />
               </div>
 
               {/* Área de Entrada */}
