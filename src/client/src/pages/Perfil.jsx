@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import ImageCropperModal from '../components/ImageCropperModal';
@@ -478,6 +479,30 @@ const esVideoMultimediaPublicacion = (multimedia) => {
   return formato.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(url);
 };
 
+const obtenerCantidadMultimediaPublicacion = (multimedia) => (
+  Array.isArray(multimedia)
+    ? multimedia.filter(Boolean).length
+    : (multimedia ? 1 : 0)
+);
+
+const obtenerTextoPublicacion = (publicacion = {}) => normalizarTexto(
+  publicacion.contenido || publicacion.texto || publicacion.titulo || ''
+);
+
+const crearResumenPublicacion = (publicacion = {}, limite = 135) => {
+  const texto = obtenerTextoPublicacion(publicacion);
+  if (!texto) return 'Publicación guardada';
+  if (texto.length <= limite) return texto;
+  return `${texto.slice(0, Math.max(0, limite - 1)).trim()}…`;
+};
+
+const ordenarPublicacionesPerfil = (lista = []) => [...lista].sort((a, b) => {
+  const fijadaA = Boolean(a?.fijadaEnPerfilAt || a?.fijadaEnPerfil);
+  const fijadaB = Boolean(b?.fijadaEnPerfilAt || b?.fijadaEnPerfil);
+  if (fijadaA !== fijadaB) return fijadaA ? -1 : 1;
+  return new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime();
+});
+
 
 export default function Perfil() {
   const [sonAmigos, setSonAmigos] = useState(false);
@@ -492,6 +517,7 @@ export default function Perfil() {
 
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { idioma, zonaHoraria } = usePreferencias();
   const [marcaTiempoActual, setMarcaTiempoActual] = useState(Date.now());
 
@@ -504,6 +530,19 @@ export default function Perfil() {
     idioma: idioma || 'es-MX',
     zonaHoraria: zonaHoraria || 'America/Mexico_City',
     ahoraMs: marcaTiempoActual
+  };
+
+
+  const formatearFechaContextoPublicacion = (valor) => {
+    if (!valor) return '';
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return '';
+    return new Intl.DateTimeFormat(preferenciasRegion.idioma, {
+      timeZone: preferenciasRegion.zonaHoraria,
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    }).format(fecha).replace('.', '');
   };
 
   const fileInputPerfilRef = useRef(null);
@@ -528,6 +567,24 @@ export default function Perfil() {
   const [comentariosAbiertos, setComentariosAbiertos] = useState({}); // { postId: true/false }
   const [comentariosPorPub, setComentariosPorPub] = useState({});     // { postId: [comentarios] }
   const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState({}); // { postId: 'texto' }
+
+  // --- COLECCIÓN PRIVADA DE PUBLICACIONES GUARDADAS ---
+  const [publicacionesGuardadas, setPublicacionesGuardadas] = useState([]);
+  const [guardadosInicializados, setGuardadosInicializados] = useState(false);
+  const [cargandoGuardados, setCargandoGuardados] = useState(false);
+  const [errorGuardados, setErrorGuardados] = useState('');
+  const [paginaGuardados, setPaginaGuardados] = useState(1);
+  const [totalGuardados, setTotalGuardados] = useState(0);
+  const [hayMasGuardados, setHayMasGuardados] = useState(false);
+  const [publicacionVisorSeleccionada, setPublicacionVisorSeleccionada] = useState(null);
+  const [origenVisorPublicacion, setOrigenVisorPublicacion] = useState(null);
+  const [cargandoComentariosVisor, setCargandoComentariosVisor] = useState(false);
+  const visorPublicacionRef = useRef(null);
+  const botonCerrarVisorPublicacionRef = useRef(null);
+  const inputComentarioVisorRef = useRef(null);
+  const elementoOrigenVisorRef = useRef(null);
+  const cargaComentariosVisorRef = useRef(0);
+  const cargaGuardadosRef = useRef(0);
 
   // --- ESTADOS PARA EL MODAL DE EDICIÓN DE PERFIL (ESTILO X) ---
   const [edicionAbierta, setEdicionAbierta] = useState(false);
@@ -557,8 +614,85 @@ export default function Perfil() {
 
   const [perfilBd, setPerfilBd] = useState(null);
   const [publicaciones, setPublicaciones] = useState([]);
+  const [avisoPreferenciaFeed, setAvisoPreferenciaFeed] = useState(null);
+  const temporizadorAvisoPreferenciaFeedRef = useRef(null);
   const [cargando, setCargando] = useState(token ? true : false);
   const [error, setError] = useState('');
+
+  useEffect(() => () => {
+    cargaGuardadosRef.current += 1;
+    cargaComentariosVisorRef.current += 1;
+
+    if (temporizadorAvisoPreferenciaFeedRef.current) {
+      window.clearTimeout(temporizadorAvisoPreferenciaFeedRef.current);
+    }
+  }, []);
+
+  const cargarPublicacionesGuardadas = async ({ pagina = 1, acumular = false } = {}) => {
+    if (!token || !esMiPerfil || cargandoGuardados) return false;
+
+    const identificadorCarga = cargaGuardadosRef.current + 1;
+    cargaGuardadosRef.current = identificadorCarga;
+    setCargandoGuardados(true);
+    setErrorGuardados('');
+
+    try {
+      const respuesta = await fetch(
+        `${API_BASE_URL}/publicaciones/guardadas?page=${pagina}&limit=24`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      const datos = await respuesta.json().catch(() => ({}));
+
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || 'No se pudieron cargar tus publicaciones guardadas.');
+      }
+
+      if (cargaGuardadosRef.current !== identificadorCarga) return false;
+
+      const nuevasPublicaciones = Array.isArray(datos.publicaciones)
+        ? datos.publicaciones
+        : [];
+
+      setPublicacionesGuardadas(prev => {
+        if (!acumular) return nuevasPublicaciones;
+
+        const publicacionesPorId = new Map(
+          prev.map(publicacion => [String(publicacion._id || publicacion.id), publicacion])
+        );
+
+        nuevasPublicaciones.forEach(publicacion => {
+          publicacionesPorId.set(String(publicacion._id || publicacion.id), publicacion);
+        });
+
+        return Array.from(publicacionesPorId.values()).sort(
+          (a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime()
+        );
+      });
+
+      setPaginaGuardados(Number(datos.pagina) || pagina);
+      setTotalGuardados(Number(datos.total) || 0);
+      setHayMasGuardados(Boolean(datos.hayMas));
+      setGuardadosInicializados(true);
+      return true;
+    } catch (errorCarga) {
+      if (cargaGuardadosRef.current !== identificadorCarga) return false;
+
+      console.error('❌ Error al cargar publicaciones guardadas:', errorCarga);
+      setErrorGuardados(errorCarga.message || 'No se pudieron cargar tus publicaciones guardadas.');
+      return false;
+    } finally {
+      if (cargaGuardadosRef.current === identificadorCarga) {
+        setCargandoGuardados(false);
+      }
+    }
+  };
 
   // Cargar comentarios de una publicación
   const cargarComentarios = async (postId) => {
@@ -572,11 +706,24 @@ export default function Perfil() {
 
       if (res.ok) {
         const data = await res.json();
+        const comentarios = Array.isArray(data) ? data : [];
+
         setComentariosPorPub(prev => ({
           ...prev,
-          [postId]: Array.isArray(data) ? data : []
+          [postId]: comentarios
         }));
-        return Array.isArray(data) ? data : [];
+        setPublicacionesGuardadas(prev => prev.map(publicacion => (
+          String(publicacion._id || publicacion.id) === String(postId)
+            ? { ...publicacion, totalComentarios: comentarios.length }
+            : publicacion
+        )));
+        setPublicacionVisorSeleccionada(prev => (
+          prev && String(prev._id || prev.id) === String(postId)
+            ? { ...prev, totalComentarios: comentarios.length }
+            : prev
+        ));
+
+        return comentarios;
       }
     } catch (error) {
       console.error('❌ Error al obtener comentarios:', error);
@@ -692,9 +839,7 @@ export default function Perfil() {
           ? datosPublicaciones
           : (datosPublicaciones.publicaciones || datosPublicaciones.posts || []);
 
-        const publicacionesOrdenadas = [...listaPosts].sort((a, b) => (
-          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-        ));
+        const publicacionesOrdenadas = ordenarPublicacionesPerfil(listaPosts);
 
         setPublicaciones(publicacionesOrdenadas);
         await cargarComentariosDePublicaciones(publicacionesOrdenadas);
@@ -937,19 +1082,566 @@ export default function Perfil() {
       const data = await res.json();
 
       if (res.ok) {
-        setPublicaciones(prev =>
-          prev.map(post =>
-            post._id === postId
-              ? { ...post, reacciones: data.reacciones }
-              : post
-          )
+        const actualizarReacciones = (post) => (
+          String(post._id || post.id) === String(postId)
+            ? { ...post, reacciones: data.reacciones }
+            : post
         );
+
+        setPublicaciones(prev => prev.map(actualizarReacciones));
+        setPublicacionesGuardadas(prev => prev.map(actualizarReacciones));
+        setPublicacionVisorSeleccionada(prev => (
+          prev ? actualizarReacciones(prev) : prev
+        ));
       } else {
         console.error(data.mensaje || 'Error al gestionar la reacción');
       }
     } catch (error) {
       console.error('❌ Error al gestionar la reacción:', error);
     }
+  };
+
+  const abrirEditorPublicacion = (post, accionInicial = 'editar') => {
+    const postId = post?._id || post?.id;
+    if (!postId) return false;
+
+    navigate('/inicio', {
+      state: {
+        editarPublicacionId: postId,
+        accionInicial,
+        rutaRetorno: `${location.pathname}${location.search || ''}`
+      }
+    });
+    return true;
+  };
+
+  const cerrarAvisoPreferenciaFeed = () => {
+    if (temporizadorAvisoPreferenciaFeedRef.current) {
+      window.clearTimeout(temporizadorAvisoPreferenciaFeedRef.current);
+      temporizadorAvisoPreferenciaFeedRef.current = null;
+    }
+    setAvisoPreferenciaFeed(null);
+  };
+
+  const mostrarAvisoPreferenciaFeed = ({ mensaje, onDeshacer = null }) => {
+    if (temporizadorAvisoPreferenciaFeedRef.current) {
+      window.clearTimeout(temporizadorAvisoPreferenciaFeedRef.current);
+    }
+
+    setAvisoPreferenciaFeed({ mensaje, onDeshacer, procesando: false });
+    temporizadorAvisoPreferenciaFeedRef.current = window.setTimeout(() => {
+      setAvisoPreferenciaFeed(null);
+      temporizadorAvisoPreferenciaFeedRef.current = null;
+    }, 7000);
+  };
+
+  const manejarDeshacerPreferenciaFeed = async () => {
+    const accionDeshacer = avisoPreferenciaFeed?.onDeshacer;
+    if (typeof accionDeshacer !== 'function' || avisoPreferenciaFeed?.procesando) return;
+
+    if (temporizadorAvisoPreferenciaFeedRef.current) {
+      window.clearTimeout(temporizadorAvisoPreferenciaFeedRef.current);
+      temporizadorAvisoPreferenciaFeedRef.current = null;
+    }
+
+    setAvisoPreferenciaFeed(prev => prev ? { ...prev, procesando: true } : prev);
+
+    try {
+      await accionDeshacer();
+      setAvisoPreferenciaFeed(null);
+    } catch (error) {
+      setAvisoPreferenciaFeed(prev => prev ? { ...prev, procesando: false } : prev);
+      alert(error.message || 'No se pudo deshacer la acción.');
+    }
+  };
+
+  const manejarOcultarPublicacionDeInicio = async (post) => {
+    const postId = post?._id || post?.id;
+    if (!postId) return false;
+
+    const estabaOculta = Boolean(post.ocultaDeMiInicio);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/ocultar-inicio`, {
+        method: estabaOculta ? 'DELETE' : 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.mensaje || 'No se pudo actualizar esta preferencia.');
+
+      const actualizarOculta = (item, oculta) => (
+        String(item._id || item.id) === String(postId)
+          ? { ...item, ocultaDeMiInicio: oculta }
+          : item
+      );
+
+      setPublicaciones(prev => prev.map(item => actualizarOculta(item, !estabaOculta)));
+      setPublicacionesGuardadas(prev => prev.map(item => actualizarOculta(item, !estabaOculta)));
+      setPublicacionVisorSeleccionada(prev => (
+        prev ? actualizarOculta(prev, !estabaOculta) : prev
+      ));
+
+      if (estabaOculta) {
+        mostrarAvisoPreferenciaFeed({ mensaje: 'La publicación volverá a aparecer en tu Inicio.' });
+      } else {
+        mostrarAvisoPreferenciaFeed({
+          mensaje: 'Publicación ocultada de tu Inicio.',
+          onDeshacer: async () => {
+            const resDeshacer = await fetch(`${API_BASE_URL}/publicaciones/${postId}/ocultar-inicio`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const dataDeshacer = await resDeshacer.json().catch(() => ({}));
+            if (!resDeshacer.ok) {
+              throw new Error(dataDeshacer.mensaje || 'No se pudo volver a mostrar la publicación.');
+            }
+
+            setPublicaciones(prev => prev.map(item => actualizarOculta(item, false)));
+            setPublicacionesGuardadas(prev => prev.map(item => actualizarOculta(item, false)));
+            setPublicacionVisorSeleccionada(prev => (
+              prev ? actualizarOculta(prev, false) : prev
+            ));
+          }
+        });
+      }
+
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo actualizar la visibilidad de esta publicación en tu Inicio.');
+      return false;
+    }
+  };
+
+  const manejarPausaAutorEnInicio = async (post) => {
+    const autorId = obtenerIdPersonaPerfil(post?.autor || post?.usuario);
+    if (!autorId) return false;
+
+    const autorEstabaPausado = Boolean(post.autorPausadoEnInicio);
+    const nombreAutor = obtenerNombreDeEntidad(post.autor || post.usuario, 'este autor');
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/publicaciones/autor/${autorId}/pausar-inicio`, {
+        method: autorEstabaPausado ? 'DELETE' : 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.mensaje || 'No se pudo actualizar la pausa del autor.');
+
+      const actualizarPausaAutor = (item, pausado, hasta = null) => {
+        const itemAutorId = obtenerIdPersonaPerfil(item.autor || item.usuario);
+        return String(itemAutorId) === String(autorId)
+          ? {
+            ...item,
+            autorPausadoEnInicio: pausado,
+            autorPausadoHasta: pausado ? hasta : null
+          }
+          : item;
+      };
+
+      setPublicaciones(prev => prev.map(item => (
+        actualizarPausaAutor(item, !autorEstabaPausado, data.autorPausadoHasta)
+      )));
+      setPublicacionesGuardadas(prev => prev.map(item => (
+        actualizarPausaAutor(item, !autorEstabaPausado, data.autorPausadoHasta)
+      )));
+      setPublicacionVisorSeleccionada(prev => (
+        prev
+          ? actualizarPausaAutor(prev, !autorEstabaPausado, data.autorPausadoHasta)
+          : prev
+      ));
+
+      if (autorEstabaPausado) {
+        mostrarAvisoPreferenciaFeed({ mensaje: `Las publicaciones de ${nombreAutor} volverán a aparecer en tu Inicio.` });
+      } else {
+        mostrarAvisoPreferenciaFeed({
+          mensaje: `Publicaciones de ${nombreAutor} pausadas durante 30 días.`,
+          onDeshacer: async () => {
+            const resDeshacer = await fetch(`${API_BASE_URL}/publicaciones/autor/${autorId}/pausar-inicio`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const dataDeshacer = await resDeshacer.json().catch(() => ({}));
+            if (!resDeshacer.ok) {
+              throw new Error(dataDeshacer.mensaje || 'No se pudo reanudar al autor.');
+            }
+
+            setPublicaciones(prev => prev.map(item => actualizarPausaAutor(item, false)));
+            setPublicacionesGuardadas(prev => prev.map(item => actualizarPausaAutor(item, false)));
+            setPublicacionVisorSeleccionada(prev => (
+              prev ? actualizarPausaAutor(prev, false) : prev
+            ));
+          }
+        });
+      }
+
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo actualizar la pausa del autor.');
+      return false;
+    }
+  };
+
+  const construirInformacionVisibilidad = (post, origen = 'perfil') => {
+    const esHistorico = post.tipo === 'historico';
+    const desdeGuardados = origen === 'guardados';
+    const arbolAudiencia = obtenerArbolAudienciaDePublicacion(post);
+    const nombreFamiliaBase = arbolAudiencia?.nombreFamilia || post.nombreFamiliaAudienciaSnapshot || 'tu árbol familiar';
+    const nombreFamilia = nombreFamiliaBase === 'tu árbol familiar' || /^familia\b/i.test(nombreFamiliaBase)
+      ? nombreFamiliaBase
+      : `Familia ${nombreFamiliaBase}`;
+
+    if (esHistorico) {
+      return desdeGuardados
+        ? {
+          titulo: '¿Por qué ves este Recuerdo Histórico?',
+          subtitulo: 'Publicación guardada',
+          icono: 'bi-bookmark-check-fill',
+          parrafos: [
+            'Los Recuerdos Históricos son publicaciones públicas dentro de Eternal Legacy.',
+            'Esta publicación aparece aquí porque decidiste guardarla para consultarla más tarde.'
+          ],
+          nota: 'Quitarla de Guardados no elimina la publicación original ni modifica el perfil de su autor.'
+        }
+        : {
+          titulo: '¿Por qué ves este Recuerdo Histórico?',
+          subtitulo: 'Perfil público del autor',
+          icono: 'bi-globe-americas',
+          parrafos: [
+            'Los Recuerdos Históricos son publicaciones públicas dentro de Eternal Legacy.',
+            'Puedes ver esta publicación porque estás visitando el perfil de su autor.'
+          ],
+          nota: 'Ocultarla o pausar a su autor solo cambia lo que aparece en tu Inicio; seguirá disponible en este perfil.'
+        };
+    }
+
+    return desdeGuardados
+      ? {
+        titulo: '¿Por qué ves este Momento Familiar?',
+        subtitulo: nombreFamilia,
+        icono: 'bi-shield-lock-fill',
+        parrafos: [
+          `Puedes seguir viendo este Momento Familiar porque perteneces a ${nombreFamilia}.`,
+          'Aparece en esta sección porque lo guardaste, pero su acceso continúa sujeto a los permisos actuales del árbol.'
+        ],
+        nota: 'Si dejas de pertenecer al árbol, este Momento Familiar dejará de estar disponible también en Guardados.'
+      }
+      : {
+        titulo: '¿Por qué ves este Momento Familiar?',
+        subtitulo: nombreFamilia,
+        icono: 'bi-shield-lock-fill',
+        parrafos: [
+          `Aunque estás visitando el perfil de su autor, puedes ver este Momento Familiar porque perteneces a ${nombreFamilia}.`,
+          'Los Momentos Familiares solo son visibles para los integrantes autorizados del árbol donde se publicaron.'
+        ],
+        nota: 'Ocultarlo o pausar a su autor solo cambia tu Inicio; el momento seguirá disponible en este perfil y dentro del árbol correspondiente.'
+      };
+  };
+
+  const manejarGuardarPublicacion = async (post) => {
+    const postId = post?._id || post?.id;
+    if (!postId) return false;
+
+    const estabaGuardadaAntes = Boolean(post.guardadaPorMi);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/guardar`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.mensaje || 'No se pudo guardar la publicación.');
+
+      const guardadaPorMi = Boolean(data.guardadaPorMi);
+      const actualizarGuardado = (item) => (
+        String(item._id || item.id) === String(postId)
+          ? { ...item, guardadaPorMi }
+          : item
+      );
+
+      setPublicaciones(prev => prev.map(actualizarGuardado));
+
+      if (guardadosInicializados) {
+        if (guardadaPorMi) {
+          const publicacionActualizada = {
+            ...post,
+            guardadaPorMi: true,
+            totalComentarios:
+              post.totalComentarios ??
+              comentariosPorPub[postId]?.length ??
+              0
+          };
+
+          setPublicacionesGuardadas(prev => {
+            const sinDuplicado = prev.filter(
+              item => String(item._id || item.id) !== String(postId)
+            );
+
+            return [publicacionActualizada, ...sinDuplicado].sort(
+              (a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime()
+            );
+          });
+
+          if (!estabaGuardadaAntes) {
+            setTotalGuardados(prev => prev + 1);
+          }
+        } else {
+          setPublicacionesGuardadas(prev => prev.filter(
+            item => String(item._id || item.id) !== String(postId)
+          ));
+
+          if (estabaGuardadaAntes) {
+            setTotalGuardados(prev => Math.max(0, prev - 1));
+          }
+        }
+      }
+
+      setPublicacionVisorSeleccionada(prev => {
+        if (!prev || String(prev._id || prev.id) !== String(postId)) return prev;
+        if (guardadaPorMi) return { ...prev, guardadaPorMi: true };
+        return origenVisorPublicacion === 'guardados'
+          ? null
+          : { ...prev, guardadaPorMi: false };
+      });
+
+      if (!guardadaPorMi && origenVisorPublicacion === 'guardados') {
+        setOrigenVisorPublicacion(null);
+      }
+
+      if (!guardadaPorMi) {
+        mostrarAvisoPreferenciaFeed({
+          mensaje: 'Publicación eliminada de Guardados.'
+        });
+      }
+
+      if (guardadosInicializados) {
+        window.setTimeout(() => {
+          cargarPublicacionesGuardadas({ pagina: 1, acumular: false });
+        }, 0);
+      }
+
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo guardar la publicación.');
+      return false;
+    }
+  };
+
+  const manejarFijarPublicacion = async (post) => {
+    const postId = post?._id || post?.id;
+    if (!postId) return false;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/fijar`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.mensaje || 'No se pudo actualizar la publicación fijada.');
+
+      const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+      const actualizarFijacion = (item) => {
+        const itemId = item._id || item.id;
+        const itemAutorId = obtenerIdPersonaPerfil(item.autor || item.usuario);
+
+        if (data.fijadaEnPerfil && String(itemAutorId) === String(miId)) {
+          return String(itemId) === String(postId)
+            ? { ...item, fijadaEnPerfil: true, fijadaEnPerfilAt: data.fijadaEnPerfilAt }
+            : { ...item, fijadaEnPerfil: false, fijadaEnPerfilAt: null };
+        }
+
+        if (String(itemId) === String(postId)) {
+          return { ...item, fijadaEnPerfil: false, fijadaEnPerfilAt: null };
+        }
+
+        return item;
+      };
+
+      setPublicaciones(prev => ordenarPublicacionesPerfil(prev.map(actualizarFijacion)));
+      setPublicacionesGuardadas(prev => prev.map(actualizarFijacion));
+      setPublicacionVisorSeleccionada(prev => (
+        prev ? actualizarFijacion(prev) : prev
+      ));
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo actualizar la publicación fijada.');
+      return false;
+    }
+  };
+
+  const manejarEliminarPublicacion = async (post) => {
+    const postId = post?._id || post?.id;
+    if (!postId) return false;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.mensaje || 'No se pudo eliminar la publicación.');
+
+      const estabaGuardada = Boolean(post.guardadaPorMi);
+
+      setPublicaciones(prev => prev.filter(item => String(item._id || item.id) !== String(postId)));
+      setPublicacionesGuardadas(prev => prev.filter(
+        item => String(item._id || item.id) !== String(postId)
+      ));
+      setPublicacionVisorSeleccionada(prev => (
+        prev && String(prev._id || prev.id) === String(postId) ? null : prev
+      ));
+      if (estabaGuardada) {
+        setTotalGuardados(prev => Math.max(0, prev - 1));
+      }
+
+      setComentariosPorPub(prev => {
+        const siguiente = { ...prev };
+        delete siguiente[postId];
+        return siguiente;
+      });
+      setComentariosAbiertos(prev => {
+        const siguiente = { ...prev };
+        delete siguiente[postId];
+        return siguiente;
+      });
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo eliminar la publicación.');
+      return false;
+    }
+  };
+
+  const crearOpcionesMenuPublicacion = (post, esAutor, origen = 'perfil') => {
+    const esHistorico = post.tipo === 'historico';
+    const desdeGuardados = origen === 'guardados';
+
+    if (!esAutor) {
+      const nombreAutor = obtenerNombreDeEntidad(post.autor || post.usuario, 'este autor');
+      const autorPausado = Boolean(post.autorPausadoEnInicio);
+      const publicacionOculta = Boolean(post.ocultaDeMiInicio);
+
+      return [
+        {
+          id: 'guardar',
+          etiqueta: post.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación',
+          descripcion: post.guardadaPorMi
+            ? 'Ya no aparecerá en tus elementos guardados.'
+            : 'Agrégala a tus elementos guardados.',
+          icono: post.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark',
+          activa: Boolean(post.guardadaPorMi),
+          onClick: () => manejarGuardarPublicacion(post)
+        },
+        {
+          id: 'por-que-la-veo',
+          etiqueta: esHistorico ? '¿Por qué veo este Recuerdo Histórico?' : '¿Por qué veo este Momento Familiar?',
+          descripcion: esHistorico
+            ? (
+              desdeGuardados
+                ? 'Consulta por qué este contenido público permanece disponible en tus Guardados.'
+                : 'Conoce por qué este contenido es visible desde el perfil del autor.'
+            )
+            : 'Consulta qué árbol familiar te permite acceder a este momento.',
+          icono: 'bi-info-circle-fill',
+          informacion: construirInformacionVisibilidad(post, origen)
+        },
+        {
+          id: 'ocultar-inicio',
+          etiqueta: publicacionOculta ? 'Volver a mostrar en mi Inicio' : 'Ocultar de mi Inicio',
+          descripcion: publicacionOculta
+            ? 'Esta publicación podrá aparecer otra vez en tu muro.'
+            : (
+              desdeGuardados
+                ? 'No aparecerá en tu Inicio, pero seguirá disponible en Guardados y en el perfil de su autor.'
+                : 'No aparecerá en tu Inicio, pero seguirá visible en este perfil.'
+            ),
+          icono: publicacionOculta ? 'bi-eye-fill' : 'bi-eye-slash-fill',
+          activa: publicacionOculta,
+          separadorAntes: true,
+          textoProcesando: publicacionOculta ? 'Mostrando...' : 'Ocultando...',
+          onClick: () => manejarOcultarPublicacionDeInicio(post)
+        },
+        {
+          id: 'pausar-autor',
+          etiqueta: autorPausado
+            ? `Reanudar publicaciones de ${nombreAutor}`
+            : `Pausar publicaciones de ${nombreAutor} durante 30 días`,
+          descripcion: autorPausado
+            ? 'Sus publicaciones podrán volver a aparecer en tu Inicio.'
+            : 'Sus publicaciones dejarán de aparecer temporalmente en tu Inicio.',
+          icono: autorPausado ? 'bi-play-circle-fill' : 'bi-clock-history',
+          activa: autorPausado,
+          textoProcesando: autorPausado ? 'Reanudando...' : 'Pausando...',
+          ...(!autorPausado ? {
+            confirmacion: {
+              titulo: `¿Pausar a ${nombreAutor} durante 30 días?`,
+              mensaje: desdeGuardados
+                ? 'Sus publicaciones no aparecerán temporalmente en tu Inicio. Seguirás pudiendo visitar su perfil, consultar tus Guardados y ver el contenido al que tengas acceso dentro de tus árboles familiares.'
+                : 'Sus publicaciones no aparecerán temporalmente en tu Inicio. Seguirás pudiendo visitar este perfil y ver el contenido al que tengas acceso dentro de tus árboles familiares.',
+              confirmarTexto: 'Pausar 30 días',
+              textoProcesando: 'Pausando...'
+            }
+          } : {}),
+          onClick: () => manejarPausaAutorEnInicio(post)
+        }
+      ];
+    }
+
+    return [
+      {
+        id: 'fijar',
+        etiqueta: post.fijadaEnPerfilAt || post.fijadaEnPerfil ? 'Desfijar de mi perfil' : 'Fijar en mi perfil',
+        descripcion: post.fijadaEnPerfilAt || post.fijadaEnPerfil
+          ? 'La publicación volverá a su posición cronológica.'
+          : 'Se mostrará primero en tu perfil.',
+        icono: post.fijadaEnPerfilAt || post.fijadaEnPerfil ? 'bi-pin-angle-fill' : 'bi-pin-angle',
+        activa: Boolean(post.fijadaEnPerfilAt || post.fijadaEnPerfil),
+        onClick: () => manejarFijarPublicacion(post)
+      },
+      {
+        id: 'guardar',
+        etiqueta: post.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación',
+        descripcion: post.guardadaPorMi ? 'Ya no aparecerá en tus elementos guardados.' : 'Agrégala a tus elementos guardados.',
+        icono: post.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark',
+        activa: Boolean(post.guardadaPorMi),
+        onClick: () => manejarGuardarPublicacion(post)
+      },
+      {
+        id: 'editar',
+        etiqueta: 'Editar publicación',
+        icono: 'bi-pencil-fill',
+        separadorAntes: true,
+        onClick: () => abrirEditorPublicacion(post)
+      },
+      ...(!esHistorico ? [{
+        id: 'audiencia',
+        etiqueta: 'Cambiar árbol de audiencia',
+        descripcion: 'Solo los miembros del árbol seleccionado podrán verla.',
+        icono: 'bi-people-fill',
+        onClick: () => abrirEditorPublicacion(post, 'cambiar-audiencia')
+      }] : []),
+      {
+        id: 'fecha',
+        etiqueta: esHistorico ? 'Editar fecha del recuerdo' : 'Editar fecha del momento',
+        icono: 'bi-calendar3',
+        onClick: () => abrirEditorPublicacion(post, 'editar-fecha')
+      },
+      {
+        id: 'eliminar',
+        etiqueta: 'Eliminar publicación',
+        descripcion: 'Se eliminará de forma permanente.',
+        icono: 'bi-trash3-fill',
+        peligro: true,
+        separadorAntes: true,
+        textoProcesando: 'Eliminando...',
+        confirmacion: {
+          titulo: '¿Eliminar esta publicación?',
+          mensaje: 'Se eliminarán también sus comentarios y archivos asociados. Esta acción no se puede deshacer.',
+          confirmarTexto: 'Eliminar publicación',
+          textoProcesando: 'Eliminando...',
+          peligro: true
+        },
+        onClick: () => manejarEliminarPublicacion(post)
+      }
+    ];
   };
 
   // 3. Alternar la caja de comentarios y disparar la carga sincrónica
@@ -996,7 +1688,8 @@ export default function Perfil() {
         const comentarioRender = {
           ...data.comentario,
           autor: {
-            nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo'
+            nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo',
+            imagenPerfil: usuarioLogueado?.imagenPerfil || null
           }
         };
 
@@ -1004,6 +1697,19 @@ export default function Perfil() {
           ...prev,
           [postId]: [...(prev[postId] || []), comentarioRender]
         }));
+        setPublicacionesGuardadas(prev => prev.map(publicacion => (
+          String(publicacion._id || publicacion.id) === String(postId)
+            ? {
+              ...publicacion,
+              totalComentarios: Number(publicacion.totalComentarios || 0) + 1
+            }
+            : publicacion
+        )));
+        setPublicacionVisorSeleccionada(prev => (
+          prev && String(prev._id || prev.id) === String(postId)
+            ? { ...prev, totalComentarios: Number(prev.totalComentarios || 0) + 1 }
+            : prev
+        ));
 
         setNuevoComentarioTexto(prev => ({ ...prev, [postId]: '' }));
       } else {
@@ -1012,6 +1718,76 @@ export default function Perfil() {
     } catch (error) {
       console.error('❌ Error al enviar el comentario:', error);
     }
+  };
+
+  const cerrarVisorPublicacion = () => {
+    const elementoOrigen = elementoOrigenVisorRef.current;
+    cargaComentariosVisorRef.current += 1;
+    setCargandoComentariosVisor(false);
+    setPublicacionVisorSeleccionada(null);
+    setOrigenVisorPublicacion(null);
+    elementoOrigenVisorRef.current = null;
+
+    window.setTimeout(() => {
+      if (elementoOrigen instanceof HTMLElement && elementoOrigen.isConnected) {
+        elementoOrigen.focus();
+      }
+    }, 0);
+  };
+
+  const abrirVisorPublicacion = async (post, origen = 'guardados', elementoOrigen = null) => {
+    const postId = post?._id || post?.id;
+    if (!postId) return;
+
+    if (elementoOrigen instanceof HTMLElement) {
+      elementoOrigenVisorRef.current = elementoOrigen;
+    }
+
+    setOrigenVisorPublicacion(origen === 'fotos' ? 'fotos' : 'guardados');
+    setPublicacionVisorSeleccionada(post);
+
+    if (Object.prototype.hasOwnProperty.call(comentariosPorPub, postId)) {
+      setCargandoComentariosVisor(false);
+      return;
+    }
+
+    const identificadorCarga = cargaComentariosVisorRef.current + 1;
+    cargaComentariosVisorRef.current = identificadorCarga;
+    setCargandoComentariosVisor(true);
+
+    await cargarComentarios(postId);
+
+    if (cargaComentariosVisorRef.current === identificadorCarga) {
+      setCargandoComentariosVisor(false);
+    }
+  };
+
+  const navegarVisorPublicacion = (direccion) => {
+    const coleccionActiva = origenVisorPublicacion === 'fotos'
+      ? fotosGaleria
+      : publicacionesGuardadas;
+
+    if (!publicacionVisorSeleccionada || coleccionActiva.length < 2) return;
+
+    const idActual = publicacionVisorSeleccionada._id || publicacionVisorSeleccionada.id;
+    const indiceActual = coleccionActiva.findIndex(
+      publicacion => String(publicacion._id || publicacion.id) === String(idActual)
+    );
+    const siguienteIndice = indiceActual + direccion;
+
+    if (indiceActual < 0 || siguienteIndice < 0 || siguienteIndice >= coleccionActiva.length) {
+      return;
+    }
+
+    abrirVisorPublicacion(coleccionActiva[siguienteIndice], origenVisorPublicacion);
+  };
+
+  const cargarMasGuardados = () => {
+    if (cargandoGuardados || !hayMasGuardados) return;
+    cargarPublicacionesGuardadas({
+      pagina: paginaGuardados + 1,
+      acumular: true
+    });
   };
 
   const manejarClickEtiqueta = (id) => {
@@ -1183,11 +1959,429 @@ export default function Perfil() {
     );
   };
 
-  const publicacionesFiltradas = [...publicaciones].sort((a, b) => (
-    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-  ));
+  useEffect(() => {
+    cargaGuardadosRef.current += 1;
+    setPublicacionesGuardadas([]);
+    setGuardadosInicializados(false);
+    setCargandoGuardados(false);
+    setErrorGuardados('');
+    setPaginaGuardados(1);
+    setTotalGuardados(0);
+    setHayMasGuardados(false);
+    cerrarVisorPublicacion();
+
+    if (!esMiPerfil && tabActiva === 'saved') {
+      setTabActiva('memories');
+    }
+  }, [id, esMiPerfil]);
+
+  useEffect(() => {
+    if (
+      tabActiva === 'saved' &&
+      esMiPerfil &&
+      token &&
+      !guardadosInicializados &&
+      !cargandoGuardados &&
+      !errorGuardados
+    ) {
+      cargarPublicacionesGuardadas({ pagina: 1, acumular: false });
+    }
+  }, [tabActiva, esMiPerfil, token, guardadosInicializados, cargandoGuardados, errorGuardados]);
+
+  useEffect(() => {
+    if (!publicacionVisorSeleccionada || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const temporizadorFoco = window.setTimeout(() => {
+      botonCerrarVisorPublicacionRef.current?.focus();
+    }, 0);
+
+    const manejarTecladoVisor = (event) => {
+      if (document.querySelector('.legacy-publicacion-menu-panel')) return;
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cerrarVisorPublicacion();
+        return;
+      }
+
+      const objetivo = event.target;
+      const escribiendo = objetivo instanceof HTMLElement && (
+        objetivo.matches('input, textarea, select, [contenteditable="true"]') ||
+        Boolean(objetivo.closest('.publicacion-media-carousel'))
+      );
+
+      if (!escribiendo && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        navegarVisorPublicacion(-1);
+        return;
+      }
+
+      if (!escribiendo && event.key === 'ArrowRight') {
+        event.preventDefault();
+        navegarVisorPublicacion(1);
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+
+      const elementosEnfocables = Array.from(
+        visorPublicacionRef.current?.querySelectorAll(
+          'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])'
+        ) || []
+      ).filter(elemento => (
+        elemento instanceof HTMLElement &&
+        elemento.offsetParent !== null
+      ));
+
+      if (elementosEnfocables.length === 0) return;
+
+      const primero = elementosEnfocables[0];
+      const ultimo = elementosEnfocables[elementosEnfocables.length - 1];
+
+      if (event.shiftKey && document.activeElement === primero) {
+        event.preventDefault();
+        ultimo.focus();
+      } else if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault();
+        primero.focus();
+      }
+    };
+
+    document.addEventListener('keydown', manejarTecladoVisor);
+
+    return () => {
+      window.clearTimeout(temporizadorFoco);
+      document.removeEventListener('keydown', manejarTecladoVisor);
+      document.body.style.overflow = overflowAnterior;
+    };
+  }, [publicacionVisorSeleccionada, origenVisorPublicacion, publicacionesGuardadas, publicaciones]);
+
+  const publicacionesFiltradas = ordenarPublicacionesPerfil(publicaciones);
   const publicacionesHistoricas = publicacionesFiltradas.filter(post => post.tipo === 'historico');
   const fotosGaleria = publicacionesFiltradas.filter(post => Boolean(obtenerUrlMultimediaPublicacion(post.multimedia)));
+  const coleccionVisorPublicacion = origenVisorPublicacion === 'fotos'
+    ? fotosGaleria
+    : publicacionesGuardadas;
+  const origenMenuVisor = origenVisorPublicacion === 'guardados' ? 'guardados' : 'perfil';
+  const etiquetaOrigenVisor = origenVisorPublicacion === 'fotos' ? 'foto del perfil' : 'publicación guardada';
+
+  const publicacionVisor = publicacionVisorSeleccionada;
+  const publicacionVisorId = publicacionVisor?._id || publicacionVisor?.id || null;
+  const autorVisor = publicacionVisor?.autor || publicacionVisor?.usuario || {};
+  const autorVisorId = obtenerIdPersonaPerfil(autorVisor);
+  const nombreAutorVisor = obtenerNombreDeEntidad(autorVisor, 'Familiar');
+  const nicknameAutorVisor = obtenerNicknameDeEntidad(autorVisor);
+  const avatarFallbackVisor = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreAutorVisor)}&background=0D1B2A&color=fff`;
+  const avatarAutorVisor = obtenerUrlImagenUsuario(obtenerImagenDeEntidad(autorVisor)) || avatarFallbackVisor;
+  const esHistoricoVisor = publicacionVisor?.tipo === 'historico';
+  const arbolAudienciaVisor = obtenerArbolAudienciaDePublicacion(publicacionVisor || {});
+  const eventoVisor = obtenerEventoRelacionadoDePublicacion(publicacionVisor || {});
+  const contenidoVisor = obtenerTextoPublicacion(publicacionVisor || {});
+  const etiquetasVisor = Array.isArray(publicacionVisor?.etiquetasMultimedia)
+    ? publicacionVisor.etiquetasMultimedia
+    : [];
+  const personasRelacionadasVisor = Array.isArray(publicacionVisor?.personasRelacionadas)
+    ? publicacionVisor.personasRelacionadas
+    : [];
+  const comentariosVisor = publicacionVisorId && Array.isArray(comentariosPorPub[publicacionVisorId])
+    ? comentariosPorPub[publicacionVisorId]
+    : [];
+  const comentariosVisorCargados = Boolean(
+    publicacionVisorId &&
+    Object.prototype.hasOwnProperty.call(comentariosPorPub, publicacionVisorId)
+  );
+  const cantidadComentariosVisor = comentariosVisorCargados
+    ? comentariosVisor.length
+    : Number(publicacionVisor?.totalComentarios || 0);
+  const miIdVisor = usuarioLogueado?.id || usuarioLogueado?._id;
+  const esAutorVisor = Boolean(
+    autorVisorId &&
+    miIdVisor &&
+    String(autorVisorId) === String(miIdVisor)
+  );
+  const fechaContextoVisor = esHistoricoVisor
+    ? publicacionVisor?.fechaRecuerdo
+    : publicacionVisor?.fechaMomento;
+  const anioContextoVisor = fechaContextoVisor
+    ? formatearFechaContextoPublicacion(fechaContextoVisor)
+    : (publicacionVisor?.anio || '');
+  const indiceVisor = publicacionVisorId
+    ? coleccionVisorPublicacion.findIndex(
+      publicacion => String(publicacion._id || publicacion.id) === String(publicacionVisorId)
+    )
+    : -1;
+  const puedeIrPublicacionAnterior = indiceVisor > 0;
+  const puedeIrPublicacionSiguiente = indiceVisor >= 0 && indiceVisor < coleccionVisorPublicacion.length - 1;
+  const tieneMultimediaVisor = obtenerCantidadMultimediaPublicacion(publicacionVisor?.multimedia) > 0;
+
+  const visorPublicacionPortal = publicacionVisor && typeof document !== 'undefined'
+    ? createPortal(
+      <div
+        ref={visorPublicacionRef}
+        className="perfil-visor-guardados-backdrop"
+        role="presentation"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) cerrarVisorPublicacion();
+        }}
+      >
+        <button
+          ref={botonCerrarVisorPublicacionRef}
+          type="button"
+          className="perfil-visor-guardados-cerrar"
+          onClick={cerrarVisorPublicacion}
+          aria-label={`Cerrar ${etiquetaOrigenVisor}`}
+        >
+          <i className="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+
+        <section
+          className="perfil-visor-guardados"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Visor de ${etiquetaOrigenVisor} de ${nombreAutorVisor}`}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="perfil-visor-guardados-navegacion anterior"
+            onClick={() => navegarVisorPublicacion(-1)}
+            disabled={!puedeIrPublicacionAnterior}
+            aria-label="Ver publicación anterior"
+          >
+            <i className="bi bi-chevron-left" aria-hidden="true"></i>
+          </button>
+
+          <div className={`perfil-visor-guardados-media ${tieneMultimediaVisor ? '' : 'sin-multimedia'}`}>
+            {tieneMultimediaVisor ? (
+              <PublicacionMediaCarousel
+                multimedia={publicacionVisor.multimedia}
+                tipo={esHistoricoVisor ? 'historico' : 'familiar'}
+                alt={esHistoricoVisor ? 'Recuerdo histórico' : 'Momento familiar'}
+                ajuste="contain"
+                className="perfil-visor-guardados-carrusel"
+              />
+            ) : (
+              <div className={`perfil-visor-guardados-texto-visual ${esHistoricoVisor ? 'historico' : 'familiar'}`}>
+                <span className="perfil-visor-guardados-texto-icono">
+                  <i className={`bi ${esHistoricoVisor ? 'bi-journal-richtext' : 'bi-people-fill'}`} aria-hidden="true"></i>
+                </span>
+                <span className="perfil-visor-guardados-texto-tipo">
+                  {esHistoricoVisor ? 'Recuerdo Histórico' : 'Momento Familiar'}
+                </span>
+                <p>{crearResumenPublicacion(publicacionVisor, 260)}</p>
+              </div>
+            )}
+          </div>
+
+          <aside className="perfil-visor-guardados-detalle">
+            <div className="perfil-visor-guardados-cabecera">
+              <PublicacionHeader
+                nombre={nombreAutorVisor}
+                nombreUsuario={nicknameAutorVisor || nombreAutorVisor}
+                avatarUrl={avatarAutorVisor}
+                fecha={formatearFecha(publicacionVisor.createdAt)}
+                fechaISO={publicacionVisor.createdAt}
+                tipo={esHistoricoVisor ? 'historico' : 'familiar'}
+                privacidad={publicacionVisor.privacidad || (esHistoricoVisor ? 'publico' : 'familia')}
+                nombreFamilia={
+                  arbolAudienciaVisor?.nombreFamilia ||
+                  publicacionVisor.nombreFamiliaAudienciaSnapshot ||
+                  'Familia'
+                }
+                etiqueta={
+                  publicacionVisor.etiqueta?.nombre ||
+                  publicacionVisor.categoria ||
+                  publicacionVisor.etiquetaNombre ||
+                  ''
+                }
+                anio={anioContextoVisor}
+                ubicacion={
+                  publicacionVisor.ubicacionTexto ||
+                  publicacionVisor.ubicacion?.texto ||
+                  publicacionVisor.ubicacion?.direccion ||
+                  ''
+                }
+                onAutorClick={autorVisorId ? () => {
+                  cerrarVisorPublicacion();
+                  irAPerfil(autorVisor);
+                } : undefined}
+                opcionesMenu={crearOpcionesMenuPublicacion(publicacionVisor, esAutorVisor, origenMenuVisor)}
+                menuAriaLabel="Opciones de la publicación"
+              />
+            </div>
+
+            <div className="perfil-visor-guardados-contenido">
+              {!esHistoricoVisor && eventoVisor && (
+                <div className="perfil-visor-guardados-evento">
+                  {renderChipEventoPublicacion(eventoVisor)}
+                </div>
+              )}
+
+              {contenidoVisor && (
+                <div className="perfil-visor-guardados-texto">
+                  {renderTextoConMenciones(contenidoVisor, publicacionVisor.menciones)}
+                </div>
+              )}
+
+              {personasRelacionadasVisor.length > 0 && (
+                <div className="perfil-visor-guardados-contexto">
+                  <i className="bi bi-diagram-3-fill" aria-hidden="true"></i>
+                  <div>
+                    <strong>Personas relacionadas</strong>
+                    <span>
+                      {personasRelacionadasVisor
+                        .map(persona => (
+                          persona?.nombreSnapshot ||
+                          persona?.usuario?.nombreUsuario ||
+                          persona?.nodo?.nombre ||
+                          persona?.nombre
+                        ))
+                        .filter(Boolean)
+                        .join(', ')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {etiquetasVisor.length > 0 && (
+                <div className="perfil-visor-guardados-contexto">
+                  <i className="bi bi-person-bounding-box" aria-hidden="true"></i>
+                  <div>
+                    <strong>Personas etiquetadas</strong>
+                    <span>
+                      {etiquetasVisor
+                        .map(persona => (
+                          persona?.nombre ||
+                          persona?.usuario?.nombreUsuario ||
+                          persona?.nickname ||
+                          persona?.nombreUsuario ||
+                          persona
+                        ))
+                        .filter(Boolean)
+                        .join(', ')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <section className="perfil-visor-guardados-comentarios" aria-label="Comentarios de la publicación">
+                <div className="perfil-visor-guardados-comentarios-titulo">
+                  <h3>Comentarios</h3>
+                  <span>{cantidadComentariosVisor}</span>
+                </div>
+
+                {cargandoComentariosVisor && !comentariosVisorCargados ? (
+                  <div className="perfil-visor-guardados-comentarios-cargando" role="status">
+                    <span className="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    Cargando comentarios…
+                  </div>
+                ) : comentariosVisor.length > 0 ? (
+                  <div className="perfil-visor-guardados-comentarios-lista">
+                    {comentariosVisor.map(comentario => {
+                      const nombreComentario = comentario.autor?.nombreUsuario || 'Familiar';
+                      const avatarComentario = obtenerUrlImagenUsuario(comentario.autor?.imagenPerfil) ||
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreComentario)}&background=0D1B2A&color=fff`;
+
+                      return (
+                        <div key={comentario._id} className="perfil-visor-guardados-comentario">
+                          <img src={avatarComentario} alt="" />
+                          <div>
+                            <strong>{nombreComentario}</strong>
+                            <p>{comentario.texto}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="perfil-visor-guardados-comentarios-vacio">
+                    <i className="bi bi-chat-heart" aria-hidden="true"></i>
+                    <p>Sin comentarios aún. Puedes iniciar la conversación.</p>
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <div className="perfil-visor-guardados-pie">
+              <div className="perfil-visor-guardados-acciones">
+                <button
+                  type="button"
+                  className={usuarioHaReaccionado(publicacionVisor) ? 'activo-like' : ''}
+                  onClick={() => manejarLike(publicacionVisorId)}
+                  aria-label={usuarioHaReaccionado(publicacionVisor) ? 'Quitar reacción' : 'Dar reacción'}
+                  aria-pressed={usuarioHaReaccionado(publicacionVisor)}
+                >
+                  <i className={`bi ${usuarioHaReaccionado(publicacionVisor) ? 'bi-heart-fill' : 'bi-heart'}`} aria-hidden="true"></i>
+                  <span>{publicacionVisor.reacciones?.length || 0}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => inputComentarioVisorRef.current?.focus()}
+                  aria-label="Escribir un comentario"
+                >
+                  <i className="bi bi-chat" aria-hidden="true"></i>
+                  <span>{cantidadComentariosVisor}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={publicacionVisor.guardadaPorMi ? 'activo-guardado' : ''}
+                  onClick={() => manejarGuardarPublicacion(publicacionVisor)}
+                  aria-label={publicacionVisor.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación'}
+                  aria-pressed={Boolean(publicacionVisor.guardadaPorMi)}
+                >
+                  <i className={`bi ${publicacionVisor.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark'}`} aria-hidden="true"></i>
+                </button>
+              </div>
+
+              <form
+                className="perfil-visor-guardados-comentario-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  manejarEnviarComentario(publicacionVisorId);
+                }}
+              >
+                <input
+                  ref={inputComentarioVisorRef}
+                  type="text"
+                  value={nuevoComentarioTexto[publicacionVisorId] || ''}
+                  onChange={(event) => setNuevoComentarioTexto(prev => ({
+                    ...prev,
+                    [publicacionVisorId]: event.target.value
+                  }))}
+                  placeholder="Agrega un comentario…"
+                  aria-label="Comentario"
+                />
+                <button
+                  type="submit"
+                  disabled={!nuevoComentarioTexto[publicacionVisorId]?.trim()}
+                >
+                  Publicar
+                </button>
+              </form>
+            </div>
+          </aside>
+
+          <button
+            type="button"
+            className="perfil-visor-guardados-navegacion siguiente"
+            onClick={() => navegarVisorPublicacion(1)}
+            disabled={!puedeIrPublicacionSiguiente}
+            aria-label="Ver publicación siguiente"
+          >
+            <i className="bi bi-chevron-right" aria-hidden="true"></i>
+          </button>
+        </section>
+      </div>,
+      document.body
+    )
+    : null;
 
   if (cargando) {
     return (
@@ -1222,6 +2416,38 @@ export default function Perfil() {
         onCancelar={cerrarCropperPerfil}
         onConfirmar={confirmarCropperPerfil}
       />
+
+      {visorPublicacionPortal}
+
+      {avisoPreferenciaFeed && (
+        <div className="aviso-preferencia-feed" role="status" aria-live="polite">
+          <span className="aviso-preferencia-feed-icono" aria-hidden="true">
+            <i className="bi bi-check-circle-fill"></i>
+          </span>
+          <span className="aviso-preferencia-feed-mensaje">{avisoPreferenciaFeed.mensaje}</span>
+          {typeof avisoPreferenciaFeed.onDeshacer === 'function' && (
+            <button
+              type="button"
+              className="aviso-preferencia-feed-deshacer"
+              onClick={manejarDeshacerPreferenciaFeed}
+              disabled={Boolean(avisoPreferenciaFeed.procesando)}
+            >
+              {avisoPreferenciaFeed.procesando ? (
+                <><span className="spinner-border spinner-border-sm" aria-hidden="true"></span> Deshaciendo...</>
+              ) : 'Deshacer'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="aviso-preferencia-feed-cerrar"
+            onClick={cerrarAvisoPreferenciaFeed}
+            aria-label="Cerrar aviso"
+            disabled={Boolean(avisoPreferenciaFeed.procesando)}
+          >
+            <i className="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </div>
+      )}
 
       {/* =========================================
           MODAL DE EDICIÓN DE PERFIL (ESTILO X)
@@ -1582,6 +2808,15 @@ export default function Perfil() {
             <button type="button" className={`tab-perfil ${tabActiva === 'photos' ? 'activo' : ''}`} onClick={() => setTabActiva('photos')}>
               Fotos
             </button>
+            {esMiPerfil && (
+              <button
+                type="button"
+                className={`tab-perfil ${tabActiva === 'saved' ? 'activo' : ''}`}
+                onClick={() => setTabActiva('saved')}
+              >
+                Guardados{guardadosInicializados ? ` (${totalGuardados})` : ''}
+              </button>
+            )}
           </nav>
         </div>
       </section>
@@ -1614,6 +2849,10 @@ export default function Perfil() {
                 const eventoRelacionado = obtenerEventoRelacionadoDePublicacion(post);
                 const contenidoPost = post.contenido || post.texto || '';
                 const etiquetasMultimedia = Array.isArray(post.etiquetasMultimedia) ? post.etiquetasMultimedia : [];
+                const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+                const esAutor = Boolean(autorId && miId && String(autorId) === String(miId));
+                const fechaContexto = esHistorico ? post.fechaRecuerdo : post.fechaMomento;
+                const anioContexto = fechaContexto ? formatearFechaContextoPublicacion(fechaContexto) : (post.anio || '');
 
                 return (
                   <article
@@ -1632,11 +2871,18 @@ export default function Perfil() {
                           privacidad={post.privacidad || (esHistorico ? 'publico' : 'familia')}
                           nombreFamilia={arbolAudiencia?.nombreFamilia || post.nombreFamiliaAudienciaSnapshot || 'Familia'}
                           etiqueta={post.etiqueta?.nombre || post.categoria || post.etiquetaNombre || ''}
-                          anio={post.anio || ''}
+                          anio={anioContexto}
                           ubicacion={post.ubicacionTexto || post.ubicacion?.texto || post.ubicacion?.direccion || ''}
                           onAutorClick={autorId ? () => irAPerfil(autor) : undefined}
-                          onMenuClick={() => { }}
+                          opcionesMenu={crearOpcionesMenuPublicacion(post, esAutor)}
                         />
+
+                        {(post.fijadaEnPerfilAt || post.fijadaEnPerfil) && esAutor && (
+                          <div className="publicacion-indicador-fijada perfil-publicacion-indicador-fijada">
+                            <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>
+                            Publicación fijada
+                          </div>
+                        )}
                       </div>
 
                       {!esHistorico && eventoRelacionado && (
@@ -1689,8 +2935,15 @@ export default function Perfil() {
                           </button>
                         </div>
                         <div className="d-flex gap-3">
-                          <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Guardar recuerdo" aria-label="Guardar recuerdo">
-                            <i className="bi bi-bookmark"></i>
+                          <button
+                            className={`boton-interaccion border-0 bg-transparent p-0 ${post.guardadaPorMi ? 'activo-guardado' : ''}`}
+                            type="button"
+                            title={post.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación'}
+                            aria-label={post.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación'}
+                            aria-pressed={Boolean(post.guardadaPorMi)}
+                            onClick={() => manejarGuardarPublicacion(post)}
+                          >
+                            <i className={`bi ${post.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark'}`}></i>
                           </button>
                           <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Compartir" aria-label="Compartir">
                             <i className="bi bi-share"></i> {post.compartido || 0}
@@ -1822,8 +3075,19 @@ export default function Perfil() {
                     const esVideoGaleria = esVideoMultimediaPublicacion(post.multimedia);
                     const esCarrusel = Array.isArray(post.multimedia) && post.multimedia.filter(Boolean).length > 1;
 
+                    const postId = post._id || post.id;
+                    const autorFoto = post.autor || post.usuario || {};
+                    const nombreAutorFoto = obtenerNombreDeEntidad(autorFoto, 'Familiar');
+                    const tipoFoto = post.tipo === 'historico' ? 'Recuerdo Histórico' : 'Momento Familiar';
+
                     return (
-                      <div key={post._id} className="galeria-item">
+                      <button
+                        key={postId}
+                        type="button"
+                        className="galeria-item galeria-item-boton"
+                        onClick={(event) => abrirVisorPublicacion(post, 'fotos', event.currentTarget)}
+                        aria-label={`Abrir ${tipoFoto} de ${nombreAutorFoto}`}
+                      >
                         {esVideoGaleria ? (
                           <video
                             src={urlGaleria}
@@ -1834,8 +3098,9 @@ export default function Perfil() {
                         ) : (
                           <img
                             src={urlGaleria}
-                            alt="Galería"
+                            alt=""
                             className="galeria-img"
+                            loading="lazy"
                           />
                         )}
 
@@ -1847,15 +3112,15 @@ export default function Perfil() {
                           <i className="bi bi-play-circle-fill galeria-icono-multi" title="Video"></i>
                         )}
 
-                        <div className="galeria-overlay">
-                          <div className="galeria-estilos-texto">
+                        <span className="galeria-overlay" aria-hidden="true">
+                          <span className="galeria-estilos-texto">
                             <i className="bi bi-heart-fill"></i> {post.reacciones?.length || 0}
-                          </div>
-                          <div className="galeria-estilos-texto">
-                            <i className="bi bi-chat-fill"></i> {comentariosPorPub[post._id]?.length ?? 0}
-                          </div>
-                        </div>
-                      </div>
+                          </span>
+                          <span className="galeria-estilos-texto">
+                            <i className="bi bi-chat-fill"></i> {comentariosPorPub[postId]?.length ?? 0}
+                          </span>
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
@@ -1866,6 +3131,152 @@ export default function Perfil() {
                   <p>Sube imágenes adjuntas en tus posts para rellenar tu baúl de recuerdos visuales.</p>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* PESTAÑA 4: GUARDADOS (PRIVADA Y SOLO EN EL PERFIL PROPIO) */}
+        {tabActiva === 'saved' && esMiPerfil && (
+          <div className="col-12">
+            <div className="guardados-perfil-contenedor">
+              {cargandoGuardados && !guardadosInicializados ? (
+                <div className="guardados-perfil-estado" role="status">
+                  <span className="spinner-border" aria-hidden="true"></span>
+                  <h5>Cargando tus publicaciones guardadas</h5>
+                  <p>Estamos reuniendo los recuerdos y momentos que decidiste conservar.</p>
+                </div>
+              ) : errorGuardados && publicacionesGuardadas.length === 0 ? (
+                <div className="guardados-perfil-estado error">
+                  <i className="bi bi-cloud-slash" aria-hidden="true"></i>
+                  <h5>No se pudieron cargar tus Guardados</h5>
+                  <p>{errorGuardados}</p>
+                  <button
+                    type="button"
+                    onClick={() => cargarPublicacionesGuardadas({ pagina: 1, acumular: false })}
+                    disabled={cargandoGuardados}
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              ) : publicacionesGuardadas.length > 0 ? (
+                <>
+                  <div className="galeria-grid guardados-grid">
+                    {publicacionesGuardadas.map(post => {
+                      const postId = post._id || post.id;
+                      const urlGuardado = obtenerUrlMultimediaPublicacion(post.multimedia);
+                      const esVideoGuardado = esVideoMultimediaPublicacion(post.multimedia);
+                      const cantidadMultimedia = obtenerCantidadMultimediaPublicacion(post.multimedia);
+                      const esCarruselGuardado = cantidadMultimedia > 1;
+                      const esHistoricoGuardado = post.tipo === 'historico';
+                      const autorGuardado = post.autor || post.usuario || {};
+                      const nombreAutorGuardado = obtenerNombreDeEntidad(autorGuardado, 'Familiar');
+                      const totalComentariosGuardado = Object.prototype.hasOwnProperty.call(comentariosPorPub, postId)
+                        ? comentariosPorPub[postId].length
+                        : Number(post.totalComentarios || 0);
+
+                      return (
+                        <button
+                          key={postId}
+                          type="button"
+                          className={`galeria-item guardado-item ${urlGuardado ? 'con-multimedia' : 'sin-multimedia'}`}
+                          onClick={(event) => abrirVisorPublicacion(post, 'guardados', event.currentTarget)}
+                          aria-label={`Abrir publicación guardada de ${nombreAutorGuardado}`}
+                        >
+                          {urlGuardado ? (
+                            esVideoGuardado ? (
+                              <video
+                                src={urlGuardado}
+                                className="galeria-img"
+                                muted
+                                preload="metadata"
+                              />
+                            ) : (
+                              <img
+                                src={urlGuardado}
+                                alt=""
+                                className="galeria-img"
+                                loading="lazy"
+                              />
+                            )
+                          ) : (
+                            <span className={`guardado-item-texto ${esHistoricoGuardado ? 'historico' : 'familiar'}`}>
+                              <span className="guardado-item-texto-icono">
+                                <i className={`bi ${esHistoricoGuardado ? 'bi-journal-richtext' : 'bi-people-fill'}`} aria-hidden="true"></i>
+                              </span>
+                              <strong>{esHistoricoGuardado ? 'Recuerdo Histórico' : 'Momento Familiar'}</strong>
+                              <span>{crearResumenPublicacion(post, 105)}</span>
+                              <small>{nombreAutorGuardado}</small>
+                            </span>
+                          )}
+
+                          {esCarruselGuardado && (
+                            <i className="bi bi-images galeria-icono-multi" title={`${cantidadMultimedia} archivos`}></i>
+                          )}
+
+                          {esVideoGuardado && !esCarruselGuardado && (
+                            <i className="bi bi-play-circle-fill galeria-icono-multi" title="Video"></i>
+                          )}
+
+                          <span className="guardado-item-marcador" aria-hidden="true">
+                            <i className="bi bi-bookmark-fill"></i>
+                          </span>
+
+                          <span className="galeria-overlay guardado-item-overlay">
+                            <span className="guardado-item-autor">{nombreAutorGuardado}</span>
+                            <span className="guardado-item-metricas">
+                              <span className="galeria-estilos-texto">
+                                <i className="bi bi-heart-fill" aria-hidden="true"></i>
+                                {post.reacciones?.length || 0}
+                              </span>
+                              <span className="galeria-estilos-texto">
+                                <i className="bi bi-chat-fill" aria-hidden="true"></i>
+                                {totalComentariosGuardado}
+                              </span>
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {errorGuardados && (
+                    <div className="guardados-perfil-error-secundario" role="alert">
+                      <i className="bi bi-exclamation-circle" aria-hidden="true"></i>
+                      <span>{errorGuardados}</span>
+                    </div>
+                  )}
+
+                  {hayMasGuardados && (
+                    <div className="guardados-perfil-cargar-mas">
+                      <button
+                        type="button"
+                        onClick={cargarMasGuardados}
+                        disabled={cargandoGuardados}
+                      >
+                        {cargandoGuardados ? (
+                          <>
+                            <span className="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                            Cargando…
+                          </>
+                        ) : (
+                          <>
+                            <i className="bi bi-plus-circle" aria-hidden="true"></i>
+                            Cargar más
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : guardadosInicializados ? (
+                <div className="guardados-perfil-estado vacio">
+                  <span className="guardados-perfil-estado-icono">
+                    <i className="bi bi-bookmark-heart" aria-hidden="true"></i>
+                  </span>
+                  <h5>Todavía no tienes publicaciones guardadas</h5>
+                  <p>Usa el marcador de un Recuerdo Histórico o Momento Familiar para encontrarlo aquí más tarde.</p>
+                </div>
+              ) : null}
             </div>
           </div>
         )}

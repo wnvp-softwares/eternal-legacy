@@ -1,5 +1,29 @@
 const mongoose = require('mongoose');
 
+
+const autorPausadoFeedSchema = new mongoose.Schema({
+    autor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        required: true
+    },
+    hasta: {
+        type: Date,
+        required: true
+    }
+}, { _id: false });
+
+const preferenciasFeedSchema = new mongoose.Schema({
+    publicacionesOcultas: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Publicacion'
+    }],
+    autoresPausados: {
+        type: [autorPausadoFeedSchema],
+        default: []
+    }
+}, { _id: false });
+
 const usuarioSchema = new mongoose.Schema({
     nombreUsuario: {
         type: String,
@@ -96,6 +120,16 @@ const usuarioSchema = new mongoose.Schema({
     e2eConfigUpdatedAt: {
         type: Date,
         default: null
+    }
+,
+
+    // Preferencias privadas que solo afectan el contenido mostrado en Inicio.
+    preferenciasFeed: {
+        type: preferenciasFeedSchema,
+        default: () => ({
+            publicacionesOcultas: [],
+            autoresPausados: []
+        })
     }
 }, { timestamps: true });
 

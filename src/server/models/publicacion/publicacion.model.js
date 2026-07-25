@@ -125,6 +125,12 @@ const publicacionSchema = new mongoose.Schema({
         default: ''
     },
 
+    // Fecha en la que ocurrió el Recuerdo Histórico. createdAt conserva la fecha real de publicación.
+    fechaRecuerdo: {
+        type: Date,
+        default: null
+    },
+
     // Fecha en la que ocurrió el Momento Familiar. Si queda vacía se usa createdAt.
     fechaMomento: {
         type: Date,
@@ -162,7 +168,19 @@ const publicacionSchema = new mongoose.Schema({
     compartido: {
         type: Number,
         default: 0
-    }
+    },
+
+    // Solo puede existir una publicación fijada por autor.
+    fijadaEnPerfilAt: {
+        type: Date,
+        default: null
+    },
+
+    // Preferencia privada de cada usuario; nunca se expone la lista completa al cliente.
+    guardadaPor: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario'
+    }]
 }, { timestamps: true });
 
 publicacionSchema.pre('validate', function () {
@@ -177,10 +195,24 @@ publicacionSchema.pre('validate', function () {
         this.fechaMomento = null;
         this.personasRelacionadas = [];
     }
+
+    if (this.tipo === 'familiar') {
+        this.fechaRecuerdo = null;
+    }
 });
 
 publicacionSchema.index({ autor: 1, createdAt: -1 });
+publicacionSchema.index(
+    { autor: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { fijadaEnPerfilAt: { $type: 'date' } },
+        name: 'una_publicacion_fijada_por_autor'
+    }
+);
+publicacionSchema.index({ guardadaPor: 1, createdAt: -1 });
 publicacionSchema.index({ tipo: 1, createdAt: -1 });
+publicacionSchema.index({ tipo: 1, fechaRecuerdo: -1, createdAt: -1 });
 publicacionSchema.index({ privacidad: 1, createdAt: -1 });
 publicacionSchema.index({ arbolAudiencia: 1, createdAt: -1 });
 publicacionSchema.index({ 'eventoRelacionado.evento': 1, createdAt: -1 });

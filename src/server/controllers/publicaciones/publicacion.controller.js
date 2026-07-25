@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
 const { Publicacion, Upload, Usuario, Arbol } = require('../../models/index.model');
 const Nodo = require('../../models/arboles/nodo.model');
 const Comentario = require('../../models/publicacion/comentario.model');
@@ -86,6 +88,114 @@ const limpiarCargaFallida = async ({ archivos = [], idsUploads = [] } = {}) => {
             ? Upload.deleteMany({ _id: { $in: idsUploads } })
             : Promise.resolve()
     ]);
+};
+
+
+const DIRECTORIO_UPLOADS_LOCAL = path.resolve(__dirname, '../../../uploads');
+
+const obtenerPublicIdDesdeUrl = (url = '') => {
+    const valor = String(url || '').trim();
+    if (!valor || !valor.includes('/upload/')) return '';
+
+    try {
+        const pathname = new URL(valor).pathname;
+        const despuesUpload = pathname.split('/upload/')[1] || '';
+        const sinVersion = despuesUpload.replace(/^(?:[^/]+\/)*v\d+\//, '');
+        return decodeURIComponent(sinVersion).replace(/\.[^/.]+$/, '').replace(/^\/+|\/+$/g, '');
+    } catch (error) {
+        const despuesUpload = valor.split('/upload/')[1] || '';
+        const sinQuery = despuesUpload.split('?')[0];
+        const sinVersion = sinQuery.replace(/^(?:[^/]+\/)*v\d+\//, '');
+        return sinVersion.replace(/\.[^/.]+$/, '').replace(/^\/+|\/+$/g, '');
+    }
+};
+
+const obtenerResourceTypeUpload = (upload = {}) => {
+    if (['image', 'video', 'raw'].includes(upload.resourceType)) return upload.resourceType;
+    return String(upload.formato || '').startsWith('video/') ? 'video' : 'image';
+};
+
+const eliminarArchivoLocalUpload = async (upload = {}) => {
+    const url = String(upload.urlArchivo || '').replace(/\\/g, '/');
+    const indiceUploads = url.lastIndexOf('/uploads/');
+    if (indiceUploads < 0) return false;
+
+    let rutaRelativa = url.slice(indiceUploads + '/uploads/'.length).split('?')[0];
+    try {
+        rutaRelativa = decodeURIComponent(rutaRelativa);
+    } catch (error) {
+        // Se conserva el valor original cuando la URL no está codificada correctamente.
+    }
+
+    const rutaFinal = path.resolve(DIRECTORIO_UPLOADS_LOCAL, rutaRelativa);
+    const prefijoSeguro = `${DIRECTORIO_UPLOADS_LOCAL}${path.sep}`;
+
+    if (rutaFinal !== DIRECTORIO_UPLOADS_LOCAL && !rutaFinal.startsWith(prefijoSeguro)) {
+        console.error('❌ Se rechazó una ruta de archivo local fuera de src/uploads:', rutaFinal);
+        return false;
+    }
+
+    try {
+        await fs.promises.unlink(rutaFinal);
+        return true;
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.error('❌ No se pudo eliminar un archivo local de publicación:', error);
+        }
+        return false;
+    }
+};
+
+const eliminarRecursoPersistenteUpload = async (upload = {}) => {
+    const publicId = String(upload.publicId || obtenerPublicIdDesdeUrl(upload.urlArchivo) || '').trim();
+
+    if (publicId) {
+        try {
+            await cloudinary.uploader.destroy(publicId, {
+                resource_type: obtenerResourceTypeUpload(upload),
+                invalidate: true
+            });
+            return;
+        } catch (error) {
+            console.error('❌ No se pudo eliminar un recurso persistente de Cloudinary:', error);
+        }
+    }
+
+    await eliminarArchivoLocalUpload(upload);
+};
+
+const limpiarUploadsRetirados = async ({ uploads = [], publicacionExcluidaId = null } = {}) => {
+    for (const upload of uploads.filter(Boolean)) {
+        const uploadId = obtenerIdSeguro(upload);
+        if (!uploadId) continue;
+
+        const filtroReferencia = {
+            multimedia: uploadId,
+            ...(publicacionExcluidaId ? { _id: { $ne: publicacionExcluidaId } } : {})
+        };
+
+        const sigueReferenciado = await Publicacion.exists(filtroReferencia);
+        if (sigueReferenciado) continue;
+
+        await Promise.allSettled([
+            eliminarRecursoPersistenteUpload(upload),
+            Upload.deleteOne({ _id: uploadId })
+        ]);
+    }
+};
+
+const crearUploadDesdeArchivo = async ({ archivo, propietario }) => {
+    const resourceType = obtenerResourceTypeCloudinary(archivo);
+    const nuevoUpload = new Upload({
+        propietario,
+        urlArchivo: archivo.path,
+        formato: archivo.mimetype,
+        pesoBytes: Number(archivo.size) || 0,
+        publicId: archivo.filename || archivo.public_id || '',
+        resourceType
+    });
+
+    return nuevoUpload.save();
 };
 
 const validarCombinacionMultimedia = (archivos = []) => {
@@ -189,6 +299,8 @@ const normalizarFechaMomento = (valor) => {
     if (Number.isNaN(fecha.getTime())) return undefined;
     return fecha;
 };
+
+const normalizarFechaRecuerdo = normalizarFechaMomento;
 
 const obtenerIdsNodosRelacionados = (valor) => {
     const lista = parseJSONSeguro(valor, []);
@@ -321,6 +433,77 @@ const construirFiltroVisibilidadPublicaciones = async (usuarioId) => {
     };
 };
 
+
+const crearContextoPreferenciasFeedVacio = () => ({
+    publicacionesOcultas: new Set(),
+    autoresPausados: new Map()
+});
+
+const obtenerContextoPreferenciasFeed = async (usuarioId, { limpiarExpiradas = false } = {}) => {
+    if (!usuarioId || !esObjectIdValido(usuarioId)) {
+        return crearContextoPreferenciasFeedVacio();
+    }
+
+    const usuario = await Usuario.findById(usuarioId).select('preferenciasFeed');
+    if (!usuario) return crearContextoPreferenciasFeedVacio();
+
+    const ahora = new Date();
+    const publicacionesOcultas = new Set(
+        (Array.isArray(usuario.preferenciasFeed?.publicacionesOcultas)
+            ? usuario.preferenciasFeed.publicacionesOcultas
+            : [])
+            .map(obtenerIdSeguro)
+            .filter(Boolean)
+            .map(String)
+    );
+
+    const autoresPausados = new Map();
+    const pausasExpiradas = [];
+
+    for (const pausa of (Array.isArray(usuario.preferenciasFeed?.autoresPausados)
+        ? usuario.preferenciasFeed.autoresPausados
+        : [])) {
+        const autorId = obtenerIdSeguro(pausa?.autor);
+        const hasta = pausa?.hasta ? new Date(pausa.hasta) : null;
+
+        if (!autorId || !hasta || Number.isNaN(hasta.getTime()) || hasta.getTime() <= ahora.getTime()) {
+            if (hasta && !Number.isNaN(hasta.getTime()) && hasta.getTime() <= ahora.getTime()) {
+                pausasExpiradas.push(autorId);
+            }
+            continue;
+        }
+
+        autoresPausados.set(String(autorId), hasta);
+    }
+
+    if (limpiarExpiradas && pausasExpiradas.length > 0) {
+        await Usuario.updateOne(
+            { _id: usuarioId },
+            { $pull: { 'preferenciasFeed.autoresPausados': { hasta: { $lte: ahora } } } }
+        ).catch(error => {
+            console.error('⚠️ No se pudieron limpiar pausas vencidas del Inicio:', error);
+        });
+    }
+
+    return { publicacionesOcultas, autoresPausados };
+};
+
+const construirFiltroMuroConPreferencias = (filtroVisibilidad, contextoPreferencias) => {
+    const condiciones = [filtroVisibilidad];
+    const idsOcultos = Array.from(contextoPreferencias?.publicacionesOcultas || []);
+    const idsAutoresPausados = Array.from(contextoPreferencias?.autoresPausados?.keys?.() || []);
+
+    if (idsOcultos.length > 0) {
+        condiciones.push({ _id: { $nin: idsOcultos } });
+    }
+
+    if (idsAutoresPausados.length > 0) {
+        condiciones.push({ autor: { $nin: idsAutoresPausados } });
+    }
+
+    return condiciones.length === 1 ? filtroVisibilidad : { $and: condiciones };
+};
+
 const obtenerArbolAudienciaValido = async ({ usuarioId, arbolAudienciaId, eventoRelacionado }) => {
     let arbolId = arbolAudienciaId || null;
 
@@ -383,6 +566,12 @@ const construirEventoRelacionado = async ({ eventoRelacionadoId, eventoRelaciona
     if (esObjectIdValido(idDesdeBody)) {
         eventoBD = await EventoFamiliar.findById(idDesdeBody)
             .populate('arbol', 'nombreFamilia nombre titulo');
+
+        if (!eventoBD) {
+            const error = new Error('El evento familiar seleccionado no existe o ya no está disponible.');
+            error.status = 404;
+            throw error;
+        }
     }
 
     const eventoFinal = eventoBD || eventoPayload || {};
@@ -434,6 +623,20 @@ const construirEventoRelacionado = async ({ eventoRelacionadoId, eventoRelaciona
     };
 };
 
+
+const validarEventoCompatibleConArbol = ({ eventoRelacionado, arbol }) => {
+    if (!eventoRelacionado) return;
+
+    const arbolEventoId = obtenerIdSeguro(eventoRelacionado.arbol);
+    const arbolAudienciaId = obtenerIdSeguro(arbol);
+
+    if (!arbolEventoId || !arbolAudienciaId || !sonMismoId(arbolEventoId, arbolAudienciaId)) {
+        const error = new Error('El evento relacionado no pertenece al árbol seleccionado.');
+        error.status = 400;
+        throw error;
+    }
+};
+
 const poblarPublicacion = async (publicacionId) => {
     return Publicacion.findById(publicacionId)
         .populate({
@@ -472,6 +675,66 @@ const poblarConsultaPublicaciones = (consulta) => {
         .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
 };
 
+
+const serializarPublicacionParaUsuario = (publicacion, usuarioId, contextoPreferencias = null) => {
+    if (!publicacion) return null;
+
+    const objeto = typeof publicacion.toObject === 'function'
+        ? publicacion.toObject()
+        : { ...publicacion };
+
+    const guardadaPor = Array.isArray(objeto.guardadaPor) ? objeto.guardadaPor : [];
+    const guardadaPorMi = guardadaPor.some(idUsuario => sonMismoId(idUsuario, usuarioId));
+    const publicacionId = obtenerIdSeguro(objeto);
+    const autorId = obtenerIdSeguro(objeto.autor);
+    const pausaAutor = autorId
+        ? contextoPreferencias?.autoresPausados?.get(String(autorId)) || null
+        : null;
+
+    delete objeto.guardadaPor;
+
+    return {
+        ...objeto,
+        guardadaPorMi,
+        fijadaEnPerfil: Boolean(objeto.fijadaEnPerfilAt),
+        ocultaDeMiInicio: Boolean(
+            publicacionId && contextoPreferencias?.publicacionesOcultas?.has(String(publicacionId))
+        ),
+        autorPausadoEnInicio: Boolean(pausaAutor),
+        autorPausadoHasta: pausaAutor || null
+    };
+};
+
+const serializarListaPublicaciones = (publicaciones = [], usuarioId, contextoPreferencias = null) => (
+    publicaciones
+        .map(publicacion => serializarPublicacionParaUsuario(publicacion, usuarioId, contextoPreferencias))
+        .filter(Boolean)
+);
+
+const obtenerPublicacionVisiblePorId = async ({ publicacionId, usuarioId }) => {
+    if (!esObjectIdValido(publicacionId)) return null;
+
+    const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(usuarioId);
+    const publicacion = await poblarConsultaPublicaciones(
+        Publicacion.findOne({
+            $and: [
+                { _id: publicacionId },
+                filtroVisibilidad
+            ]
+        })
+    );
+
+    return publicacion;
+};
+
+const asegurarAutorPublicacion = (publicacion, usuarioId) => {
+    if (!publicacion || !sonMismoId(publicacion.autor, usuarioId)) {
+        const error = new Error('Solo el autor puede administrar esta publicación.');
+        error.status = 403;
+        throw error;
+    }
+};
+
 // CREAR PUBLICACIÓN CON HASTA 5 ARCHIVOS MULTIMEDIA
 const crearPublicacion = async (req, res) => {
     const archivosSubidos = obtenerArchivosSubidos(req);
@@ -488,6 +751,7 @@ const crearPublicacion = async (req, res) => {
             eventoRelacionadoId,
             eventoRelacionado,
             arbolAudienciaId,
+            fechaRecuerdo,
             fechaMomento,
             personasRelacionadas
         } = req.body || {};
@@ -546,6 +810,17 @@ const crearPublicacion = async (req, res) => {
             arbolAudiencia = resultadoArbol.arbol;
         }
 
+        const fechaRecuerdoNormalizada = tipoSeguro === 'historico'
+            ? normalizarFechaRecuerdo(fechaRecuerdo)
+            : null;
+
+        if (fechaRecuerdoNormalizada === undefined) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({
+                mensaje: 'La fecha del recuerdo no es válida.'
+            });
+        }
+
         const fechaMomentoNormalizada = tipoSeguro === 'familiar'
             ? normalizarFechaMomento(fechaMomento)
             : null;
@@ -566,14 +841,10 @@ const crearPublicacion = async (req, res) => {
         }
 
         for (const archivo of archivosSubidos) {
-            const nuevoUpload = new Upload({
-                propietario: req.usuario.id,
-                urlArchivo: archivo.path,
-                formato: archivo.mimetype,
-                pesoBytes: Number(archivo.size) || 0
+            const uploadGuardado = await crearUploadDesdeArchivo({
+                archivo,
+                propietario: req.usuario.id
             });
-
-            const uploadGuardado = await nuevoUpload.save();
             idsMultimedia.push(uploadGuardado._id);
         }
 
@@ -581,6 +852,13 @@ const crearPublicacion = async (req, res) => {
             eventoRelacionadoId,
             eventoRelacionado
         });
+
+        if (tipoSeguro === 'familiar' && eventoNormalizado) {
+            validarEventoCompatibleConArbol({
+                eventoRelacionado: eventoNormalizado,
+                arbol: arbolAudiencia
+            });
+        }
 
         const [mencionesNormalizadas, etiquetasMultimediaNormalizadas] = await Promise.all([
             construirListaPersonas(menciones, { incluirHandle: true }),
@@ -594,6 +872,7 @@ const crearPublicacion = async (req, res) => {
             arbolAudiencia: arbolAudiencia?._id || null,
             nombreFamiliaAudienciaSnapshot: arbolAudiencia ? obtenerNombreFamiliaDesdeArbol(arbolAudiencia) : '',
             contenido: contenidoLimpio,
+            fechaRecuerdo: fechaRecuerdoNormalizada || null,
             fechaMomento: fechaMomentoNormalizada || null,
             multimedia: idsMultimedia,
             ubicacionTexto: ubicacionTexto || '',
@@ -618,7 +897,7 @@ const crearPublicacion = async (req, res) => {
 
         return res.status(201).json({
             mensaje: 'Publicación creada con éxito',
-            publicacion: publicacionCompleta
+            publicacion: serializarPublicacionParaUsuario(publicacionCompleta, req.usuario.id)
         });
     } catch (error) {
         console.error('❌ Error al crear publicación:', error);
@@ -639,17 +918,115 @@ const crearPublicacion = async (req, res) => {
 // OBTENER LAS PUBLICACIONES DEL MURO
 const obtenerPublicaciones = async (req, res) => {
     try {
-        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(req.usuario.id);
+        const usuarioId = req.usuario.id || req.usuario._id;
+        const [filtroVisibilidad, contextoPreferencias] = await Promise.all([
+            construirFiltroVisibilidadPublicaciones(usuarioId),
+            obtenerContextoPreferenciasFeed(usuarioId, { limpiarExpiradas: true })
+        ]);
+        const filtroMuro = construirFiltroMuroConPreferencias(filtroVisibilidad, contextoPreferencias);
 
         const publicaciones = await poblarConsultaPublicaciones(
-            Publicacion.find(filtroVisibilidad).sort({ createdAt: -1 })
+            Publicacion.find(filtroMuro).sort({ createdAt: -1 })
         );
 
-        res.status(200).json(publicaciones);
+        res.status(200).json(
+            serializarListaPublicaciones(publicaciones, usuarioId, contextoPreferencias)
+        );
     } catch (error) {
         console.error('❌ Error al obtener publicaciones:', error);
         res.status(500).json({
             mensaje: 'Error al obtener las publicaciones del servidor.'
+        });
+    }
+};
+
+
+// OBTENER LA COLECCIÓN PRIVADA DE PUBLICACIONES GUARDADAS DEL USUARIO
+const obtenerPublicacionesGuardadas = async (req, res) => {
+    try {
+        const usuarioId = req.usuario.id || req.usuario._id;
+        const paginaSolicitada = Number.parseInt(req.query.page, 10);
+        const limiteSolicitado = Number.parseInt(req.query.limit, 10);
+        const pagina = Number.isInteger(paginaSolicitada) && paginaSolicitada > 0
+            ? paginaSolicitada
+            : 1;
+        const limite = Math.min(
+            48,
+            Number.isInteger(limiteSolicitado) && limiteSolicitado > 0
+                ? limiteSolicitado
+                : 24
+        );
+        const salto = (pagina - 1) * limite;
+
+        const [filtroVisibilidad, contextoPreferencias] = await Promise.all([
+            construirFiltroVisibilidadPublicaciones(usuarioId),
+            obtenerContextoPreferenciasFeed(usuarioId, { limpiarExpiradas: true })
+        ]);
+
+        const filtroGuardadas = {
+            $and: [
+                filtroVisibilidad,
+                { guardadaPor: usuarioId }
+            ]
+        };
+
+        const [total, publicaciones] = await Promise.all([
+            Publicacion.countDocuments(filtroGuardadas),
+            poblarConsultaPublicaciones(
+                Publicacion.find(filtroGuardadas)
+                    .sort({ createdAt: -1 })
+                    .skip(salto)
+                    .limit(limite)
+            )
+        ]);
+
+        const idsPublicaciones = publicaciones
+            .map(publicacion => publicacion?._id)
+            .filter(Boolean);
+
+        const conteosComentarios = idsPublicaciones.length > 0
+            ? await Comentario.aggregate([
+                {
+                    $match: {
+                        publicacionPadre: { $in: idsPublicaciones }
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$publicacionPadre',
+                        total: { $sum: 1 }
+                    }
+                }
+            ])
+            : [];
+
+        const comentariosPorPublicacion = new Map(
+            conteosComentarios.map(item => [String(item._id), Number(item.total) || 0])
+        );
+
+        const publicacionesSerializadas = serializarListaPublicaciones(
+            publicaciones,
+            usuarioId,
+            contextoPreferencias
+        ).map(publicacion => ({
+            ...publicacion,
+            totalComentarios: comentariosPorPublicacion.get(String(publicacion._id)) || 0
+        }));
+
+        const totalPaginas = total > 0 ? Math.ceil(total / limite) : 0;
+
+        return res.status(200).json({
+            publicaciones: publicacionesSerializadas,
+            total,
+            pagina,
+            limite,
+            totalPaginas,
+            hayMas: pagina * limite < total
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener publicaciones guardadas:', error);
+        return res.status(500).json({
+            mensaje: 'No se pudieron obtener tus publicaciones guardadas.'
         });
     }
 };
@@ -672,17 +1049,23 @@ const obtenerPublicacionesPorUsuario = async (req, res) => {
             });
         }
 
-        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(req.usuario.id);
+        const usuarioSolicitanteId = req.usuario.id || req.usuario._id;
+        const [filtroVisibilidad, contextoPreferencias] = await Promise.all([
+            construirFiltroVisibilidadPublicaciones(usuarioSolicitanteId),
+            obtenerContextoPreferenciasFeed(usuarioSolicitanteId, { limpiarExpiradas: true })
+        ]);
         const publicaciones = await poblarConsultaPublicaciones(
             Publicacion.find({
                 $and: [
                     filtroVisibilidad,
                     { autor: usuarioId }
                 ]
-            }).sort({ createdAt: -1 })
+            }).sort({ fijadaEnPerfilAt: -1, createdAt: -1 })
         );
 
-        return res.status(200).json(publicaciones);
+        return res.status(200).json(
+            serializarListaPublicaciones(publicaciones, usuarioSolicitanteId, contextoPreferencias)
+        );
     } catch (error) {
         console.error('❌ Error al obtener publicaciones del perfil:', error);
         return res.status(500).json({
@@ -712,7 +1095,11 @@ const buscarTodo = async (req, res) => {
         const escaparRegex = (valor) => valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regexDirecto = new RegExp(escaparRegex(querySinArroba), 'i');
         const regexNombre = new RegExp(escaparRegex(queryComoNombre), 'i');
-        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(req.usuario.id);
+        const usuarioId = req.usuario.id || req.usuario._id;
+        const [filtroVisibilidad, contextoPreferencias] = await Promise.all([
+            construirFiltroVisibilidadPublicaciones(usuarioId),
+            obtenerContextoPreferenciasFeed(usuarioId, { limpiarExpiradas: true })
+        ]);
 
         const [personasEncontradas, publicaciones] = await Promise.all([
             Usuario.find({
@@ -775,7 +1162,7 @@ const buscarTodo = async (req, res) => {
 
         res.status(200).json({
             personas,
-            publicaciones
+            publicaciones: serializarListaPublicaciones(publicaciones, usuarioId, contextoPreferencias)
         });
     } catch (error) {
         console.error('❌ Error al buscar publicaciones/personas:', error);
@@ -822,7 +1209,7 @@ const obtenerPublicacionesPorEvento = async (req, res) => {
                 totalPublicaciones: publicaciones.length,
                 totalMultimedia
             },
-            publicaciones
+            publicaciones: serializarListaPublicaciones(publicaciones, req.usuario.id)
         });
     } catch (error) {
         console.error('❌ Error al obtener publicaciones por evento:', error);
@@ -921,7 +1308,7 @@ const obtenerMomentosFamiliaresPorNodo = async (req, res) => {
         const mapaConteos = new Map(conteos.map(item => [String(item._id), item.total]));
 
         const respuesta = publicacionesConFotos.map(publicacion => ({
-            ...publicacion,
+            ...serializarPublicacionParaUsuario(publicacion, req.usuario.id),
             totalComentarios: mapaConteos.get(String(publicacion._id)) || 0
         }));
 
@@ -939,6 +1326,568 @@ const obtenerMomentosFamiliaresPorNodo = async (req, res) => {
         console.error('❌ Error al obtener Momentos Familiares del nodo:', error);
         return res.status(error.status || 500).json({
             mensaje: error.message || 'Error interno al obtener los Momentos Familiares.'
+        });
+    }
+};
+
+
+// OBTENER UNA PUBLICACIÓN VISIBLE POR ID
+const obtenerPublicacionPorId = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await obtenerPublicacionVisiblePorId({
+            publicacionId: id,
+            usuarioId: req.usuario.id
+        });
+
+        if (!publicacion) {
+            return res.status(404).json({ mensaje: 'Publicación no encontrada o sin permiso para verla.' });
+        }
+
+        return res.status(200).json({
+            publicacion: serializarPublicacionParaUsuario(publicacion, req.usuario.id)
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener una publicación:', error);
+        return res.status(500).json({ mensaje: 'Error interno al obtener la publicación.' });
+    }
+};
+
+const tieneCampo = (objeto, campo) => Object.prototype.hasOwnProperty.call(objeto || {}, campo);
+
+// EDITAR PUBLICACIÓN Y SU MULTIMEDIA
+const editarPublicacion = async (req, res) => {
+    const archivosSubidos = obtenerArchivosSubidos(req);
+    const idsUploadsNuevos = [];
+    let edicionGuardada = false;
+
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+        const body = req.body || {};
+
+        if (!esObjectIdValido(id)) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await Publicacion.findById(id).populate('multimedia');
+        if (!publicacion) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(404).json({ mensaje: 'La publicación no existe.' });
+        }
+
+        asegurarAutorPublicacion(publicacion, usuarioId);
+
+        const tipoSeguro = publicacion.tipo === 'familiar' ? 'familiar' : 'historico';
+        const uploadsOriginales = (Array.isArray(publicacion.multimedia) ? publicacion.multimedia : []).filter(Boolean);
+        const mapaUploadsOriginales = new Map(
+            uploadsOriginales.map(upload => [String(obtenerIdSeguro(upload)), upload])
+        );
+
+        let idsMultimediaConservada = uploadsOriginales.map(upload => String(obtenerIdSeguro(upload))).filter(Boolean);
+        if (tieneCampo(body, 'multimediaExistenteIds')) {
+            const solicitados = parseJSONSeguro(body.multimediaExistenteIds, []);
+            if (!Array.isArray(solicitados)) {
+                await limpiarCargaFallida({ archivos: archivosSubidos });
+                return res.status(400).json({ mensaje: 'La lista de multimedia existente no es válida.' });
+            }
+
+            idsMultimediaConservada = Array.from(new Set(solicitados.map(obtenerIdSeguro).filter(Boolean).map(String)));
+            const contieneIdAjeno = idsMultimediaConservada.some(uploadId => !mapaUploadsOriginales.has(uploadId));
+            if (contieneIdAjeno) {
+                await limpiarCargaFallida({ archivos: archivosSubidos });
+                return res.status(400).json({ mensaje: 'Uno de los archivos indicados no pertenece a esta publicación.' });
+            }
+        }
+
+        const uploadsConservados = idsMultimediaConservada.map(uploadId => mapaUploadsOriginales.get(uploadId)).filter(Boolean);
+        const totalMultimediaFinal = uploadsConservados.length + archivosSubidos.length;
+
+        if (totalMultimediaFinal > MAX_PUBLICATION_MEDIA_FILES) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({
+                mensaje: `Solo puedes conservar hasta ${MAX_PUBLICATION_MEDIA_FILES} archivos por publicación.`
+            });
+        }
+
+        const pesoTotal = uploadsConservados.reduce(
+            (total, upload) => total + (Number(upload.pesoBytes) || 0),
+            archivosSubidos.reduce((total, archivo) => total + (Number(archivo?.size) || 0), 0)
+        );
+
+        if (pesoTotal > MAX_PUBLICATION_TOTAL_SIZE_BYTES) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(413).json({
+                mensaje: `El conjunto de archivos supera el límite de ${MAX_UPLOAD_SIZE_MB} MB.`
+            });
+        }
+
+        const archivosCombinados = [
+            ...uploadsConservados.map(upload => ({ mimetype: upload.formato })),
+            ...archivosSubidos
+        ];
+        const errorCombinacion = validarCombinacionMultimedia(archivosCombinados);
+        if (errorCombinacion) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({ mensaje: errorCombinacion });
+        }
+
+        const contenidoFinal = tieneCampo(body, 'contenido')
+            ? String(body.contenido || '').trim()
+            : String(publicacion.contenido || '').trim();
+
+        if (!contenidoFinal && totalMultimediaFinal === 0) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({
+                mensaje: 'La publicación debe conservar texto o al menos un archivo multimedia.'
+            });
+        }
+
+        let arbolAudiencia = null;
+        let arbolCambio = false;
+        let eventoFinal = publicacion.eventoRelacionado || null;
+
+        if (tipoSeguro === 'familiar') {
+            const arbolSolicitado = tieneCampo(body, 'arbolAudienciaId')
+                ? body.arbolAudienciaId
+                : obtenerIdSeguro(publicacion.arbolAudiencia);
+
+            const resultadoArbol = await obtenerArbolAudienciaValido({
+                usuarioId,
+                arbolAudienciaId: arbolSolicitado,
+                eventoRelacionado: body.eventoRelacionado
+            });
+
+            if (resultadoArbol.error) {
+                await limpiarCargaFallida({ archivos: archivosSubidos });
+                return res.status(resultadoArbol.error.status).json({ mensaje: resultadoArbol.error.mensaje });
+            }
+
+            arbolAudiencia = resultadoArbol.arbol;
+            arbolCambio = !sonMismoId(publicacion.arbolAudiencia, arbolAudiencia._id);
+
+            const eventoFueEnviado = tieneCampo(body, 'eventoRelacionadoId') || tieneCampo(body, 'eventoRelacionado');
+            if (eventoFueEnviado) {
+                eventoFinal = await construirEventoRelacionado({
+                    eventoRelacionadoId: body.eventoRelacionadoId,
+                    eventoRelacionado: body.eventoRelacionado
+                });
+            } else if (arbolCambio && eventoFinal && !sonMismoId(eventoFinal.arbol, arbolAudiencia._id)) {
+                eventoFinal = null;
+            }
+
+            if (eventoFinal) {
+                validarEventoCompatibleConArbol({ eventoRelacionado: eventoFinal, arbol: arbolAudiencia });
+            }
+        }
+
+        const fechaRecuerdoFinal = tipoSeguro === 'historico'
+            ? (tieneCampo(body, 'fechaRecuerdo')
+                ? normalizarFechaRecuerdo(body.fechaRecuerdo)
+                : publicacion.fechaRecuerdo)
+            : null;
+
+        if (fechaRecuerdoFinal === undefined) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({ mensaje: 'La fecha del recuerdo no es válida.' });
+        }
+
+        const fechaMomentoFinal = tipoSeguro === 'familiar'
+            ? (tieneCampo(body, 'fechaMomento')
+                ? normalizarFechaMomento(body.fechaMomento)
+                : publicacion.fechaMomento)
+            : null;
+
+        if (fechaMomentoFinal === undefined) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({ mensaje: 'La fecha del momento no es válida.' });
+        }
+
+        let mencionesFinales = publicacion.menciones;
+        if (tieneCampo(body, 'menciones')) {
+            mencionesFinales = await construirListaPersonas(body.menciones, { incluirHandle: true });
+        }
+
+        let etiquetasFinales = publicacion.etiquetasMultimedia;
+        if (tieneCampo(body, 'etiquetasMultimedia')) {
+            etiquetasFinales = await construirListaPersonas(body.etiquetasMultimedia);
+        }
+
+        let personasRelacionadasFinales = publicacion.personasRelacionadas;
+        if (tipoSeguro === 'familiar') {
+            if (tieneCampo(body, 'personasRelacionadas')) {
+                personasRelacionadasFinales = await construirPersonasRelacionadas({
+                    valor: body.personasRelacionadas,
+                    arbolId: arbolAudiencia._id
+                });
+            } else if (arbolCambio) {
+                personasRelacionadasFinales = [];
+            }
+        } else {
+            personasRelacionadasFinales = [];
+        }
+
+        for (const archivo of archivosSubidos) {
+            const uploadGuardado = await crearUploadDesdeArchivo({ archivo, propietario: usuarioId });
+            idsUploadsNuevos.push(uploadGuardado._id);
+        }
+
+        const idsFinalesMultimedia = [
+            ...idsMultimediaConservada,
+            ...idsUploadsNuevos.map(String)
+        ];
+
+        publicacion.contenido = contenidoFinal;
+        publicacion.ubicacionTexto = tieneCampo(body, 'ubicacionTexto')
+            ? String(body.ubicacionTexto || '').trim()
+            : publicacion.ubicacionTexto;
+        publicacion.fechaRecuerdo = fechaRecuerdoFinal || null;
+        publicacion.fechaMomento = fechaMomentoFinal || null;
+        publicacion.menciones = mencionesFinales;
+        publicacion.etiquetasMultimedia = etiquetasFinales;
+        publicacion.personasRelacionadas = personasRelacionadasFinales;
+        publicacion.multimedia = idsFinalesMultimedia;
+
+        if (tipoSeguro === 'familiar') {
+            publicacion.privacidad = 'familia';
+            publicacion.arbolAudiencia = arbolAudiencia._id;
+            publicacion.nombreFamiliaAudienciaSnapshot = obtenerNombreFamiliaDesdeArbol(arbolAudiencia);
+            publicacion.eventoRelacionado = eventoFinal;
+        } else {
+            publicacion.privacidad = 'publico';
+        }
+
+        await publicacion.save();
+        edicionGuardada = true;
+
+        const idsConservadosSet = new Set(idsMultimediaConservada.map(String));
+        const uploadsRetirados = uploadsOriginales.filter(upload => !idsConservadosSet.has(String(obtenerIdSeguro(upload))));
+        try {
+            await limpiarUploadsRetirados({ uploads: uploadsRetirados, publicacionExcluidaId: publicacion._id });
+        } catch (errorLimpieza) {
+            console.error('⚠️ La publicación se actualizó, pero quedó multimedia pendiente de limpieza:', errorLimpieza);
+        }
+
+        const publicacionCompleta = await poblarPublicacion(publicacion._id) || publicacion;
+        return res.status(200).json({
+            mensaje: 'Publicación actualizada correctamente.',
+            publicacion: serializarPublicacionParaUsuario(publicacionCompleta, usuarioId)
+        });
+    } catch (error) {
+        console.error('❌ Error al editar publicación:', error);
+
+        if (!edicionGuardada) {
+            await limpiarCargaFallida({
+                archivos: archivosSubidos,
+                idsUploads: idsUploadsNuevos
+            });
+        }
+
+        return res.status(error.status || 500).json({
+            mensaje: error.status ? error.message : 'Error interno al editar la publicación.'
+        });
+    }
+};
+
+// FIJAR O DESFIJAR UNA PUBLICACIÓN EN EL PERFIL DEL AUTOR
+const alternarFijacionPublicacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await Publicacion.findById(id);
+        if (!publicacion) return res.status(404).json({ mensaje: 'La publicación no existe.' });
+        asegurarAutorPublicacion(publicacion, usuarioId);
+
+        const estabaFijada = Boolean(publicacion.fijadaEnPerfilAt);
+        let fijadaEnPerfilAt = null;
+
+        if (estabaFijada) {
+            publicacion.fijadaEnPerfilAt = null;
+            await publicacion.save();
+        } else {
+            await Publicacion.updateMany(
+                { autor: usuarioId, fijadaEnPerfilAt: { $ne: null } },
+                { $set: { fijadaEnPerfilAt: null } }
+            );
+
+            fijadaEnPerfilAt = new Date();
+            publicacion.fijadaEnPerfilAt = fijadaEnPerfilAt;
+            await publicacion.save();
+        }
+
+        return res.status(200).json({
+            mensaje: estabaFijada ? 'Publicación desfijada.' : 'Publicación fijada en tu perfil.',
+            publicacionId: publicacion._id,
+            fijadaEnPerfil: !estabaFijada,
+            fijadaEnPerfilAt
+        });
+    } catch (error) {
+        console.error('❌ Error al fijar publicación:', error);
+        return res.status(error.code === 11000 ? 409 : (error.status || 500)).json({
+            mensaje: error.code === 11000
+                ? 'Ya existe otra publicación fijada. Intenta nuevamente.'
+                : (error.message || 'No se pudo actualizar la fijación.')
+        });
+    }
+};
+
+// GUARDAR O QUITAR UNA PUBLICACIÓN DE LOS ELEMENTOS GUARDADOS DEL USUARIO
+const alternarGuardadoPublicacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await obtenerPublicacionVisiblePorId({ publicacionId: id, usuarioId });
+        if (!publicacion) {
+            return res.status(404).json({ mensaje: 'Publicación no encontrada o sin permiso para verla.' });
+        }
+
+        const guardadaPorMi = (Array.isArray(publicacion.guardadaPor) ? publicacion.guardadaPor : [])
+            .some(idUsuario => sonMismoId(idUsuario, usuarioId));
+
+        await Publicacion.updateOne(
+            { _id: id },
+            guardadaPorMi
+                ? { $pull: { guardadaPor: usuarioId } }
+                : { $addToSet: { guardadaPor: usuarioId } }
+        );
+
+        return res.status(200).json({
+            mensaje: guardadaPorMi ? 'Publicación eliminada de guardados.' : 'Publicación guardada.',
+            publicacionId: id,
+            guardadaPorMi: !guardadaPorMi
+        });
+    } catch (error) {
+        console.error('❌ Error al guardar publicación:', error);
+        return res.status(500).json({ mensaje: 'No se pudo actualizar la publicación guardada.' });
+    }
+};
+
+// OCULTAR UNA PUBLICACIÓN AJENA ÚNICAMENTE DEL INICIO DEL USUARIO
+const ocultarPublicacionDeInicio = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await obtenerPublicacionVisiblePorId({ publicacionId: id, usuarioId });
+        if (!publicacion) {
+            return res.status(404).json({ mensaje: 'Publicación no encontrada o sin permiso para verla.' });
+        }
+
+        if (sonMismoId(publicacion.autor, usuarioId)) {
+            return res.status(400).json({ mensaje: 'No puedes ocultar de tu Inicio una publicación propia.' });
+        }
+
+        await Usuario.updateOne(
+            { _id: usuarioId },
+            { $addToSet: { 'preferenciasFeed.publicacionesOcultas': publicacion._id } }
+        );
+
+        return res.status(200).json({
+            mensaje: 'La publicación dejará de aparecer en tu Inicio.',
+            publicacionId: publicacion._id,
+            ocultaDeMiInicio: true
+        });
+    } catch (error) {
+        console.error('❌ Error al ocultar publicación del Inicio:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudo ocultar la publicación de tu Inicio.'
+        });
+    }
+};
+
+// VOLVER A MOSTRAR EN INICIO UNA PUBLICACIÓN OCULTA POR EL USUARIO
+const mostrarPublicacionEnInicio = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await obtenerPublicacionVisiblePorId({ publicacionId: id, usuarioId });
+        if (!publicacion) {
+            return res.status(404).json({ mensaje: 'Publicación no encontrada o sin permiso para verla.' });
+        }
+
+        await Usuario.updateOne(
+            { _id: usuarioId },
+            { $pull: { 'preferenciasFeed.publicacionesOcultas': publicacion._id } }
+        );
+
+        return res.status(200).json({
+            mensaje: 'La publicación volverá a aparecer en tu Inicio.',
+            publicacionId: publicacion._id,
+            ocultaDeMiInicio: false
+        });
+    } catch (error) {
+        console.error('❌ Error al volver a mostrar publicación en Inicio:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudo volver a mostrar la publicación en tu Inicio.'
+        });
+    }
+};
+
+// PAUSAR DURANTE 30 DÍAS LAS PUBLICACIONES DE OTRO AUTOR EN INICIO
+const pausarAutorEnInicio = async (req, res) => {
+    try {
+        const { autorId } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(autorId)) {
+            return res.status(400).json({ mensaje: 'El ID del autor no es válido.' });
+        }
+
+        if (sonMismoId(autorId, usuarioId)) {
+            return res.status(400).json({ mensaje: 'No puedes pausar tus propias publicaciones.' });
+        }
+
+        const [autorExiste, filtroVisibilidad] = await Promise.all([
+            Usuario.exists({ _id: autorId }),
+            construirFiltroVisibilidadPublicaciones(usuarioId)
+        ]);
+
+        if (!autorExiste) {
+            return res.status(404).json({ mensaje: 'No se encontró al autor solicitado.' });
+        }
+
+        const tienePublicacionVisible = await Publicacion.exists({
+            $and: [
+                { autor: autorId },
+                filtroVisibilidad
+            ]
+        });
+
+        if (!tienePublicacionVisible) {
+            return res.status(404).json({ mensaje: 'No tienes publicaciones visibles de este autor para pausar.' });
+        }
+
+        const hasta = new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
+
+        await Usuario.updateOne(
+            { _id: usuarioId },
+            { $pull: { 'preferenciasFeed.autoresPausados': { autor: autorId } } }
+        );
+        await Usuario.updateOne(
+            { _id: usuarioId },
+            { $push: { 'preferenciasFeed.autoresPausados': { autor: autorId, hasta } } }
+        );
+
+        return res.status(200).json({
+            mensaje: 'Las publicaciones de este autor se pausaron durante 30 días.',
+            autorId,
+            autorPausadoEnInicio: true,
+            autorPausadoHasta: hasta
+        });
+    } catch (error) {
+        console.error('❌ Error al pausar autor en Inicio:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudieron pausar las publicaciones de este autor.'
+        });
+    }
+};
+
+// REANUDAR LAS PUBLICACIONES DE UN AUTOR EN INICIO
+const reanudarAutorEnInicio = async (req, res) => {
+    try {
+        const { autorId } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(autorId)) {
+            return res.status(400).json({ mensaje: 'El ID del autor no es válido.' });
+        }
+
+        await Usuario.updateOne(
+            { _id: usuarioId },
+            { $pull: { 'preferenciasFeed.autoresPausados': { autor: autorId } } }
+        );
+
+        return res.status(200).json({
+            mensaje: 'Las publicaciones de este autor volverán a aparecer en tu Inicio.',
+            autorId,
+            autorPausadoEnInicio: false,
+            autorPausadoHasta: null
+        });
+    } catch (error) {
+        console.error('❌ Error al reanudar autor en Inicio:', error);
+        return res.status(500).json({
+            mensaje: 'No se pudieron reanudar las publicaciones de este autor.'
+        });
+    }
+};
+
+// ELIMINAR DEFINITIVAMENTE UNA PUBLICACIÓN DEL AUTOR
+const eliminarPublicacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await Publicacion.findById(id).populate('multimedia');
+        if (!publicacion) return res.status(404).json({ mensaje: 'La publicación no existe.' });
+        asegurarAutorPublicacion(publicacion, usuarioId);
+
+        const uploads = (Array.isArray(publicacion.multimedia) ? publicacion.multimedia : []).filter(Boolean);
+
+        const resultadoEliminacion = await Publicacion.deleteOne({ _id: publicacion._id });
+        if (resultadoEliminacion.deletedCount !== 1) {
+            const error = new Error('La publicación no pudo eliminarse.');
+            error.status = 409;
+            throw error;
+        }
+
+        try {
+            await Comentario.deleteMany({ publicacionPadre: publicacion._id });
+        } catch (errorComentarios) {
+            console.error('⚠️ La publicación se eliminó, pero quedaron comentarios pendientes de limpieza:', errorComentarios);
+        }
+
+        try {
+            await Usuario.updateMany(
+                { 'preferenciasFeed.publicacionesOcultas': publicacion._id },
+                { $pull: { 'preferenciasFeed.publicacionesOcultas': publicacion._id } }
+            );
+        } catch (errorPreferencias) {
+            console.error('⚠️ La publicación se eliminó, pero quedaron preferencias de Inicio pendientes de limpieza:', errorPreferencias);
+        }
+
+        try {
+            await limpiarUploadsRetirados({ uploads, publicacionExcluidaId: publicacion._id });
+        } catch (errorLimpieza) {
+            console.error('⚠️ La publicación se eliminó, pero quedó multimedia pendiente de limpieza:', errorLimpieza);
+        }
+
+        return res.status(200).json({
+            mensaje: 'Publicación eliminada definitivamente.',
+            publicacionId: publicacion._id
+        });
+    } catch (error) {
+        console.error('❌ Error al eliminar publicación:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudo eliminar la publicación.'
         });
     }
 };
@@ -1007,7 +1956,17 @@ const reaccionarPublicacion = async (req, res) => {
 module.exports = {
     crearPublicacion,
     obtenerPublicaciones,
+    obtenerPublicacionesGuardadas,
     obtenerPublicacionesPorUsuario,
+    obtenerPublicacionPorId,
+    editarPublicacion,
+    alternarFijacionPublicacion,
+    alternarGuardadoPublicacion,
+    ocultarPublicacionDeInicio,
+    mostrarPublicacionEnInicio,
+    pausarAutorEnInicio,
+    reanudarAutorEnInicio,
+    eliminarPublicacion,
     buscarTodo,
     obtenerPublicacionesPorEvento,
     obtenerMomentosFamiliaresPorNodo,

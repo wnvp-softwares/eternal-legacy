@@ -3706,3 +3706,574 @@ video.imagen-post-moderna {
   text-align: center;
   font-size: 0.8rem;
 }
+
+/* =========================================================
+   ADMINISTRACIÓN DE PUBLICACIONES
+   ========================================================= */
+.publicacion-indicador-fijada {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 0 54px;
+    color: var(--texto-secundario);
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.publicacion-indicador-fijada i {
+    color: var(--dorado);
+}
+
+.boton-interaccion.activo-guardado {
+    color: var(--dorado) !important;
+}
+
+.boton-interaccion.activo-guardado i {
+    color: inherit !important;
+}
+
+.tarjeta-multimedia-borrador:has(.acciones-multimedia-borrador) {
+    isolation: isolate;
+}
+
+.fecha-recuerdo-publicacion {
+    border-color: color-mix(in srgb, var(--dorado) 32%, var(--borde-color));
+}
+
+@media (max-width: 576px) {
+    .publicacion-indicador-fijada {
+        margin-left: 48px;
+        margin-top: 7px;
+        font-size: 0.72rem;
+    }
+}
+
+@media (max-width: 380px) {
+    .publicacion-indicador-fijada {
+        margin-left: 0;
+    }
+}
+
+/* =========================================
+   AVISOS DE PREFERENCIAS DEL INICIO
+   ========================================= */
+.aviso-preferencia-feed {
+    position: fixed;
+    left: 50%;
+    bottom: max(24px, calc(env(safe-area-inset-bottom) + 16px));
+    z-index: 2700;
+    width: min(560px, calc(100vw - 32px));
+    min-height: 56px;
+    padding: 10px 12px;
+    border: 1px solid var(--borde-color);
+    border-radius: 14px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    color: var(--texto-principal);
+    background: var(--fondo-tarjeta);
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.24);
+    transform: translateX(-50%);
+    animation: aviso-preferencia-aparecer 0.2s ease-out;
+}
+
+.aviso-preferencia-feed-icono {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--dorado-oscuro);
+    background: color-mix(in srgb, var(--dorado) 16%, transparent);
+}
+
+.aviso-preferencia-feed-mensaje {
+    min-width: 0;
+    font-size: 0.88rem;
+    font-weight: 650;
+    line-height: 1.35;
+}
+
+.aviso-preferencia-feed-deshacer,
+.aviso-preferencia-feed-cerrar {
+    border: 0;
+    border-radius: 9px;
+    color: var(--texto-principal);
+    background: transparent;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+.aviso-preferencia-feed-deshacer {
+    min-height: 38px;
+    padding: 7px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--dorado-oscuro);
+}
+
+.aviso-preferencia-feed-cerrar {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+}
+
+.aviso-preferencia-feed-deshacer:hover:not(:disabled),
+.aviso-preferencia-feed-cerrar:hover:not(:disabled) {
+    background: var(--hover-menu);
+}
+
+.aviso-preferencia-feed-deshacer:disabled,
+.aviso-preferencia-feed-cerrar:disabled {
+    opacity: 0.58;
+    cursor: wait;
+}
+
+[data-tema="oscuro"] .aviso-preferencia-feed {
+    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes aviso-preferencia-aparecer {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 12px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+@media (max-width: 576px) {
+    .aviso-preferencia-feed {
+        bottom: max(12px, calc(env(safe-area-inset-bottom) + 8px));
+        width: calc(100vw - 20px);
+        grid-template-columns: 30px minmax(0, 1fr) auto;
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .aviso-preferencia-feed-deshacer {
+        grid-column: 2 / 4;
+        justify-self: start;
+        min-height: 34px;
+        padding: 5px 8px;
+    }
+
+    .aviso-preferencia-feed-cerrar {
+        grid-column: 3;
+        grid-row: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aviso-preferencia-feed {
+        animation: none;
+    }
+}
+
+/* =========================================================
+   EDITOR DE PUBLICACIONES COMPACTO EN PC Y TABLET
+   - El modal siempre permanece dentro del viewport.
+   - Cabecera y pie quedan visibles.
+   - Solo el cuerpo central utiliza desplazamiento interno.
+   - La edición reduce espacios sin alterar la publicación final.
+   ========================================================= */
+@media (min-width: 577px) {
+    .modal-backdrop-publicacion {
+        padding: clamp(12px, 2.4vh, 24px);
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        overscroll-behavior: contain;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion {
+        width: min(600px, calc(100vw - 32px));
+        max-width: 600px;
+        height: auto;
+        max-height: calc(100vh - 32px);
+        max-height: calc(100dvh - 32px);
+        border-radius: 20px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion {
+        height: min(88vh, 820px);
+        height: min(88dvh, 820px);
+    }
+
+    .modal-backdrop-publicacion .modal-cabecera-unica,
+    .modal-backdrop-publicacion .modal-pie {
+        flex: 0 0 auto;
+        background-color: var(--fondo-tarjeta);
+    }
+
+    .modal-backdrop-publicacion .modal-cuerpo {
+        flex: 1 1 auto;
+        min-height: 0;
+        margin-top: 0 !important;
+        padding: 16px 18px 18px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: var(--borde-color) transparent;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .modal-backdrop-publicacion .modal-cuerpo::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .modal-backdrop-publicacion .modal-cuerpo::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        border-radius: 999px;
+        background-color: var(--borde-color);
+        background-clip: padding-box;
+    }
+
+    .modal-backdrop-publicacion .modal-pie {
+        width: 100%;
+        margin-top: 0 !important;
+        padding: 11px 16px !important;
+        border-top: 1px solid var(--borde-color);
+        gap: 12px;
+        box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.07);
+        z-index: 14;
+    }
+
+    [data-tema="oscuro"] .modal-backdrop-publicacion .modal-pie {
+        box-shadow: 0 -12px 26px rgba(0, 0, 0, 0.24);
+    }
+
+    /* Cabecera compacta solo durante edición. */
+    .modal-backdrop-publicacion .modal-publicacion-edicion .modal-cabecera-unica {
+        padding: 11px 54px 10px 16px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .titulo-modal-publicacion {
+        gap: 10px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .icono-modal-publicacion {
+        width: 34px;
+        height: 34px;
+        font-size: 1rem;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .titulo-modal-publicacion h4 {
+        font-size: 0.96rem;
+        line-height: 1.15;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .titulo-modal-publicacion p {
+        margin-top: 1px;
+        font-size: 0.72rem;
+        line-height: 1.2;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .btn-cerrar-modal-publicacion {
+        top: 9px;
+        right: 14px;
+        width: 34px;
+        height: 34px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .modal-cuerpo {
+        padding: 12px 16px 14px;
+    }
+
+    /* Audiencia familiar en una sola fila legible. */
+    .modal-backdrop-publicacion .modal-publicacion-edicion .selector-audiencia-familiar {
+        min-height: 48px;
+        margin-bottom: 10px !important;
+        padding: 7px 9px;
+        border-radius: 12px;
+        gap: 10px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .selector-audiencia-info {
+        gap: 8px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .selector-audiencia-icono {
+        width: 30px;
+        height: 30px;
+        font-size: 0.84rem;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .selector-audiencia-info strong {
+        font-size: 0.8rem;
+        line-height: 1.15;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .selector-audiencia-info small {
+        display: none;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .select-audiencia-familiar,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .audiencia-familiar-unica,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .selector-audiencia-cargando {
+        min-height: 34px;
+        max-width: 230px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        line-height: 1.1;
+    }
+
+    /* Fecha horizontal para recuperar espacio vertical. */
+    .modal-backdrop-publicacion .modal-publicacion-edicion .fecha-momento-publicacion {
+        grid-template-columns: minmax(0, 1fr) minmax(165px, 210px);
+        align-items: center;
+        gap: 8px 12px;
+        margin-bottom: 10px !important;
+        padding: 8px 10px;
+        border-radius: 12px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .fecha-momento-publicacion label {
+        min-width: 0;
+        font-size: 0.8rem;
+        line-height: 1.15;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .fecha-momento-publicacion input {
+        grid-column: 2;
+        grid-row: 1;
+        min-height: 34px;
+        padding: 6px 9px;
+        border-radius: 9px;
+        font-size: 0.82rem;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .fecha-momento-publicacion > small {
+        display: none;
+    }
+
+    /* Texto compacto y con scroll propio cuando es extenso. */
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto .textarea-transparente {
+        height: 116px !important;
+        min-height: 116px !important;
+        max-height: 116px !important;
+        font-size: 1rem !important;
+        line-height: 1.42 !important;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion.modal-publicacion-con-preview .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .modal-publicacion-edicion.modal-publicacion-con-preview .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .modal-publicacion-edicion.modal-publicacion-con-preview .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .modal-publicacion-edicion.modal-publicacion-con-preview .contenedor-input-superpuesto .textarea-transparente {
+        height: 82px !important;
+        min-height: 82px !important;
+        max-height: 82px !important;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto .textarea-transparente {
+        overflow-y: auto !important;
+        scrollbar-width: thin;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .chips-publicacion-modal {
+        margin-top: 7px;
+        gap: 6px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .chip-publicacion {
+        min-height: 27px;
+        padding: 4px 8px;
+        font-size: 0.72rem;
+    }
+
+    /* Miniaturas de edición: suficientes para administrar sin dominar la pantalla. */
+    .modal-backdrop-publicacion .modal-publicacion-edicion .editor-multimedia-publicacion {
+        margin-top: 9px !important;
+        padding: 8px;
+        border-radius: 13px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .editor-multimedia-encabezado {
+        gap: 10px;
+        margin-bottom: 7px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .editor-multimedia-encabezado strong {
+        font-size: 0.82rem;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .editor-multimedia-encabezado span {
+        font-size: 0.7rem;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .editor-multimedia-contador {
+        min-width: 44px;
+        padding: 4px 8px;
+        font-size: 0.74rem;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .carrusel-borrador-publicacion {
+        gap: 9px;
+        padding: 1px 1px 5px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .tarjeta-multimedia-borrador,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .tarjeta-agregar-multimedia,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .carrusel-borrador-publicacion.archivo-unico .tarjeta-multimedia-borrador {
+        flex: 0 0 124px;
+        width: 124px;
+        margin-inline: 0;
+        border-radius: 12px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .accion-multimedia {
+        width: 32px;
+        height: 32px;
+        font-size: 0.86rem;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .panel-herramienta-publicacion {
+        max-height: 210px;
+        margin-top: 9px;
+        padding: 10px;
+        overflow-y: auto;
+        border-radius: 13px;
+    }
+
+    /* Herramientas y Guardar siempre disponibles. */
+    .modal-backdrop-publicacion .modal-publicacion-edicion .grupo-herramientas-modal {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        gap: 7px;
+        padding: 1px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .grupo-herramientas-modal::-webkit-scrollbar {
+        display: none;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .btn-herramienta-modal {
+        flex: 0 0 34px;
+        width: 34px;
+        height: 34px;
+        font-size: 0.94rem;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .boton-publicar-modal {
+        flex: 0 0 auto;
+        min-width: 138px;
+        min-height: 38px;
+        margin: 0 !important;
+        padding: 8px 16px;
+        border-radius: 14px;
+        font-size: 0.86rem;
+        white-space: nowrap;
+    }
+}
+
+/* Tablets: conserva márgenes, scroll interno y controles accesibles. */
+@media (min-width: 577px) and (max-width: 900px) {
+    .modal-backdrop-publicacion {
+        padding: 12px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion {
+        width: calc(100vw - 24px);
+        max-width: 620px;
+        max-height: calc(100vh - 24px);
+        max-height: calc(100dvh - 24px);
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion {
+        height: calc(100vh - 24px);
+        height: calc(100dvh - 24px);
+    }
+}
+
+/* Monitores de poca altura: versión todavía más compacta. */
+@media (min-width: 577px) and (max-height: 800px) {
+    .modal-backdrop-publicacion {
+        padding: 10px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion {
+        height: calc(100vh - 20px);
+        height: calc(100dvh - 20px);
+        max-height: calc(100vh - 20px);
+        max-height: calc(100dvh - 20px);
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .modal-cabecera-unica {
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .titulo-modal-publicacion p {
+        display: none;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .modal-cuerpo {
+        padding: 9px 14px 11px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .selector-audiencia-familiar {
+        min-height: 42px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .fecha-momento-publicacion {
+        padding-top: 6px;
+        padding-bottom: 6px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .contenedor-input-superpuesto .textarea-transparente {
+        height: 94px !important;
+        min-height: 94px !important;
+        max-height: 94px !important;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion.modal-publicacion-con-preview .contenedor-input-superpuesto,
+    .modal-backdrop-publicacion .modal-publicacion-edicion.modal-publicacion-con-preview .contenedor-input-superpuesto .input-publicacion,
+    .modal-backdrop-publicacion .modal-publicacion-edicion.modal-publicacion-con-preview .contenedor-input-superpuesto .input-overlay,
+    .modal-backdrop-publicacion .modal-publicacion-edicion.modal-publicacion-con-preview .contenedor-input-superpuesto .textarea-transparente {
+        height: 68px !important;
+        min-height: 68px !important;
+        max-height: 68px !important;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .tarjeta-multimedia-borrador,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .tarjeta-agregar-multimedia,
+    .modal-backdrop-publicacion .modal-publicacion-edicion .carrusel-borrador-publicacion.archivo-unico .tarjeta-multimedia-borrador {
+        flex-basis: 106px;
+        width: 106px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .panel-herramienta-publicacion {
+        max-height: 150px;
+    }
+
+    .modal-backdrop-publicacion .modal-publicacion-edicion .modal-pie {
+        padding: 8px 12px !important;
+    }
+}
+

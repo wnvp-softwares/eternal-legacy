@@ -13,7 +13,17 @@ const {
 const {
     crearPublicacion,
     obtenerPublicaciones,
+    obtenerPublicacionesGuardadas,
     obtenerPublicacionesPorUsuario,
+    obtenerPublicacionPorId,
+    editarPublicacion,
+    alternarFijacionPublicacion,
+    alternarGuardadoPublicacion,
+    ocultarPublicacionDeInicio,
+    mostrarPublicacionEnInicio,
+    pausarAutorEnInicio,
+    reanudarAutorEnInicio,
+    eliminarPublicacion,
     buscarTodo,
     obtenerPublicacionesPorEvento,
     obtenerMomentosFamiliaresPorNodo,
@@ -79,6 +89,9 @@ router.post('/crear', verificarToken, manejarCargaPublicacion, crearPublicacion)
 // Ruta para obtener el muro.
 router.get('/muro', verificarToken, obtenerPublicaciones);
 
+// Colección privada de publicaciones guardadas del usuario autenticado.
+router.get('/guardadas', verificarToken, obtenerPublicacionesGuardadas);
+
 // Publicaciones visibles de un perfil concreto.
 router.get('/usuario/:usuarioId', verificarToken, obtenerPublicacionesPorUsuario);
 
@@ -90,5 +103,20 @@ router.get('/arbol/:arbolId/nodo/:nodoId/momentos-familiares', verificarToken, o
 
 // Ruta para dar me gusta / reaccionar.
 router.post('/:id/reaccionar', verificarToken, reaccionarPublicacion);
+
+// Preferencias del Inicio relacionadas con publicaciones y autores ajenos.
+router.patch('/autor/:autorId/pausar-inicio', verificarToken, pausarAutorEnInicio);
+router.delete('/autor/:autorId/pausar-inicio', verificarToken, reanudarAutorEnInicio);
+router.patch('/:id/ocultar-inicio', verificarToken, ocultarPublicacionDeInicio);
+router.delete('/:id/ocultar-inicio', verificarToken, mostrarPublicacionEnInicio);
+
+// Preferencias y administración de una publicación concreta.
+router.patch('/:id/fijar', verificarToken, alternarFijacionPublicacion);
+router.patch('/:id/guardar', verificarToken, alternarGuardadoPublicacion);
+
+// Consulta, edición con multimedia y eliminación definitiva.
+router.get('/:id', verificarToken, obtenerPublicacionPorId);
+router.patch('/:id', verificarToken, manejarCargaPublicacion, editarPublicacion);
+router.delete('/:id', verificarToken, eliminarPublicacion);
 
 module.exports = router;

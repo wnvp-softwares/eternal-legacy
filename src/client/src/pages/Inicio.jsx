@@ -363,6 +363,16 @@ const revocarUrlTemporal = (url) => {
   }
 };
 
+
+const formatearFechaParaInput = (valor) => {
+  if (!valor) return '';
+  const texto = String(valor);
+  const coincidencia = texto.match(/^\d{4}-\d{2}-\d{2}/);
+  if (coincidencia) return coincidencia[0];
+  const fecha = new Date(valor);
+  return Number.isNaN(fecha.getTime()) ? '' : fecha.toISOString().slice(0, 10);
+};
+
 const normalizarHandleMencion = (valor = '', { minusculas = false } = {}) => {
   let handle = String(valor || '')
     .normalize('NFD')
@@ -498,6 +508,7 @@ const normalizarEventoInicio = (evento = {}, arbol = {}, preferencias = {}) => {
   return {
     ...evento,
     id: obtenerId(evento) || `${nombreFamilia}-${evento.titulo}-${evento.fechaInicio}`,
+    arbolId: obtenerId(arbol) || obtenerId(evento.arbol) || evento.arbolId || null,
     titulo: evento.titulo || 'Evento familiar',
     descripcion: evento.descripcion || '',
     tipoEvento,
@@ -565,9 +576,26 @@ export default function Inicio() {
     });
   };
 
+
+  const formatearFechaContextoPublicacion = (valor) => {
+    if (!valor) return '';
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return '';
+    return new Intl.DateTimeFormat(idioma || 'es-MX', {
+      timeZone: zonaHoraria || 'America/Mexico_City',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    }).format(fecha).replace('.', '');
+  };
+
   const [modalAbierto, setModalAbierto] = useState(false);
   const [selectorTipoAbierto, setSelectorTipoAbierto] = useState(false);
   const [tipoPublicacion, setTipoPublicacion] = useState('historico');
+  const [publicacionEditandoId, setPublicacionEditandoId] = useState(null);
+  const [rutaRetornoEdicion, setRutaRetornoEdicion] = useState('');
+  const [cargandoPublicacionEdicion, setCargandoPublicacionEdicion] = useState(false);
+  const [fechaRecuerdoPublicacion, setFechaRecuerdoPublicacion] = useState('');
 
   useEffect(() => {
     if (!location.state?.abrirPublicador) return;
@@ -611,10 +639,34 @@ export default function Inicio() {
   const gifInputRef = useRef(null);
   const textareaPublicacionRef = useRef(null);
   const overlayRef = useRef(null);
+  const modalCuerpoPublicacionRef = useRef(null);
+  const arbolAudienciaAnteriorRef = useRef(null);
 
   const token = localStorage.getItem('token');
   const [usuarioLogueado, setUsuarioLogueado] = useState(leerUsuarioSesion);
   const API_BASE_URL = API_BASE_URL_CONFIG;
+
+  useEffect(() => {
+    if (!modalAbierto) return undefined;
+
+    const overflowBodyAnterior = document.body.style.overflow;
+    const paddingBodyAnterior = document.body.style.paddingRight;
+    const overflowHtmlAnterior = document.documentElement.style.overflow;
+    const anchoScrollbar = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    if (anchoScrollbar > 0) {
+      document.body.style.paddingRight = `${anchoScrollbar}px`;
+    }
+
+    return () => {
+      document.body.style.overflow = overflowBodyAnterior;
+      document.body.style.paddingRight = paddingBodyAnterior;
+      document.documentElement.style.overflow = overflowHtmlAnterior;
+    };
+  }, [modalAbierto]);
 
   useEffect(() => {
     const actualizarUsuarioSesion = (evento) => {
@@ -641,6 +693,8 @@ export default function Inicio() {
   }, []);
 
   const [publicaciones, setPublicaciones] = useState([]);
+  const [avisoPreferenciaFeed, setAvisoPreferenciaFeed] = useState(null);
+  const temporizadorAvisoPreferenciaFeedRef = useRef(null);
   const [cargando, setCargando] = useState(token ? true : false);
   const [error, setError] = useState(token ? '' : 'No has iniciado sesión.');
 
@@ -660,6 +714,12 @@ export default function Inicio() {
   const [comentariosPorPub, setComentariosPorPub] = useState({});
   const [comentarioAbierto, setComentarioAbierto] = useState({});
   const [nuevoComentarioTexto, setNuevoComentarioTexto] = useState({});
+
+  useEffect(() => () => {
+    if (temporizadorAvisoPreferenciaFeedRef.current) {
+      window.clearTimeout(temporizadorAvisoPreferenciaFeedRef.current);
+    }
+  }, []);
 
   const obtenerComentariosDesdeBackend = async (pubId) => {
     if (!token || !pubId) return [];
@@ -848,8 +908,23 @@ export default function Inicio() {
 
   useEffect(() => {
     const arbolId = arbolAudienciaPublicacion?.id;
-    setPersonasRelacionadasPublicacion([]);
+    const arbolAnteriorId = arbolAudienciaAnteriorRef.current;
+    const cambioRealDeArbol = Boolean(
+      arbolAnteriorId && arbolId && String(arbolAnteriorId) !== String(arbolId)
+    );
+
+    arbolAudienciaAnteriorRef.current = arbolId || null;
     setBusquedaNodoRelacionado('');
+
+    if (cambioRealDeArbol) {
+      setPersonasRelacionadasPublicacion([]);
+      setEventoRelacionadoPublicacion((eventoActual) => {
+        if (!eventoActual) return null;
+        return eventoActual.arbolId && String(eventoActual.arbolId) === String(arbolId)
+          ? eventoActual
+          : null;
+      });
+    }
 
     if (!token || tipoPublicacion !== 'familiar' || !arbolId) {
       setNodosRelacionablesPublicacion([]);
@@ -933,8 +1008,32 @@ export default function Inicio() {
     esRecortable: esArchivoImagenRecortable(archivo),
     nombre: archivo.name,
     pesoBytes: archivo.size,
-    recortada: false
+    recortada: false,
+    existente: false,
+    uploadId: null
   });
+
+  const crearElementoMultimediaExistente = (upload = {}, indice = 0) => {
+    const formato = String(upload.formato || upload.mimetype || upload.mimeType || '').toLowerCase();
+    const vistaPrevia = obtenerUrlMultimediaPublicacion(upload) || '';
+    const tipo = formato.startsWith('video/') || /\.(mp4|webm|ogg|mov)(?:$|\?)/i.test(vistaPrevia)
+      ? 'video'
+      : (formato === 'image/gif' || /\.gif(?:$|\?)/i.test(vistaPrevia) ? 'gif' : 'imagen');
+    const uploadId = obtenerId(upload) || upload.id || `existente-${indice}`;
+
+    return {
+      id: `existente-${uploadId}`,
+      uploadId,
+      archivo: null,
+      vistaPrevia,
+      tipo,
+      esRecortable: false,
+      nombre: upload.nombreArchivo || upload.publicId || `Archivo ${indice + 1}`,
+      pesoBytes: Number(upload.pesoBytes) || 0,
+      recortada: false,
+      existente: true
+    };
+  };
 
   const agregarArchivosMultimedia = (archivosSeleccionados = []) => {
     const archivos = Array.from(archivosSeleccionados).filter(Boolean);
@@ -976,7 +1075,9 @@ export default function Inicio() {
     }
 
     const firmasExistentes = new Set(
-      actuales.map((elemento) => `${elemento.archivo.name}-${elemento.archivo.size}-${elemento.archivo.lastModified}`)
+      actuales
+        .filter((elemento) => elemento.archivo)
+        .map((elemento) => `${elemento.archivo.name}-${elemento.archivo.size}-${elemento.archivo.lastModified}`)
     );
 
     const candidatas = archivos
@@ -1117,6 +1218,7 @@ export default function Inicio() {
     setMencionesPublicacion([]);
     setEventoRelacionadoPublicacion(null);
     setEtiquetasImagen([]);
+    setFechaRecuerdoPublicacion('');
     setFechaMomentoPublicacion('');
     setPersonasRelacionadasPublicacion([]);
     setBusquedaNodoRelacionado('');
@@ -1238,6 +1340,12 @@ export default function Inicio() {
 
   const abrirSelectorTipoPublicacion = () => setSelectorTipoAbierto(true);
 
+  const limpiarEstadoEdicionPublicacion = () => {
+    setPublicacionEditandoId(null);
+    setRutaRetornoEdicion('');
+    setCargandoPublicacionEdicion(false);
+  };
+
   const iniciarPublicacion = async (tipo) => {
     const tipoSeguro = TIPOS_PUBLICACION_CONFIG[tipo] ? tipo : 'historico';
 
@@ -1252,8 +1360,10 @@ export default function Inicio() {
       return;
     }
 
+    limpiarEstadoEdicionPublicacion();
     setTipoPublicacion(tipoSeguro);
     setArbolAudienciaPublicacion(tipoSeguro === 'familiar' ? (arbolesDisponibles[0] || null) : null);
+    arbolAudienciaAnteriorRef.current = tipoSeguro === 'familiar' ? (arbolesDisponibles[0]?.id || null) : null;
     setTextoPublicacion('');
     limpiarMultimedia();
     limpiarHerramientasPublicacion();
@@ -1261,18 +1371,167 @@ export default function Inicio() {
     setModalAbierto(true);
   };
 
+  const normalizarPersonaParaEditor = (persona = {}) => normalizarPersonaSugerida({
+    ...persona,
+    id: obtenerId(persona.usuario) || obtenerId(persona) || persona.id,
+    nombre: persona.nombre || persona.usuario?.nombreUsuario || persona.nombreUsuario,
+    nombreUsuario: persona.usuario?.nombreUsuario || persona.nombreUsuario,
+    nickname: persona.usuario?.nickname || persona.nickname,
+    imagen: obtenerImagenDeEntidad(persona.usuario) || obtenerImagenDeEntidad(persona)
+  });
+
+  const normalizarFamiliarParaEditor = (persona = {}) => ({
+    ...persona,
+    id: obtenerId(persona.nodo) || persona.nodoId || obtenerId(persona),
+    nodoId: obtenerId(persona.nodo) || persona.nodoId || obtenerId(persona),
+    usuarioId: obtenerId(persona.usuario),
+    nombre: persona.nombreSnapshot || persona.nodo?.nombre || persona.usuario?.nombreUsuario || 'Familiar',
+    origen: persona.nodo?.origen || (persona.usuario ? 'usuario_real' : 'perfil_sin_cuenta'),
+    imagen: obtenerImagenDeEntidad(persona.usuario) || persona.nodo?.fotoPerfil || null
+  });
+
+  const enfocarCampoDentroDelEditor = (elemento) => {
+    if (!(elemento instanceof HTMLElement)) return;
+
+    const cuerpoModal = modalCuerpoPublicacionRef.current;
+
+    if (cuerpoModal && cuerpoModal.contains(elemento)) {
+      const rectCuerpo = cuerpoModal.getBoundingClientRect();
+      const rectElemento = elemento.getBoundingClientRect();
+      const destino = cuerpoModal.scrollTop
+        + (rectElemento.top - rectCuerpo.top)
+        - Math.max(16, (cuerpoModal.clientHeight - rectElemento.height) / 2);
+
+      cuerpoModal.scrollTo({
+        top: Math.max(0, destino),
+        behavior: 'smooth'
+      });
+    } else {
+      elemento.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    }
+
+    window.setTimeout(() => {
+      try {
+        elemento.focus({ preventScroll: true });
+      } catch (error) {
+        elemento.focus();
+      }
+    }, 180);
+  };
+
+  const cargarPublicacionParaEditar = async (publicacionId, {
+    accionInicial = 'editar',
+    rutaRetorno = ''
+  } = {}) => {
+    if (!publicacionId || cargandoPublicacionEdicion) return false;
+
+    try {
+      setCargandoPublicacionEdicion(true);
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${publicacionId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo cargar la publicación.');
+
+      const publicacion = datos.publicacion;
+      const autorId = obtenerId(publicacion?.autor);
+      const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+      if (!autorId || String(autorId) !== String(miId)) {
+        throw new Error('Solo puedes editar tus propias publicaciones.');
+      }
+
+      const tipoSeguro = publicacion.tipo === 'familiar' ? 'familiar' : 'historico';
+      let arbolSeleccionado = null;
+
+      if (tipoSeguro === 'familiar') {
+        const arbolesDisponibles = arbolesAudienciaPublicacion.length > 0
+          ? arbolesAudienciaPublicacion
+          : await cargarArbolesAudienciaPublicacion();
+        const arbolActual = obtenerArbolAudienciaDePublicacion(publicacion);
+        arbolSeleccionado = arbolesDisponibles.find(
+          arbol => String(arbol.id) === String(arbolActual?.id)
+        ) || null;
+
+        if (!arbolSeleccionado) {
+          throw new Error('Ya no perteneces al árbol donde se publicó este Momento Familiar.');
+        }
+      }
+
+      limpiarMultimedia();
+      setPublicacionEditandoId(publicacion._id || publicacion.id);
+      setRutaRetornoEdicion(rutaRetorno);
+      setTipoPublicacion(tipoSeguro);
+      setTextoPublicacion(publicacion.contenido || '');
+      setUbicacionPublicacion(publicacion.ubicacionTexto || '');
+      setUbicacionTemporal(publicacion.ubicacionTexto || '');
+      setFechaRecuerdoPublicacion(formatearFechaParaInput(publicacion.fechaRecuerdo));
+      setFechaMomentoPublicacion(formatearFechaParaInput(publicacion.fechaMomento));
+      setMencionesPublicacion((Array.isArray(publicacion.menciones) ? publicacion.menciones : []).map(normalizarPersonaParaEditor));
+      setEtiquetasImagen((Array.isArray(publicacion.etiquetasMultimedia) ? publicacion.etiquetasMultimedia : []).map(normalizarPersonaParaEditor));
+      setPersonasRelacionadasPublicacion((Array.isArray(publicacion.personasRelacionadas) ? publicacion.personasRelacionadas : []).map(normalizarFamiliarParaEditor));
+      setEventoRelacionadoPublicacion(tipoSeguro === 'familiar' ? obtenerEventoRelacionadoDePublicacion(publicacion) : null);
+      setArbolAudienciaPublicacion(arbolSeleccionado);
+      arbolAudienciaAnteriorRef.current = arbolSeleccionado?.id || null;
+      actualizarMultimediaBorrador(
+        (Array.isArray(publicacion.multimedia) ? publicacion.multimedia : [])
+          .map(crearElementoMultimediaExistente)
+          .filter(elemento => elemento.uploadId && elemento.vistaPrevia)
+      );
+      setPanelHerramientaActivo(null);
+      setSelectorTipoAbierto(false);
+      setModalAbierto(true);
+
+      if (accionInicial === 'cambiar-audiencia') {
+        window.setTimeout(() => {
+          const selectorAudiencia = document.querySelector('.select-audiencia-familiar');
+          enfocarCampoDentroDelEditor(selectorAudiencia);
+        }, 120);
+      } else if (accionInicial === 'editar-fecha') {
+        window.setTimeout(() => {
+          const selector = tipoSeguro === 'historico'
+            ? '#fecha-recuerdo-publicacion'
+            : '#fecha-momento-publicacion';
+          const campoFecha = document.querySelector(selector);
+          enfocarCampoDentroDelEditor(campoFecha);
+        }, 120);
+      } else {
+        window.setTimeout(() => enfocarCampoDentroDelEditor(textareaPublicacionRef.current), 120);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error al preparar edición de publicación:', error);
+      alert(error.message || 'No se pudo abrir la publicación para editar.');
+      if (rutaRetorno) navigate(rutaRetorno, { replace: true });
+      return false;
+    } finally {
+      setCargandoPublicacionEdicion(false);
+    }
+  };
+
   const cerrarModalPublicacion = () => {
     if (publicando) return;
+    const volverA = rutaRetornoEdicion;
     setModalAbierto(false);
+    setTextoPublicacion('');
+    limpiarMultimedia();
+    limpiarHerramientasPublicacion();
+    limpiarEstadoEdicionPublicacion();
+    if (volverA) navigate(volverA, { replace: true });
   };
 
   const manejarPublicar = async () => {
     if (publicando) return;
 
     const contenidoLimpio = textoPublicacion.trim();
-    const archivosAEnviar = multimediaBorradorRef.current;
+    const elementosMultimedia = multimediaBorradorRef.current;
+    const archivosNuevos = elementosMultimedia.filter(elemento => elemento.archivo);
+    const multimediaExistenteIds = elementosMultimedia
+      .filter(elemento => elemento.existente && elemento.uploadId)
+      .map(elemento => elemento.uploadId);
+    const esEdicion = Boolean(publicacionEditandoId);
 
-    if (!contenidoLimpio && archivosAEnviar.length === 0) {
+    if (!contenidoLimpio && elementosMultimedia.length === 0) {
       alert('Escribe un mensaje o agrega al menos una foto, video o GIF.');
       return;
     }
@@ -1282,7 +1541,7 @@ export default function Inicio() {
       return;
     }
 
-    const pesoTotal = archivosAEnviar.reduce((total, elemento) => total + (elemento.pesoBytes || 0), 0);
+    const pesoTotal = elementosMultimedia.reduce((total, elemento) => total + (elemento.pesoBytes || 0), 0);
     if (pesoTotal > MAX_TOTAL_UPLOAD_BYTES_FRONTEND) {
       alert(`El conjunto de archivos supera el límite de ${MAX_TOTAL_UPLOAD_MB_FRONTEND} MB.`);
       return;
@@ -1294,83 +1553,127 @@ export default function Inicio() {
       const formData = new FormData();
       formData.append('tipo', tipoPublicacion);
       formData.append('contenido', contenidoLimpio);
+      formData.append('ubicacionTexto', ubicacionPublicacion || '');
+      formData.append('menciones', JSON.stringify(
+        mencionesPublicacion.map(p => ({
+          id: p.id,
+          nombre: p.nombreReal || p.nombre,
+          nickname: p.nickname,
+          nombreUsuario: p.nombreUsuario,
+          handle: p.handle || normalizarHandleMencion(p.nickname || p.nombreUsuario || p.nombreReal || p.nombre)
+        }))
+      ));
+      formData.append('etiquetasMultimedia', JSON.stringify(
+        etiquetasImagen.map(p => ({
+          id: p.id,
+          nombre: p.nombreReal || p.nombre,
+          nickname: p.nickname,
+          nombreUsuario: p.nombreUsuario
+        }))
+      ));
+
+      if (tipoPublicacion === 'historico') {
+        formData.append('fechaRecuerdo', fechaRecuerdoPublicacion || '');
+      }
+
       if (tipoPublicacion === 'familiar') {
         formData.append('arbolAudienciaId', arbolAudienciaPublicacion.id);
-        if (fechaMomentoPublicacion) formData.append('fechaMomento', fechaMomentoPublicacion);
-        if (personasRelacionadasPublicacion.length > 0) {
-          formData.append('personasRelacionadas', JSON.stringify(
-            personasRelacionadasPublicacion.map(persona => ({ nodoId: persona.id }))
-          ));
+        formData.append('fechaMomento', fechaMomentoPublicacion || '');
+        formData.append('personasRelacionadas', JSON.stringify(
+          personasRelacionadasPublicacion.map(persona => ({ nodoId: persona.id }))
+        ));
+        formData.append('eventoRelacionadoId', eventoRelacionadoPublicacion?.id || '');
+        formData.append('eventoRelacionado', eventoRelacionadoPublicacion
+          ? JSON.stringify({
+            id: eventoRelacionadoPublicacion.id,
+            titulo: eventoRelacionadoPublicacion.titulo,
+            fechaInicio: eventoRelacionadoPublicacion.fechaInicio,
+            tipoEvento: eventoRelacionadoPublicacion.tipoEvento,
+            nombreFamilia: eventoRelacionadoPublicacion.nombreFamilia,
+            arbolId: eventoRelacionadoPublicacion.arbolId
+          })
+          : '');
+      }
+
+      if (esEdicion) {
+        formData.append('multimediaExistenteIds', JSON.stringify(multimediaExistenteIds));
+      }
+      archivosNuevos.forEach((elemento) => formData.append('archivo', elemento.archivo));
+
+      const respuesta = await fetch(
+        esEdicion
+          ? `${API_BASE_URL}/publicaciones/${publicacionEditandoId}`
+          : `${API_BASE_URL}/publicaciones/crear`,
+        {
+          method: esEdicion ? 'PATCH' : 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
         }
-      }
-      if (ubicacionPublicacion) formData.append('ubicacionTexto', ubicacionPublicacion);
-      if (mencionesPublicacion.length > 0) {
-        formData.append('menciones', JSON.stringify(
-          mencionesPublicacion.map(p => ({
-            id: p.id,
-            nombre: p.nombreReal || p.nombre,
-            nickname: p.nickname,
-            nombreUsuario: p.nombreUsuario,
-            handle: p.handle || normalizarHandleMencion(p.nickname || p.nombreUsuario || p.nombreReal || p.nombre)
-          }))
-        ));
-      }
-      if (tipoPublicacion === 'familiar' && eventoRelacionadoPublicacion) {
-        formData.append('eventoRelacionadoId', eventoRelacionadoPublicacion.id);
-        formData.append('eventoRelacionado', JSON.stringify({ id: eventoRelacionadoPublicacion.id, titulo: eventoRelacionadoPublicacion.titulo, fechaInicio: eventoRelacionadoPublicacion.fechaInicio, tipoEvento: eventoRelacionadoPublicacion.tipoEvento, nombreFamilia: eventoRelacionadoPublicacion.nombreFamilia }));
-      }
-      if (etiquetasImagen.length > 0) {
-        formData.append('etiquetasMultimedia', JSON.stringify(
-          etiquetasImagen.map(p => ({
-            id: p.id,
-            nombre: p.nombreReal || p.nombre,
-            nickname: p.nickname,
-            nombreUsuario: p.nombreUsuario
-          }))
-        ));
-      }
-      archivosAEnviar.forEach((elemento) => formData.append('archivo', elemento.archivo));
-
-      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/crear`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
+      );
       const datos = await respuesta.json().catch(() => ({}));
-      if (respuesta.ok) {
-        const autorRespuesta = datos.publicacion?.autor;
-        const autorPublicacionCreada = autorRespuesta && typeof autorRespuesta === 'object'
-          ? { ...(usuarioLogueado || {}), ...autorRespuesta }
-          : (usuarioLogueado || autorRespuesta);
+      if (!respuesta.ok) {
+        alert(datos.mensaje || (esEdicion ? 'No se pudo actualizar la publicación.' : 'Hubo un error al publicar.'));
+        return;
+      }
 
-        const publicacionCreada = {
-          ...datos.publicacion,
-          autor: autorPublicacionCreada,
-          ubicacionTexto: datos.publicacion?.ubicacionTexto || ubicacionPublicacion,
-          menciones: datos.publicacion?.menciones || mencionesPublicacion,
-          eventoRelacionado: datos.publicacion?.eventoRelacionado || eventoRelacionadoPublicacion,
-          arbolAudiencia: datos.publicacion?.arbolAudiencia || arbolAudienciaPublicacion,
-          nombreFamiliaAudienciaSnapshot: datos.publicacion?.nombreFamiliaAudienciaSnapshot || arbolAudienciaPublicacion?.nombreFamilia || '',
-          etiquetasMultimedia: datos.publicacion?.etiquetasMultimedia || etiquetasImagen,
-          fechaMomento: datos.publicacion?.fechaMomento || fechaMomentoPublicacion || null,
-          personasRelacionadas: datos.publicacion?.personasRelacionadas || personasRelacionadasPublicacion
-        };
-        setPublicaciones((prev) => [publicacionCreada, ...prev]);
-        setComentariosPorPub(prev => ({ ...prev, [datos.publicacion._id]: [] }));
-        setTextoPublicacion('');
-        limpiarMultimedia();
-        limpiarHerramientasPublicacion();
-        setModalAbierto(false);
+      const autorRespuesta = datos.publicacion?.autor;
+      const autorNormalizado = autorRespuesta && typeof autorRespuesta === 'object'
+        ? { ...(usuarioLogueado || {}), ...autorRespuesta }
+        : (usuarioLogueado || autorRespuesta);
+      const publicacionGuardada = {
+        ...datos.publicacion,
+        autor: autorNormalizado
+      };
+
+      if (esEdicion) {
+        setPublicaciones(prev => prev.map(pub => (
+          String(pub._id || pub.id) === String(publicacionGuardada._id || publicacionGuardada.id)
+            ? publicacionGuardada
+            : pub
+        )));
       } else {
-        alert(datos.mensaje || 'Hubo un error al publicar.');
+        setPublicaciones(prev => [publicacionGuardada, ...prev]);
+        setComentariosPorPub(prev => ({ ...prev, [publicacionGuardada._id]: [] }));
+      }
+
+      const volverA = rutaRetornoEdicion;
+      setTextoPublicacion('');
+      limpiarMultimedia();
+      limpiarHerramientasPublicacion();
+      setModalAbierto(false);
+      limpiarEstadoEdicionPublicacion();
+
+      if (volverA) {
+        navigate(volverA, {
+          replace: true,
+          state: {
+            publicacionActualizadaId: publicacionGuardada._id || publicacionGuardada.id,
+            actualizadoEn: Date.now()
+          }
+        });
       }
     } catch (err) {
-      console.error('Error al publicar:', err);
+      console.error('Error al guardar publicación:', err);
       alert('Error de red al intentar conectar con el servidor.');
     } finally {
       setPublicando(false);
     }
   };
+
+  useEffect(() => {
+    const publicacionId = location.state?.editarPublicacionId;
+    if (!publicacionId || !token) return;
+
+    const accionInicial = location.state?.accionInicial || 'editar';
+    const rutaRetorno = location.state?.rutaRetorno || '';
+
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: null
+    });
+
+    cargarPublicacionParaEditar(publicacionId, { accionInicial, rutaRetorno });
+  }, [location.state?.editarPublicacionId, token]);
 
   const usuarioHaReaccionado = (pub) => {
     if (!Array.isArray(pub.reacciones)) return false;
@@ -1390,6 +1693,462 @@ export default function Inicio() {
       const datos = await respuesta.json();
       if (respuesta.ok) setPublicaciones(prev => prev.map(p => p._id === pubId ? { ...p, reacciones: datos.reacciones } : p));
     } catch (err) { console.error(err); }
+  };
+
+  const cerrarAvisoPreferenciaFeed = () => {
+    if (temporizadorAvisoPreferenciaFeedRef.current) {
+      window.clearTimeout(temporizadorAvisoPreferenciaFeedRef.current);
+      temporizadorAvisoPreferenciaFeedRef.current = null;
+    }
+    setAvisoPreferenciaFeed(null);
+  };
+
+  const mostrarAvisoPreferenciaFeed = ({ mensaje, onDeshacer = null }) => {
+    if (temporizadorAvisoPreferenciaFeedRef.current) {
+      window.clearTimeout(temporizadorAvisoPreferenciaFeedRef.current);
+    }
+
+    setAvisoPreferenciaFeed({ mensaje, onDeshacer, procesando: false });
+    temporizadorAvisoPreferenciaFeedRef.current = window.setTimeout(() => {
+      setAvisoPreferenciaFeed(null);
+      temporizadorAvisoPreferenciaFeedRef.current = null;
+    }, 7000);
+  };
+
+  const manejarDeshacerPreferenciaFeed = async () => {
+    const accionDeshacer = avisoPreferenciaFeed?.onDeshacer;
+    if (typeof accionDeshacer !== 'function' || avisoPreferenciaFeed?.procesando) return;
+
+    if (temporizadorAvisoPreferenciaFeedRef.current) {
+      window.clearTimeout(temporizadorAvisoPreferenciaFeedRef.current);
+      temporizadorAvisoPreferenciaFeedRef.current = null;
+    }
+
+    setAvisoPreferenciaFeed(prev => prev ? { ...prev, procesando: true } : prev);
+
+    try {
+      await accionDeshacer();
+      setAvisoPreferenciaFeed(null);
+    } catch (error) {
+      setAvisoPreferenciaFeed(prev => prev ? { ...prev, procesando: false } : prev);
+      alert(error.message || 'No se pudo deshacer la acción.');
+    }
+  };
+
+  const recargarMuroPorPreferencias = async () => {
+    const respuesta = await fetch(`${API_BASE_URL}/publicaciones/muro`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const datos = await respuesta.json().catch(() => []);
+    if (!respuesta.ok) {
+      throw new Error(datos.mensaje || 'No se pudo actualizar el muro.');
+    }
+
+    const lista = Array.isArray(datos) ? datos : [];
+    setPublicaciones(lista);
+    await cargarComentariosDePublicaciones(lista);
+    return lista;
+  };
+
+  const limpiarEstadosDePublicacionesRetiradas = (idsPublicaciones = []) => {
+    const ids = new Set(idsPublicaciones.filter(Boolean).map(String));
+    if (ids.size === 0) return;
+
+    setComentariosPorPub(prev => {
+      const siguiente = { ...prev };
+      ids.forEach(idPublicacion => delete siguiente[idPublicacion]);
+      return siguiente;
+    });
+    setComentarioAbierto(prev => {
+      const siguiente = { ...prev };
+      ids.forEach(idPublicacion => delete siguiente[idPublicacion]);
+      return siguiente;
+    });
+    setNuevoComentarioTexto(prev => {
+      const siguiente = { ...prev };
+      ids.forEach(idPublicacion => delete siguiente[idPublicacion]);
+      return siguiente;
+    });
+  };
+
+  const manejarOcultarPublicacionDeInicio = async (pub) => {
+    const pubId = pub?._id || pub?.id;
+    if (!pubId) return false;
+
+    const estabaOculta = Boolean(pub.ocultaDeMiInicio);
+
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${pubId}/ocultar-inicio`, {
+        method: estabaOculta ? 'DELETE' : 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo actualizar esta preferencia.');
+
+      if (estabaOculta || textoBusqueda.trim() !== '') {
+        setPublicaciones(prev => prev.map(item => (
+          String(item._id || item.id) === String(pubId)
+            ? { ...item, ocultaDeMiInicio: !estabaOculta }
+            : item
+        )));
+      } else {
+        setPublicaciones(prev => prev.filter(item => String(item._id || item.id) !== String(pubId)));
+        limpiarEstadosDePublicacionesRetiradas([pubId]);
+      }
+
+      if (estabaOculta) {
+        mostrarAvisoPreferenciaFeed({ mensaje: 'La publicación volverá a aparecer en tu Inicio.' });
+      } else {
+        mostrarAvisoPreferenciaFeed({
+          mensaje: 'Publicación ocultada de tu Inicio.',
+          onDeshacer: async () => {
+            const respuestaDeshacer = await fetch(`${API_BASE_URL}/publicaciones/${pubId}/ocultar-inicio`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const datosDeshacer = await respuestaDeshacer.json().catch(() => ({}));
+            if (!respuestaDeshacer.ok) {
+              throw new Error(datosDeshacer.mensaje || 'No se pudo volver a mostrar la publicación.');
+            }
+
+            if (textoBusqueda.trim() !== '') {
+              setPublicaciones(prev => prev.map(item => (
+                String(item._id || item.id) === String(pubId)
+                  ? { ...item, ocultaDeMiInicio: false }
+                  : item
+              )));
+            } else {
+              await recargarMuroPorPreferencias();
+            }
+          }
+        });
+      }
+
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo actualizar la visibilidad de esta publicación en tu Inicio.');
+      return false;
+    }
+  };
+
+  const manejarPausaAutorEnInicio = async (pub) => {
+    const autorId = obtenerIdPersonaPerfil(pub?.autor) || obtenerIdPersonaPerfil(pub?.usuario);
+    if (!autorId) return false;
+
+    const autorEstabaPausado = Boolean(pub.autorPausadoEnInicio);
+    const nombreAutor = obtenerNombreDeEntidad(pub.autor || pub.usuario, 'este autor');
+
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/autor/${autorId}/pausar-inicio`, {
+        method: autorEstabaPausado ? 'DELETE' : 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo actualizar la pausa del autor.');
+
+      if (autorEstabaPausado || textoBusqueda.trim() !== '') {
+        setPublicaciones(prev => prev.map(item => {
+          const itemAutorId = obtenerIdPersonaPerfil(item.autor) || obtenerIdPersonaPerfil(item.usuario);
+          return String(itemAutorId) === String(autorId)
+            ? {
+              ...item,
+              autorPausadoEnInicio: !autorEstabaPausado,
+              autorPausadoHasta: autorEstabaPausado ? null : datos.autorPausadoHasta
+            }
+            : item;
+        }));
+      } else {
+        const idsRetirados = publicaciones
+          .filter(item => {
+            const itemAutorId = obtenerIdPersonaPerfil(item.autor) || obtenerIdPersonaPerfil(item.usuario);
+            return String(itemAutorId) === String(autorId);
+          })
+          .map(item => item._id || item.id);
+
+        setPublicaciones(prev => prev.filter(item => {
+          const itemAutorId = obtenerIdPersonaPerfil(item.autor) || obtenerIdPersonaPerfil(item.usuario);
+          return String(itemAutorId) !== String(autorId);
+        }));
+        limpiarEstadosDePublicacionesRetiradas(idsRetirados);
+      }
+
+      if (autorEstabaPausado) {
+        mostrarAvisoPreferenciaFeed({ mensaje: `Las publicaciones de ${nombreAutor} volverán a aparecer en tu Inicio.` });
+      } else {
+        mostrarAvisoPreferenciaFeed({
+          mensaje: `Publicaciones de ${nombreAutor} pausadas durante 30 días.`,
+          onDeshacer: async () => {
+            const respuestaDeshacer = await fetch(`${API_BASE_URL}/publicaciones/autor/${autorId}/pausar-inicio`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const datosDeshacer = await respuestaDeshacer.json().catch(() => ({}));
+            if (!respuestaDeshacer.ok) {
+              throw new Error(datosDeshacer.mensaje || 'No se pudo reanudar al autor.');
+            }
+
+            if (textoBusqueda.trim() !== '') {
+              setPublicaciones(prev => prev.map(item => {
+                const itemAutorId = obtenerIdPersonaPerfil(item.autor) || obtenerIdPersonaPerfil(item.usuario);
+                return String(itemAutorId) === String(autorId)
+                  ? { ...item, autorPausadoEnInicio: false, autorPausadoHasta: null }
+                  : item;
+              }));
+            } else {
+              await recargarMuroPorPreferencias();
+            }
+          }
+        });
+      }
+
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo actualizar la pausa del autor.');
+      return false;
+    }
+  };
+
+  const construirInformacionVisibilidad = (pub) => {
+    const esHistorico = pub.tipo === 'historico';
+    const arbolAudiencia = obtenerArbolAudienciaDePublicacion(pub);
+    const nombreFamiliaBase = arbolAudiencia?.nombreFamilia || pub.nombreFamiliaAudienciaSnapshot || 'tu árbol familiar';
+    const nombreFamilia = nombreFamiliaBase === 'tu árbol familiar' || /^familia\b/i.test(nombreFamiliaBase)
+      ? nombreFamiliaBase
+      : `Familia ${nombreFamiliaBase}`;
+
+    if (esHistorico) {
+      return {
+        titulo: '¿Por qué ves este Recuerdo Histórico?',
+        subtitulo: 'Visibilidad pública',
+        icono: 'bi-globe-americas',
+        parrafos: [
+          'Los Recuerdos Históricos son publicaciones públicas dentro de Eternal Legacy.',
+          'Esta publicación puede aparecer en tu Inicio porque forma parte del contenido público disponible para la comunidad.'
+        ],
+        nota: 'Ocultarla o pausar a su autor solo cambia tu propio Inicio; la publicación no se elimina.'
+      };
+    }
+
+    return {
+      titulo: '¿Por qué ves este Momento Familiar?',
+      subtitulo: nombreFamilia,
+      icono: 'bi-shield-lock-fill',
+      parrafos: [
+        `Puedes ver este Momento Familiar porque perteneces a ${nombreFamilia}.`,
+        'Los Momentos Familiares solo son visibles para los integrantes autorizados del árbol donde se publicaron.'
+      ],
+      nota: 'Ocultarlo o pausar a su autor no lo elimina del árbol, de sus eventos ni de los recuerdos familiares relacionados.'
+    };
+  };
+
+  const manejarGuardarPublicacion = async (pub) => {
+    const pubId = pub?._id || pub?.id;
+    if (!pubId) return false;
+
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${pubId}/guardar`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo guardar la publicación.');
+
+      setPublicaciones(prev => prev.map(item => (
+        String(item._id || item.id) === String(pubId)
+          ? { ...item, guardadaPorMi: Boolean(datos.guardadaPorMi) }
+          : item
+      )));
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo guardar la publicación.');
+      return false;
+    }
+  };
+
+  const manejarFijarPublicacion = async (pub) => {
+    const pubId = pub?._id || pub?.id;
+    if (!pubId) return false;
+
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${pubId}/fijar`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo actualizar la publicación fijada.');
+
+      const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+      setPublicaciones(prev => prev.map(item => {
+        const itemId = item._id || item.id;
+        const itemAutorId = obtenerId(item.autor) || obtenerId(item.usuario);
+        if (datos.fijadaEnPerfil && String(itemAutorId) === String(miId)) {
+          return String(itemId) === String(pubId)
+            ? { ...item, fijadaEnPerfil: true, fijadaEnPerfilAt: datos.fijadaEnPerfilAt }
+            : { ...item, fijadaEnPerfil: false, fijadaEnPerfilAt: null };
+        }
+        if (String(itemId) === String(pubId)) {
+          return { ...item, fijadaEnPerfil: false, fijadaEnPerfilAt: null };
+        }
+        return item;
+      }));
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo actualizar la publicación fijada.');
+      return false;
+    }
+  };
+
+  const manejarEliminarPublicacion = async (pub) => {
+    const pubId = pub?._id || pub?.id;
+    if (!pubId) return false;
+
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${pubId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo eliminar la publicación.');
+
+      setPublicaciones(prev => prev.filter(item => String(item._id || item.id) !== String(pubId)));
+      setComentariosPorPub(prev => {
+        const siguiente = { ...prev };
+        delete siguiente[pubId];
+        return siguiente;
+      });
+      setComentarioAbierto(prev => {
+        const siguiente = { ...prev };
+        delete siguiente[pubId];
+        return siguiente;
+      });
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo eliminar la publicación.');
+      return false;
+    }
+  };
+
+  const crearOpcionesMenuPublicacion = (pub, esAutor) => {
+    const esHistorico = pub.tipo === 'historico';
+
+    if (!esAutor) {
+      const nombreAutor = obtenerNombreDeEntidad(pub.autor || pub.usuario, 'este autor');
+      const autorPausado = Boolean(pub.autorPausadoEnInicio);
+      const publicacionOculta = Boolean(pub.ocultaDeMiInicio);
+
+      return [
+        {
+          id: 'guardar',
+          etiqueta: pub.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación',
+          descripcion: pub.guardadaPorMi
+            ? 'Ya no aparecerá en tus elementos guardados.'
+            : 'Agrégala a tus elementos guardados.',
+          icono: pub.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark',
+          activa: Boolean(pub.guardadaPorMi),
+          onClick: () => manejarGuardarPublicacion(pub)
+        },
+        {
+          id: 'por-que-la-veo',
+          etiqueta: esHistorico ? '¿Por qué veo este Recuerdo Histórico?' : '¿Por qué veo este Momento Familiar?',
+          descripcion: esHistorico
+            ? 'Conoce por qué este contenido público puede aparecer en tu Inicio.'
+            : 'Consulta qué árbol familiar te permite acceder a este momento.',
+          icono: 'bi-info-circle-fill',
+          informacion: construirInformacionVisibilidad(pub)
+        },
+        {
+          id: 'ocultar-inicio',
+          etiqueta: publicacionOculta ? 'Volver a mostrar en mi Inicio' : 'Ocultar de mi Inicio',
+          descripcion: publicacionOculta
+            ? 'Esta publicación podrá aparecer otra vez en tu muro.'
+            : 'Dejará de aparecer en tu Inicio, pero seguirá disponible en el perfil de su autor.',
+          icono: publicacionOculta ? 'bi-eye-fill' : 'bi-eye-slash-fill',
+          activa: publicacionOculta,
+          separadorAntes: true,
+          textoProcesando: publicacionOculta ? 'Mostrando...' : 'Ocultando...',
+          onClick: () => manejarOcultarPublicacionDeInicio(pub)
+        },
+        {
+          id: 'pausar-autor',
+          etiqueta: autorPausado
+            ? `Reanudar publicaciones de ${nombreAutor}`
+            : `Pausar publicaciones de ${nombreAutor} durante 30 días`,
+          descripcion: autorPausado
+            ? 'Sus publicaciones podrán volver a aparecer en tu Inicio.'
+            : 'Sus publicaciones dejarán de aparecer temporalmente en tu Inicio.',
+          icono: autorPausado ? 'bi-play-circle-fill' : 'bi-clock-history',
+          activa: autorPausado,
+          textoProcesando: autorPausado ? 'Reanudando...' : 'Pausando...',
+          ...(!autorPausado ? {
+            confirmacion: {
+              titulo: `¿Pausar a ${nombreAutor} durante 30 días?`,
+              mensaje: 'Sus publicaciones no aparecerán temporalmente en tu Inicio. Seguirás pudiendo visitar su perfil y ver el contenido al que tengas acceso dentro de tus árboles familiares.',
+              confirmarTexto: 'Pausar 30 días',
+              textoProcesando: 'Pausando...'
+            }
+          } : {}),
+          onClick: () => manejarPausaAutorEnInicio(pub)
+        }
+      ];
+    }
+
+    return [
+      {
+        id: 'fijar',
+        etiqueta: pub.fijadaEnPerfilAt || pub.fijadaEnPerfil ? 'Desfijar de mi perfil' : 'Fijar en mi perfil',
+        descripcion: pub.fijadaEnPerfilAt || pub.fijadaEnPerfil
+          ? 'La publicación volverá a su posición cronológica.'
+          : 'Se mostrará primero en tu perfil.',
+        icono: pub.fijadaEnPerfilAt || pub.fijadaEnPerfil ? 'bi-pin-angle-fill' : 'bi-pin-angle',
+        activa: Boolean(pub.fijadaEnPerfilAt || pub.fijadaEnPerfil),
+        onClick: () => manejarFijarPublicacion(pub)
+      },
+      {
+        id: 'guardar',
+        etiqueta: pub.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación',
+        descripcion: pub.guardadaPorMi ? 'Ya no aparecerá en tus elementos guardados.' : 'Agrégala a tus elementos guardados.',
+        icono: pub.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark',
+        activa: Boolean(pub.guardadaPorMi),
+        onClick: () => manejarGuardarPublicacion(pub)
+      },
+      {
+        id: 'editar',
+        etiqueta: 'Editar publicación',
+        icono: 'bi-pencil-fill',
+        separadorAntes: true,
+        onClick: () => cargarPublicacionParaEditar(pub._id || pub.id)
+      },
+      ...(!esHistorico ? [{
+        id: 'audiencia',
+        etiqueta: 'Cambiar árbol de audiencia',
+        descripcion: 'Solo los miembros del árbol seleccionado podrán verla.',
+        icono: 'bi-people-fill',
+        onClick: () => cargarPublicacionParaEditar(pub._id || pub.id, { accionInicial: 'cambiar-audiencia' })
+      }] : []),
+      {
+        id: 'fecha',
+        etiqueta: esHistorico ? 'Editar fecha del recuerdo' : 'Editar fecha del momento',
+        icono: 'bi-calendar3',
+        onClick: () => cargarPublicacionParaEditar(pub._id || pub.id, { accionInicial: 'editar-fecha' })
+      },
+      {
+        id: 'eliminar',
+        etiqueta: 'Eliminar publicación',
+        descripcion: 'Se eliminará de forma permanente.',
+        icono: 'bi-trash3-fill',
+        peligro: true,
+        separadorAntes: true,
+        textoProcesando: 'Eliminando...',
+        confirmacion: {
+          titulo: '¿Eliminar esta publicación?',
+          mensaje: 'Se eliminarán también sus comentarios y archivos asociados. Esta acción no se puede deshacer.',
+          confirmarTexto: 'Eliminar publicación',
+          textoProcesando: 'Eliminando...',
+          peligro: true
+        },
+        onClick: () => manejarEliminarPublicacion(pub)
+      }
+    ];
   };
 
   const toggleComentarios = async (pubId) => {
@@ -1554,6 +2313,7 @@ export default function Inicio() {
 
     return {
       id: id || `${titulo}-${fechaInicio || Date.now()}`,
+      arbolId: obtenerId(evento.arbol) || obtenerId(eventoBase?.arbol) || evento.arbolId || eventoBase?.arbolId || null,
       titulo, fechaInicio, tipoEvento, nombreFamilia, detalle, fecha, etiquetaTipo,
       descripcion: evento.descripcion || eventoBase?.descripcion || '',
       ubicacion: obtenerTextoUbicacionEvento(eventoBase || evento)
@@ -1797,6 +2557,10 @@ export default function Inicio() {
     }
 
     if (panelHerramientaActivo === 'eventos') {
+      const eventosDelArbolActual = proximosEventosFamiliares.filter(evento => (
+        !evento.arbolId || String(evento.arbolId) === String(arbolAudienciaPublicacion?.id)
+      ));
+
       return (
         <div className="panel-herramienta-publicacion panel-eventos-publicacion">
           <div className="encabezado-panel-eventos-publicacion">
@@ -1814,8 +2578,8 @@ export default function Inicio() {
               <div className="estado-sugerencias-publicacion"><span className="spinner-border spinner-border-sm me-2"></span>Cargando eventos...</div>
             ) : errorEventosFamiliares ? (
               <div className="estado-sugerencias-publicacion error">{errorEventosFamiliares}</div>
-            ) : proximosEventosFamiliares.length > 0 ? (
-              proximosEventosFamiliares.map(evento => (
+            ) : eventosDelArbolActual.length > 0 ? (
+              eventosDelArbolActual.map(evento => (
                 <button key={evento.id} type="button" className="evento-sugerido-publicacion" onClick={() => seleccionarEventoPublicacion(evento)}>
                   <span className="evento-sugerido-fecha">
                     <strong>{evento.fecha?.dia || '--'}</strong>
@@ -2052,6 +2816,36 @@ export default function Inicio() {
         onConfirmar={confirmarCropperPublicacion}
       />
 
+      {avisoPreferenciaFeed && (
+        <div className="aviso-preferencia-feed" role="status" aria-live="polite">
+          <span className="aviso-preferencia-feed-icono" aria-hidden="true">
+            <i className="bi bi-check-circle-fill"></i>
+          </span>
+          <span className="aviso-preferencia-feed-mensaje">{avisoPreferenciaFeed.mensaje}</span>
+          {typeof avisoPreferenciaFeed.onDeshacer === 'function' && (
+            <button
+              type="button"
+              className="aviso-preferencia-feed-deshacer"
+              onClick={manejarDeshacerPreferenciaFeed}
+              disabled={Boolean(avisoPreferenciaFeed.procesando)}
+            >
+              {avisoPreferenciaFeed.procesando ? (
+                <><span className="spinner-border spinner-border-sm" aria-hidden="true"></span> Deshaciendo...</>
+              ) : 'Deshacer'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="aviso-preferencia-feed-cerrar"
+            onClick={cerrarAvisoPreferenciaFeed}
+            aria-label="Cerrar aviso"
+            disabled={Boolean(avisoPreferenciaFeed.procesando)}
+          >
+            <i className="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </div>
+      )}
+
       {/* SELECTOR DE TIPO DE PUBLICACIÓN */}
       {selectorTipoAbierto && (
         <div className="modal-backdrop-custom" onClick={() => setSelectorTipoAbierto(false)}>
@@ -2122,14 +2916,17 @@ export default function Inicio() {
       {modalAbierto && (
         <div className="modal-backdrop-custom modal-backdrop-publicacion" onClick={cerrarModalPublicacion}>
           <div
-            className={`modal-publicacion modal-publicacion-${tipoPublicacion} ${hayMultimediaBorrador ? 'modal-publicacion-con-preview' : 'modal-publicacion-sin-preview'} ${panelHerramientaActivo ? 'modal-publicacion-con-panel' : ''}`}
+            className={`modal-publicacion modal-publicacion-${tipoPublicacion} ${publicacionEditandoId ? 'modal-publicacion-edicion' : 'modal-publicacion-creacion'} ${hayMultimediaBorrador ? 'modal-publicacion-con-preview' : 'modal-publicacion-sin-preview'} ${panelHerramientaActivo ? 'modal-publicacion-con-panel' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={publicacionEditandoId ? 'Editar publicación' : 'Crear publicación'}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-publicacion-topbar-movil">
               <button type="button" className="btn-cerrar-publicacion-movil" onClick={cerrarModalPublicacion} disabled={publicando} aria-label="Cerrar publicación">
                 <i className="bi bi-x-lg"></i>
               </button>
-              <span>Nueva publicación</span>
+              <span>{publicacionEditandoId ? 'Editar publicación' : 'Nueva publicación'}</span>
               <button type="button" className="btn-menu-publicacion-movil" aria-label="Más opciones">
                 <i className="bi bi-three-dots"></i>
               </button>
@@ -2141,13 +2938,13 @@ export default function Inicio() {
               <div className="titulo-modal-publicacion">
                 <span className="icono-modal-publicacion"><i className={`bi ${configPublicacionActual.icono}`}></i></span>
                 <div>
-                  <h4>{configPublicacionActual.titulo}</h4>
-                  <p>{configPublicacionActual.subtitulo}</p>
+                  <h4>{publicacionEditandoId ? `Editar ${configPublicacionActual.titulo}` : configPublicacionActual.titulo}</h4>
+                  <p>{publicacionEditandoId ? 'Actualiza el contenido sin cambiar el tipo de publicación.' : configPublicacionActual.subtitulo}</p>
                 </div>
               </div>
             </div>
 
-            <div className="modal-cuerpo mt-3">
+            <div className="modal-cuerpo mt-3" ref={modalCuerpoPublicacionRef}>
               {tipoPublicacion === 'familiar' && (
                 <div className="selector-audiencia-familiar mb-3">
                   <div className="selector-audiencia-info">
@@ -2182,6 +2979,23 @@ export default function Inicio() {
                       {arbolAudienciaPublicacion?.nombreFamilia || arbolesAudienciaPublicacion[0]?.nombreFamilia || 'Árbol familiar'}
                     </div>
                   )}
+                </div>
+              )}
+
+              {tipoPublicacion === 'historico' && (
+                <div className="fecha-momento-publicacion fecha-recuerdo-publicacion mb-3">
+                  <label htmlFor="fecha-recuerdo-publicacion">
+                    <i className="bi bi-calendar3"></i>
+                    Fecha del recuerdo <span>opcional</span>
+                  </label>
+                  <input
+                    id="fecha-recuerdo-publicacion"
+                    type="date"
+                    value={fechaRecuerdoPublicacion}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(event) => setFechaRecuerdoPublicacion(event.target.value)}
+                  />
+                  <small>Conserva la fecha histórica sin modificar cuándo se publicó en Legacy.</small>
                 </div>
               )}
 
@@ -2263,8 +3077,8 @@ export default function Inicio() {
 
               <button className="boton-publicar-modal" type="button" onClick={manejarPublicar} disabled={!puedePublicar || publicando}>
                 {publicando ? (
-                  <><span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Publicando...</>
-                ) : configPublicacionActual.boton}
+                  <><span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>{publicacionEditandoId ? 'Guardando...' : 'Publicando...'}</>
+                ) : (publicacionEditandoId ? 'Guardar cambios' : configPublicacionActual.boton)}
               </button>
             </div>
           </div>
@@ -2353,6 +3167,10 @@ export default function Inicio() {
             const nombreAutor = obtenerNombreDeEntidad(pub.autor) || obtenerNombreDeEntidad(pub.usuario, 'Familiar');
             const nicknameAutor = obtenerNicknameDeEntidad(pub.autor) || obtenerNicknameDeEntidad(pub.usuario);
             const srcAvatarAutor = obtenerUrlImagenPerfil(imagenAutor, nombreAutor);
+            const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+            const esAutor = Boolean(autorId && miId && String(autorId) === String(miId));
+            const fechaContexto = pub.tipo === 'historico' ? pub.fechaRecuerdo : pub.fechaMomento;
+            const anioContexto = fechaContexto ? formatearFechaContextoPublicacion(fechaContexto) : (pub.anio || '');
 
             return (
               <div key={pub._id} className="tarjeta tarjeta-publicacion shadow-sm mb-4">
@@ -2366,11 +3184,18 @@ export default function Inicio() {
                   privacidad={pub.tipo === 'historico' ? 'publico' : 'familia'}
                   nombreFamilia={obtenerArbolAudienciaDePublicacion(pub)?.nombreFamilia || 'Familia'}
                   etiqueta={pub.etiqueta?.nombre || ''}
-                  anio={pub.anio || ''}
+                  anio={anioContexto}
                   ubicacion={ubicacionPost}
                   onAutorClick={autorId ? () => irAPerfil(pub.autor || pub.usuario) : undefined}
-                  onMenuClick={() => { }}
+                  opcionesMenu={crearOpcionesMenuPublicacion(pub, esAutor)}
                 />
+
+                {(pub.fijadaEnPerfilAt || pub.fijadaEnPerfil) && esAutor && (
+                  <div className="publicacion-indicador-fijada">
+                    <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>
+                    Publicación fijada en tu perfil
+                  </div>
+                )}
 
                 {pub.tipo !== 'historico' && eventoRelacionadoPost && (
                   <div className="publicacion-evento-debajo-header">
@@ -2407,7 +3232,16 @@ export default function Inicio() {
                     </button>
                   </div>
                   <div className="d-flex gap-3">
-                    <button className="boton-interaccion border-0 bg-transparent p-0" title="Guardar Recuerdo"><i className="bi bi-bookmark"></i></button>
+                    <button
+                      className={`boton-interaccion border-0 bg-transparent p-0 ${pub.guardadaPorMi ? 'activo-guardado' : ''}`}
+                      type="button"
+                      title={pub.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación'}
+                      aria-label={pub.guardadaPorMi ? 'Quitar de guardados' : 'Guardar publicación'}
+                      aria-pressed={Boolean(pub.guardadaPorMi)}
+                      onClick={() => manejarGuardarPublicacion(pub)}
+                    >
+                      <i className={`bi ${pub.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark'}`}></i>
+                    </button>
                     <button className="boton-interaccion border-0 bg-transparent p-0"><i className="bi bi-share"></i> {pub.compartido || 0}</button>
                   </div>
                 </div>
