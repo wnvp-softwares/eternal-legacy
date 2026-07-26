@@ -5,7 +5,8 @@ const {
     enviarInvitacionFamiliar, 
     responderInvitacionFamiliar, 
     obtenerMisFamiliares,
-    obtenerInvitacionesPendientes
+    obtenerInvitacionesPendientes,
+    eliminarRelacionFamiliar
 } = require('../../controllers/usuarios/familia.controller');
 
 // Ruta para enviar la invitación (Antes era /agregar)
@@ -18,5 +19,8 @@ router.put('/responder/:idInvitacion', verificarToken, responderInvitacionFamili
 router.get('/listar', verificarToken, obtenerMisFamiliares);
 
 router.get('/pendientes', verificarToken, obtenerInvitacionesPendientes);
+
+// Eliminar una relación familiar cuando el usuario autenticado participa en ella
+router.delete('/:relacionId', verificarToken, eliminarRelacionFamiliar);
 
 module.exports = router;

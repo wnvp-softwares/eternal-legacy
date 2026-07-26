@@ -20,6 +20,17 @@ const sonMismoId = (id1, id2) => {
     return Boolean(valor1 && valor2 && valor1 === valor2);
 };
 
+
+const normalizarBusquedaEvento = (valor = '') => String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^#+/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/[^A-Za-z0-9.\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
 const usuarioPuedeVerArbol = (arbol, usuarioId) => {
     if (!arbol || !usuarioId) return false;
     if (sonMismoId(arbol.creador, usuarioId)) return true;
@@ -452,7 +463,9 @@ const crearEventoFamiliar = async (req, res) => {
 const obtenerEventosPorArbol = async (req, res) => {
     try {
         const { arbolId } = req.params;
-        const { desde, hasta, estado = 'Activo', tipoEvento, limite = 50 } = req.query;
+        const { desde, hasta, estado = 'Activo', tipoEvento, limite = 50, q = '' } = req.query;
+        const limiteSeguro = Math.min(Math.max(Number(limite) || 50, 1), 100);
+        const terminoBusqueda = normalizarBusquedaEvento(q);
 
         const arbol = await Arbol.findOne({ _id: arbolId, activo: true });
         if (!arbol) return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
@@ -473,17 +486,24 @@ const obtenerEventosPorArbol = async (req, res) => {
         if (Object.keys(fechaFiltro).length > 0) filtro.fechaInicio = fechaFiltro;
         if (tipoEvento && tipoEvento !== 'Todos') filtro.tipoEvento = tipoEvento;
 
-        const eventos = await consultaEventoPoblado(
+        let eventos = await consultaEventoPoblado(
             EventoFamiliar.find(filtro)
                 .sort({ fechaInicio: 1, _id: 1 })
-                .limit(Math.min(Number(limite) || 50, 100))
+                .limit(terminoBusqueda ? MAX_EVENTOS_CONSULTA : limiteSeguro)
         );
+
+        if (terminoBusqueda) {
+            eventos = eventos
+                .filter(evento => normalizarBusquedaEvento(evento?.titulo).includes(terminoBusqueda))
+                .slice(0, limiteSeguro);
+        }
 
         const eventosConMetadatos = await anexarMetadatosEventos(eventos, arbol, req.usuario.id);
 
         return res.status(200).json({
             mensaje: 'Eventos recuperados correctamente.',
             total: eventosConMetadatos.length,
+            consulta: terminoBusqueda || '',
             eventos: eventosConMetadatos
         });
     } catch (error) {

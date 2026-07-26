@@ -18,6 +18,10 @@ export default function Red() {
 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [confirmacionEliminar, setConfirmacionEliminar] = useState(null);
+  const [confirmacionMarcada, setConfirmacionMarcada] = useState(false);
+  const [procesandoEliminacion, setProcesandoEliminacion] = useState(false);
+  const [errorConfirmacion, setErrorConfirmacion] = useState('');
 
   const token = localStorage.getItem('token');
   const URL_BASE_BACKEND = BACKEND_BASE_URL;
@@ -121,6 +125,27 @@ export default function Red() {
     return () => clearTimeout(timer);
   }, [busqueda, token]);
 
+  useEffect(() => {
+    if (!confirmacionEliminar) return undefined;
+
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const manejarEscape = (evento) => {
+      if (evento.key === 'Escape' && !procesandoEliminacion) {
+        setConfirmacionEliminar(null);
+        setConfirmacionMarcada(false);
+        setErrorConfirmacion('');
+      }
+    };
+
+    document.addEventListener('keydown', manejarEscape);
+    return () => {
+      document.body.style.overflow = overflowAnterior;
+      document.removeEventListener('keydown', manejarEscape);
+    };
+  }, [confirmacionEliminar, procesandoEliminacion]);
+
   // ==========================================
   // FUNCIONES DE INTERACCIÓN
   // ==========================================
@@ -143,23 +168,57 @@ export default function Red() {
     }
   };
 
-  const manejarDejarDeSeguir = async (usuarioId) => {
-    if (!usuarioId) return;
+  const abrirConfirmacionEliminar = ({ tipo, usuarioId = null, relacionId = null, nombre = 'esta persona' }) => {
+    setConfirmacionEliminar({ tipo, usuarioId, relacionId, nombre });
+    setConfirmacionMarcada(false);
+    setErrorConfirmacion('');
+  };
+
+  const cerrarConfirmacionEliminar = () => {
+    if (procesandoEliminacion) return;
+    setConfirmacionEliminar(null);
+    setConfirmacionMarcada(false);
+    setErrorConfirmacion('');
+  };
+
+  const confirmarEliminacionConexion = async () => {
+    if (!confirmacionEliminar || !confirmacionMarcada || procesandoEliminacion) return;
+
+    const { tipo, usuarioId, relacionId } = confirmacionEliminar;
+    const esFamilia = tipo === 'familia';
+    const endpoint = esFamilia
+      ? `${URL_BASE_BACKEND}/api/familia/${relacionId}`
+      : `${URL_BASE_BACKEND}/api/seguidores/dejar-de-seguir/${usuarioId}`;
+
     try {
-      const res = await fetch(`${URL_BASE_BACKEND}/api/seguidores/dejar-de-seguir/${usuarioId}`, {
+      setProcesandoEliminacion(true);
+      setErrorConfirmacion('');
+
+      const respuesta = await fetch(endpoint, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      const datos = await respuesta.json().catch(() => ({}));
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.mensaje || 'No se pudo dejar de seguir al usuario.');
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || (esFamilia
+          ? 'No se pudo eliminar la relación familiar.'
+          : 'No se pudo eliminar esta conexión.'));
       }
 
-      setConexiones(prev => prev.filter(contacto => String(contacto.idConexion) !== String(usuarioId)));
+      if (esFamilia) {
+        setFamiliares(prev => prev.filter(familiar => String(familiar.id) !== String(relacionId)));
+      } else {
+        setConexiones(prev => prev.filter(contacto => String(contacto.idConexion) !== String(usuarioId)));
+      }
+
+      setConfirmacionEliminar(null);
+      setConfirmacionMarcada(false);
     } catch (error) {
-      console.error('Error al dejar de seguir:', error);
-      setError(error.message);
+      console.error('Error al eliminar conexión:', error);
+      setErrorConfirmacion(error.message);
+    } finally {
+      setProcesandoEliminacion(false);
     }
   };
 
@@ -337,25 +396,35 @@ export default function Red() {
                         : `https://ui-avatars.com/api/?name=${encodeURIComponent(familiar.nombre)}&background=cbd5e1`;
 
                       return (
-                        <div key={familiar.id} className="col-12 col-md-6 col-lg-4 col-xl-3">
-                          <div className="card shadow-sm p-3 d-flex flex-row align-items-center gap-3 bg-white h-100">
-                            {/* 🌟 Actualizado para usar srcFamiliar */}
+                        <div key={familiar.id} className="col-12 col-md-6 col-lg-4 col-xl-3 columna-tarjeta-red">
+                          <div className="tarjeta-familiar-red h-100">
                             <img
                               src={srcFamiliar}
                               alt={familiar.nombre}
-                              className="rounded-circle object-fit-cover"
-                              style={{ width: '85px', height: '80px' }}
+                              className="foto-familiar-red"
                             />
-                            <div className="flex-grow-1">
-                              <h6 className="mb-0 fw-bold text-dark">{familiar.nombre}</h6>
-                              <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 small mt-1 d-inline-block">
-                                {familiar.relacion}
-                              </span>
+                            <div className="info-familiar-red">
+                              <h6 className="nombre-familiar-red">{familiar.nombre}</h6>
                               <button
-                                className="btn btn-link text-secondary btn-sm d-block p-0 mt-2 text-decoration-none small"
+                                type="button"
+                                className="badge-familiar-click"
+                                title="Eliminar de mi familia"
+                                onClick={() => abrirConfirmacionEliminar({
+                                  tipo: 'familia',
+                                  relacionId: familiar.id,
+                                  usuarioId: familiar.idConexion,
+                                  nombre: familiar.nombre
+                                })}
+                              >
+                                <i className="bi bi-people-fill"></i>
+                                Familiar · {familiar.relacion}
+                              </button>
+                              <button
+                                className="btn-perfil-familiar-red"
+                                type="button"
                                 onClick={() => navigate(`/perfil/${familiar.idConexion}`)}
                               >
-                                Ver Perfil <i className="bi bi-arrow-right small"></i>
+                                Ver perfil <i className="bi bi-arrow-right"></i>
                               </button>
                             </div>
                           </div>
@@ -379,29 +448,41 @@ export default function Red() {
                 : `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreVisible)}&background=f1f5f9`;
 
               return (
-                <div key={`conn-${idUsuario}-${index}`} className="col-12 col-sm-6 col-md-4 col-xl-3">
-                  <div className="tarjeta-conexion d-flex flex-column justify-content-between h-100">
-                    <div>
-                      <img src={srcImagen} alt={nombreVisible} className="foto-conexion mb-3" />
-                      <h5 className="nombre-conexion fw-bold">{nombreVisible}</h5>
-                      {tabActiva === 'siguiendo' ? (
-                        <button type="button" className="badge-siguiendo-click mb-2" onClick={() => manejarDejarDeSeguir(idUsuario)} title="Clic para dejar de seguir">
-                          <i className="bi bi-person-dash-fill me-1"></i> Siguiendo
-                        </button>
-                      ) : (
-                        <span className="badge bg-light text-dark text-uppercase mb-2 px-3 py-1 relacion-badge">
-                          {contacto.relacion}
-                        </span>
-                      )}
-                      <p className="relacion-conexion text-muted small">{contacto.info}</p>
+                <div key={`conn-${idUsuario}-${index}`} className="col-12 col-sm-6 col-md-4 col-xl-3 columna-tarjeta-red">
+                  <div className="tarjeta-conexion h-100">
+                    <div className="contenido-principal-conexion">
+                      <img src={srcImagen} alt={nombreVisible} className="foto-conexion" />
+                      <div className="datos-conexion-red">
+                        <h5 className="nombre-conexion fw-bold">{nombreVisible}</h5>
+                        {(tabActiva === 'siguiendo' || tabActiva === 'amigos') ? (
+                          <button
+                            type="button"
+                            className="badge-siguiendo-click mb-2"
+                            onClick={() => abrirConfirmacionEliminar({
+                              tipo: tabActiva,
+                              usuarioId: idUsuario,
+                              nombre: nombreVisible
+                            })}
+                            title={tabActiva === 'amigos' ? 'Eliminar de amigos' : 'Dejar de seguir'}
+                          >
+                            <i className={`bi ${tabActiva === 'amigos' ? 'bi-person-x-fill' : 'bi-person-dash-fill'} me-1`}></i>
+                            {tabActiva === 'amigos' ? 'Amigo' : 'Siguiendo'}
+                          </button>
+                        ) : (
+                          <span className="badge bg-light text-dark text-uppercase mb-2 px-3 py-1 relacion-badge">
+                            {contacto.relacion}
+                          </span>
+                        )}
+                        <p className="relacion-conexion text-muted small">{contacto.info}</p>
+                      </div>
                     </div>
 
-                    <div className="mt-3 d-flex flex-column gap-2 w-100 px-2">
+                    <div className="acciones-conexion-red">
                       <button className="btn-ver-perfil rounded-pill w-100" type="button" onClick={() => navigate(`/perfil/${idUsuario}`)}>
                         <i className="bi bi-person-fill me-1"></i> Ver Perfil
                       </button>
                       {tabActiva === 'seguidores' && (
-                        <button className="btn btn-dorado btn-sm rounded-pill w-100 mt-1" onClick={() => manejarSeguir(idUsuario)}>
+                        <button className="btn btn-dorado btn-sm rounded-pill w-100" onClick={() => manejarSeguir(idUsuario)}>
                           <i className="bi bi-arrow-return-right me-1"></i> Seguir de vuelta
                         </button>
                       )}
@@ -417,6 +498,75 @@ export default function Red() {
             </div>
           )}
 
+        </div>
+      )}
+
+      {confirmacionEliminar && (
+        <div className="modal-confirmacion-red" role="dialog" aria-modal="true" aria-labelledby="titulo-confirmacion-red">
+          <button
+            type="button"
+            className="fondo-modal-confirmacion-red"
+            aria-label="Cerrar confirmación"
+            onClick={cerrarConfirmacionEliminar}
+          ></button>
+          <div className="contenido-modal-confirmacion-red">
+            <div className="icono-confirmacion-red">
+              <i className="bi bi-person-x-fill"></i>
+            </div>
+            <h3 id="titulo-confirmacion-red">
+              {confirmacionEliminar.tipo === 'familia'
+                ? 'Eliminar relación familiar'
+                : confirmacionEliminar.tipo === 'amigos'
+                  ? 'Eliminar de amigos'
+                  : 'Dejar de seguir'}
+            </h3>
+            <p>
+              ¿Confirmas que deseas eliminar a <strong>{confirmacionEliminar.nombre}</strong> de esta sección?
+            </p>
+            <div className="aviso-confirmacion-red">
+              <i className="bi bi-info-circle-fill"></i>
+              <span>
+                {confirmacionEliminar.tipo === 'familia'
+                  ? 'Esto elimina la relación de Mi Red, pero no borra personas, nodos ni recuerdos de tus árboles genealógicos.'
+                  : confirmacionEliminar.tipo === 'amigos'
+                    ? 'Dejarás de seguir a esta persona y la amistad mutua dejará de mostrarse.'
+                    : 'La persona dejará de aparecer en Siguiendo. Podrás seguirla nuevamente después.'}
+              </span>
+            </div>
+            <label className="doble-check-red">
+              <input
+                type="checkbox"
+                checked={confirmacionMarcada}
+                onChange={(evento) => setConfirmacionMarcada(evento.target.checked)}
+                disabled={procesandoEliminacion}
+              />
+              <span>Entiendo la consecuencia y deseo continuar.</span>
+            </label>
+
+            {errorConfirmacion && (
+              <div className="error-confirmacion-red" role="alert">
+                <i className="bi bi-exclamation-triangle-fill"></i> {errorConfirmacion}
+              </div>
+            )}
+
+            <div className="acciones-modal-confirmacion-red">
+              <button type="button" className="btn-cancelar-confirmacion-red" onClick={cerrarConfirmacionEliminar} disabled={procesandoEliminacion}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-eliminar-confirmacion-red"
+                onClick={confirmarEliminacionConexion}
+                disabled={!confirmacionMarcada || procesandoEliminacion}
+              >
+                {procesandoEliminacion ? (
+                  <><span className="spinner-border spinner-border-sm" aria-hidden="true"></span> Eliminando...</>
+                ) : (
+                  <><i className="bi bi-trash3-fill"></i> Confirmar eliminación</>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

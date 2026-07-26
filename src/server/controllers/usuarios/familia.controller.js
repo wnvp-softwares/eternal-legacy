@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { Familia } = require('../../models/index.model');
 
 // 1. ENVIAR INVITACIÓN AL ÁRBOL GENEALÓGICO
@@ -129,10 +130,48 @@ const obtenerInvitacionesPendientes = async (req, res) => {
     }
 };
 
+
+// 5. ELIMINAR UNA RELACIÓN FAMILIAR DE MI RED
+const eliminarRelacionFamiliar = async (req, res) => {
+    try {
+        const { relacionId } = req.params;
+        const usuarioId = String(req.usuario.id || req.usuario._id || '');
+
+        if (!relacionId || !mongoose.Types.ObjectId.isValid(String(relacionId))) {
+            return res.status(400).json({ mensaje: 'El ID de la relación familiar no es válido.' });
+        }
+
+        const relacion = await Familia.findById(relacionId);
+
+        if (!relacion) {
+            return res.status(404).json({ mensaje: 'La relación familiar no existe o ya fue eliminada.' });
+        }
+
+        const esParticipante =
+            String(relacion.usuarioPrincipal) === usuarioId ||
+            String(relacion.familiar) === usuarioId;
+
+        if (!esParticipante) {
+            return res.status(403).json({ mensaje: 'No tienes permiso para eliminar esta relación familiar.' });
+        }
+
+        await relacion.deleteOne();
+
+        return res.status(200).json({
+            mensaje: 'La relación familiar fue eliminada de Mi Red.',
+            relacionId: relacion._id
+        });
+    } catch (error) {
+        console.error('❌ Error al eliminar relación familiar:', error);
+        return res.status(500).json({ mensaje: 'Error interno del servidor al eliminar la relación familiar.' });
+    }
+};
+
 // 🌟 REPLANTEA EL EXPORTS PARA INCLUIR LA NUEVA FUNCIÓN
 module.exports = {
     enviarInvitacionFamiliar,
     responderInvitacionFamiliar,
     obtenerMisFamiliares,
-    obtenerInvitacionesPendientes // 🌟 Añadida
+    obtenerInvitacionesPendientes,
+    eliminarRelacionFamiliar
 };

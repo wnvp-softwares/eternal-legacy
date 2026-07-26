@@ -31,16 +31,17 @@
     overflow-x: auto;
     gap: 8px;
     padding-bottom: 10px;
-    
+
     /* --- CORRECCIÓN CLAVE --- 
        Evita que el menú empuje la pantalla hacia la derecha en celulares */
-    max-width: calc(100vw - 2rem); 
+    max-width: calc(100vw - 2rem);
 }
 
 /* Estilizamos la barra de scroll para móviles */
 .menu-configuracion::-webkit-scrollbar {
     height: 4px;
 }
+
 .menu-configuracion::-webkit-scrollbar-thumb {
     background-color: var(--borde-color);
     border-radius: 4px;
@@ -54,7 +55,8 @@
         min-width: 250px;
         overflow-x: visible;
         padding-bottom: 0;
-        max-width: none; /* Quitamos el límite en PC */
+        max-width: none;
+        /* Quitamos el límite en PC */
     }
 }
 
@@ -70,7 +72,7 @@
     font-weight: 500;
     font-size: 0.95rem;
     transition: all 0.2s;
-    white-space: nowrap; 
+    white-space: nowrap;
     text-align: left;
 }
 
@@ -80,8 +82,8 @@
 }
 
 .item-configuracion.activo {
-    background-color: #0D1B2A; 
-    color: white;
+    background-color: var(--boton-primario-fondo);
+    color: var(--boton-primario-texto);
     font-weight: 600;
 }
 
@@ -92,9 +94,9 @@
     border: 1px solid var(--borde-color);
     border-radius: 16px;
     padding: 30px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    box-shadow: var(--sombra-suave);
     /* CRÍTICO: Asegura que el panel nunca se desborde */
-    max-width: 100%; 
+    max-width: 100%;
     overflow: hidden;
 }
 
@@ -142,8 +144,8 @@ textarea.input-config {
 }
 
 .boton-guardar {
-    background-color: #0D1B2A;
-    color: white;
+    background-color: var(--boton-primario-fondo);
+    color: var(--boton-primario-texto);
     border: none;
     padding: 10px 24px;
     border-radius: 8px;
@@ -154,7 +156,7 @@ textarea.input-config {
 }
 
 .boton-guardar:hover {
-    background-color: #1a2d42;
+    background-color: var(--boton-primario-hover);
     transform: translateY(-2px);
 }
 
@@ -193,9 +195,10 @@ textarea.input-config {
 /* Ajustes para móviles muy pequeños */
 @media (max-width: 576px) {
     .panel-configuracion {
-        padding: 20px 15px; /* Ajustado para que el título no quede tan pegado */
+        padding: 20px 15px;
+        /* Ajustado para que el título no quede tan pegado */
     }
-    
+
     .opcion-switch {
         flex-direction: column;
         align-items: flex-start;
@@ -236,14 +239,14 @@ textarea.input-config {
 }
 
 .alerta-configuracion.exito {
-    background-color: rgba(16, 185, 129, 0.10);
-    color: #047857;
+    background-color: var(--exito-fondo-suave);
+    color: var(--exito-texto);
     border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .alerta-configuracion.error {
-    background-color: rgba(239, 68, 68, 0.10);
-    color: #b91c1c;
+    background-color: var(--error-fondo-suave);
+    color: var(--error-texto);
     border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
@@ -266,16 +269,131 @@ textarea.input-config {
     transform: none;
 }
 
-[data-tema="oscuro"] .alerta-configuracion.exito {
-    background-color: rgba(16, 185, 129, 0.14);
-    color: #6ee7b7;
+html[data-theme="dark"] .alerta-configuracion.exito {
+    background-color: var(--exito-fondo-suave);
+    color: var(--exito-texto);
     border-color: rgba(16, 185, 129, 0.30);
 }
 
-[data-tema="oscuro"] .alerta-configuracion.error {
-    background-color: rgba(239, 68, 68, 0.14);
-    color: #fca5a5;
+html[data-theme="dark"] .alerta-configuracion.error {
+    background-color: var(--error-fondo-suave);
+    color: var(--error-texto);
     border-color: rgba(239, 68, 68, 0.30);
+}
+
+
+
+/* =========================================================
+   SELECTOR DE APARIENCIA
+   ========================================================= */
+.selector-temas-configuracion {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.opcion-tema-configuracion {
+    min-width: 0;
+    min-height: 148px;
+    border: 1px solid var(--borde-color);
+    border-radius: 14px;
+    padding: 16px 12px;
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 5px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.opcion-tema-configuracion:hover {
+    border-color: var(--borde-fuerte);
+    background-color: var(--hover-menu);
+    transform: translateY(-2px);
+}
+
+.opcion-tema-configuracion.activo {
+    border-color: var(--dorado);
+    background-color: var(--dorado-fondo-suave);
+    box-shadow: 0 0 0 2px var(--dorado-borde-suave);
+}
+
+.opcion-tema-configuracion:focus-visible {
+    outline: 3px solid var(--dorado-borde-suave);
+    outline-offset: 3px;
+}
+
+.opcion-tema-configuracion strong {
+    color: var(--texto-principal);
+    font-size: 0.86rem;
+}
+
+.opcion-tema-configuracion small {
+    color: var(--texto-secundario);
+    font-size: 0.72rem;
+    line-height: 1.25;
+}
+
+.vista-previa-tema {
+    width: 46px;
+    height: 46px;
+    margin-bottom: 6px;
+    border: 1px solid var(--borde-fuerte);
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.10);
+}
+
+.vista-previa-tema.tema-claro {
+    background-color: #ffffff;
+}
+
+.vista-previa-tema.tema-oscuro {
+    background-color: #0d1b2a;
+}
+
+.vista-previa-tema.tema-automatico {
+    display: flex;
+    transform: rotate(45deg);
+}
+
+.vista-previa-tema.tema-automatico span {
+    width: 50%;
+    height: 100%;
+}
+
+.vista-previa-tema.tema-automatico span:first-child {
+    background-color: #ffffff;
+}
+
+.vista-previa-tema.tema-automatico span:last-child {
+    background-color: #0d1b2a;
+}
+
+html[data-theme="dark"] .input-config option {
+    background-color: var(--fondo-elevado);
+    color: var(--texto-principal);
+}
+
+@media (max-width: 640px) {
+    .selector-temas-configuracion {
+        display: flex;
+        overflow-x: auto;
+        padding: 3px 3px 10px;
+        scroll-snap-type: x proximity;
+    }
+
+    .opcion-tema-configuracion {
+        flex: 0 0 138px;
+        min-height: 142px;
+        scroll-snap-align: start;
+    }
 }
 
 /* =========================================================

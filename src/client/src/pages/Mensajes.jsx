@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState, useRef } from 'react';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { obtenerOGenerarLlavesE2E, encriptarMensaje, desencriptarMensaje } from '../utils/e2eCrypto';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
@@ -130,6 +130,17 @@ const formatearHoraMensaje = (valor, idioma = 'es-MX', zonaHoraria = ZONA_HORARI
   }
 };
 
+const formatearTiempoPreviewContacto = (valor, idioma = 'es-MX', zonaHoraria = ZONA_HORARIA_PREDETERMINADA) => {
+  if (!valor) return '';
+
+  const etiqueta = formatearEtiquetaDiaMensaje(valor, idioma, zonaHoraria);
+  const hoy = String(idioma || 'es-MX').toLowerCase().startsWith('en') ? 'Today' : 'Hoy';
+
+  return etiqueta === hoy
+    ? formatearHoraMensaje(valor, idioma, zonaHoraria)
+    : etiqueta;
+};
+
 const construirElementosConversacion = (mensajes = [], idioma, zonaHoraria) => {
   const mensajesOrdenados = (Array.isArray(mensajes) ? mensajes : [])
     .map((mensaje, indiceOriginal) => ({ mensaje, indiceOriginal }))
@@ -181,6 +192,8 @@ export default function Mensajes() {
 
   const historialMensajesRef = useRef(null);
   const accionScrollPendienteRef = useRef(null);
+  const inputMensajeRef = useRef(null);
+  const alturaViewportBaseRef = useRef(0);
   const token = localStorage.getItem('token');
 
   const prepararRestauracionScroll = (forzarFinal = false) => {
@@ -225,30 +238,139 @@ export default function Mensajes() {
     if (token) inicializarE2E();
   }, [token]);
 
-  // 2. Cargar lista de contactos permitidos (Mapeo Defensivo)
-  useEffect(() => {
-    const cargarContactos = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/mensajes/contactos`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+  const cargarContactos = useCallback(async () => {
+    if (!token || !miPublicKey) return;
 
-        if (res.ok) {
-          const data = await res.json();
-          // Normalización: Extrae el arreglo sin importar cómo lo devuelva el backend
-          const listaContactos = Array.isArray(data)
-            ? data
-            : (data.contactos || data.contactosPermitidos || data.personas || data.contactosDirectos || []);
+    try {
+      const res = await fetch(`${API_BASE_URL}/mensajes/contactos`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-          setContactos(listaContactos);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const listaContactos = Array.isArray(data)
+        ? data
+        : (data.contactos || data.contactosPermitidos || data.personas || data.contactosDirectos || []);
+
+      const miUsuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+      const miId = miUsuario.id || miUsuario._id;
+
+      const contactosConPreview = await Promise.all(listaContactos.map(async (contacto) => {
+        const ultimoMensaje = contacto?.ultimoMensaje;
+        if (!ultimoMensaje) {
+          return {
+            ...contacto,
+            previewUltimoMensaje: '',
+            ultimoMensajeEsMio: false,
+            ultimoMensajeFecha: null
+          };
         }
-      } catch (error) {
-        console.error('Error al cargar contactos:', error);
+
+        const ultimoMensajeEsMio = String(ultimoMensaje.creador || ultimoMensaje.emisor) === String(miId);
+
+        try {
+          const textoPlano = await desencriptarMensaje(ultimoMensaje, ultimoMensajeEsMio);
+          return {
+            ...contacto,
+            previewUltimoMensaje: String(textoPlano || '').trim(),
+            ultimoMensajeEsMio,
+            ultimoMensajeFecha: ultimoMensaje.createdAt || null
+          };
+        } catch (error) {
+          console.warn('No se pudo descifrar la preview de una conversación:', error);
+          return {
+            ...contacto,
+            previewUltimoMensaje: 'Mensaje cifrado',
+            ultimoMensajeEsMio,
+            ultimoMensajeFecha: ultimoMensaje.createdAt || null
+          };
+        }
+      }));
+
+      contactosConPreview.sort((a, b) => {
+        const fechaA = obtenerFechaValida(a.ultimoMensajeFecha)?.getTime() || 0;
+        const fechaB = obtenerFechaValida(b.ultimoMensajeFecha)?.getTime() || 0;
+        if (fechaA !== fechaB) return fechaB - fechaA;
+
+        const nombreA = String(a.nombreUsuario || a.nombre || '');
+        const nombreB = String(b.nombreUsuario || b.nombre || '');
+        return nombreA.localeCompare(nombreB, idioma || 'es-MX');
+      });
+
+      setContactos(contactosConPreview);
+    } catch (error) {
+      console.error('Error al cargar contactos:', error);
+    }
+  }, [token, miPublicKey, idioma]);
+
+  // 2. Cargar contactos, previews y contadores de forma periódica.
+  useEffect(() => {
+    if (!token || !miPublicKey) return undefined;
+
+    cargarContactos();
+    const intervalo = window.setInterval(cargarContactos, 5000);
+    return () => window.clearInterval(intervalo);
+  }, [token, miPublicKey, cargarContactos]);
+
+  // Mantiene el chat dentro del viewport visual real cuando aparece o desaparece el teclado móvil.
+  useLayoutEffect(() => {
+    const raiz = document.documentElement;
+    const viewport = window.visualViewport;
+
+    raiz.dataset.vistaMensajesActiva = 'true';
+
+    const actualizarViewport = () => {
+      const altoVisible = viewport?.height || window.innerHeight;
+      const offsetSuperior = viewport?.offsetTop || 0;
+      const anchoVisible = viewport?.width || window.innerWidth;
+
+      if (!alturaViewportBaseRef.current || altoVisible > alturaViewportBaseRef.current) {
+        alturaViewportBaseRef.current = altoVisible;
       }
+
+      const elementoActivo = document.activeElement;
+      const inputActivo = elementoActivo === inputMensajeRef.current;
+      const diferencia = alturaViewportBaseRef.current - altoVisible;
+      const tecladoAbierto = anchoVisible < 1200 && diferencia > 100 && (
+        inputActivo || raiz.dataset.tecladoMensajes === 'abierto'
+      );
+
+      raiz.style.setProperty('--mensajes-viewport-alto', `${Math.round(altoVisible)}px`);
+      raiz.style.setProperty('--mensajes-viewport-offset-top', `${Math.round(offsetSuperior)}px`);
+      raiz.dataset.tecladoMensajes = tecladoAbierto ? 'abierto' : 'cerrado';
+
+      window.requestAnimationFrame(() => {
+        if (tecladoAbierto && historialMensajesRef.current) {
+          historialMensajesRef.current.scrollTop = historialMensajesRef.current.scrollHeight;
+        }
+      });
     };
 
-    if (token) cargarContactos();
-  }, [token]);
+    const manejarCambioFoco = () => window.setTimeout(actualizarViewport, 60);
+    actualizarViewport();
+
+    viewport?.addEventListener('resize', actualizarViewport);
+    viewport?.addEventListener('scroll', actualizarViewport);
+    window.addEventListener('resize', actualizarViewport);
+    window.addEventListener('orientationchange', actualizarViewport);
+    document.addEventListener('focusin', manejarCambioFoco);
+    document.addEventListener('focusout', manejarCambioFoco);
+
+    return () => {
+      viewport?.removeEventListener('resize', actualizarViewport);
+      viewport?.removeEventListener('scroll', actualizarViewport);
+      window.removeEventListener('resize', actualizarViewport);
+      window.removeEventListener('orientationchange', actualizarViewport);
+      document.removeEventListener('focusin', manejarCambioFoco);
+      document.removeEventListener('focusout', manejarCambioFoco);
+      delete raiz.dataset.vistaMensajesActiva;
+      delete raiz.dataset.tecladoMensajes;
+      raiz.style.removeProperty('--mensajes-viewport-alto');
+      raiz.style.removeProperty('--mensajes-viewport-offset-top');
+      alturaViewportBaseRef.current = 0;
+    };
+  }, []);
 
   // 3. Cargar y Descifrar Mensajes del Chat Seleccionado
   const cargarMensajesConversacion = async (contactoId, { desplazarAlFinal = false } = {}) => {
@@ -278,7 +400,7 @@ export default function Mensajes() {
               tipo: esCreador ? 'enviado' : 'recibido',
               texto: textoPlano,
               createdAt: msg.createdAt,
-              leido: msg.fechaVisto !== null // <-- NUEVO: Guarda si ya fue leído[cite: 3]
+              leido: msg.fechaVisto !== null
             };
           })
         );
@@ -373,6 +495,7 @@ export default function Mensajes() {
 
       if (res.ok) {
         await cargarMensajesConversacion(contactoId, { desplazarAlFinal: true });
+        await cargarContactos();
       } else {
         const errorData = await res.json();
         alert(errorData.mensaje || 'Error al enviar mensaje');
@@ -440,8 +563,11 @@ export default function Mensajes() {
                     className={`item-chat ${obtenerId(chatSeleccionado) === idContacto ? 'activo' : ''} ${tieneMensajesNuevos ? 'tiene-no-leidos' : ''}`} // <-- Clase condicional
                     onClick={() => {
                       setChatSeleccionado(contacto);
-                      // Opcional: Limpiar el contador localmente de inmediato al hacer click para mejorar UX
-                      contacto.mensajesNoLeidos = 0;
+                      setContactos(prev => prev.map(item => (
+                        String(obtenerId(item)) === String(idContacto)
+                          ? { ...item, mensajesNoLeidos: 0 }
+                          : item
+                      )));
                     }}
                   >
                     <div className="avatar-chat">
@@ -449,21 +575,33 @@ export default function Mensajes() {
                     </div>
                     <div className="info-chat flex-grow-1">
                       <div className="nombre-tiempo d-flex justify-content-between align-items-center">
-                        <h6 className={`nombre-chat mb-0 ${tieneMensajesNuevos ? 'fw-bold text-dark' : ''}`}>{nombreContacto}</h6>
-
-                        {/* Globo indicador visual si hay mensajes nuevos */}
-                        {tieneMensajesNuevos && (
-                          <span className="badge rounded-pill bg-primary el-globo-notificacion animate__animated animate__bounceIn">
-                            {contacto.mensajesNoLeidos}
-                          </span>
-                        )}
+                        <h6 className={`nombre-chat mb-0 ${tieneMensajesNuevos ? 'fw-bold' : ''}`}>{nombreContacto}</h6>
+                        <div className="estado-tiempo-chat">
+                          {contacto.ultimoMensajeFecha && (
+                            <span className="tiempo-chat">
+                              {formatearTiempoPreviewContacto(
+                                contacto.ultimoMensajeFecha,
+                                idioma || 'es-MX',
+                                zonaHoraria || ZONA_HORARIA_PREDETERMINADA
+                              )}
+                            </span>
+                          )}
+                          {tieneMensajesNuevos && (
+                            <span className="badge rounded-pill bg-primary el-globo-notificacion animate__animated animate__bounceIn">
+                              {contacto.mensajesNoLeidos}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="mensaje-previo">
-                        <p className={`texto-previo mb-0 ${tieneMensajesNuevos ? 'fw-bold text-dark' : 'text-success'}`}>
-                          {tieneMensajesNuevos ? (
-                            <span><i className="bi bi-chat-left-dots-fill me-1 text-primary"></i>Mensaje nuevo</span>
+                        <p className={`texto-previo mb-0 ${tieneMensajesNuevos ? 'fw-bold' : ''}`}>
+                          {contacto.previewUltimoMensaje ? (
+                            <>
+                              {contacto.ultimoMensajeEsMio && <span className="preview-prefijo-propio">Tú: </span>}
+                              {contacto.previewUltimoMensaje}
+                            </>
                           ) : (
-                            <span><i className="bi bi-shield-lock-fill me-1"></i>Conexión Cifrada</span>
+                            <span className="preview-sin-mensajes"><i className="bi bi-chat-dots me-1"></i>Sin mensajes todavía</span>
                           )}
                         </p>
                       </div>
@@ -570,6 +708,7 @@ export default function Mensajes() {
               {/* Área de Entrada */}
               <div className="area-escribir">
                 <input
+                  ref={inputMensajeRef}
                   type="text"
                   className="input-mensaje"
                   placeholder="Escribe un mensaje cifrado..."

@@ -751,3 +751,83 @@
         gap: 9px;
     }
 }
+
+/* =========================================================
+   PREVIEW DE CONVERSACIONES Y VIEWPORT MÓVIL REAL
+   ========================================================= */
+.info-chat {
+    min-width: 0;
+}
+
+.estado-tiempo-chat {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    margin-left: 10px;
+}
+
+.preview-prefijo-propio {
+    color: var(--texto-principal);
+    font-weight: 600;
+}
+
+.preview-sin-mensajes {
+    color: var(--texto-secundario);
+    opacity: 0.82;
+}
+
+@media (max-width: 1199px) {
+    html[data-vista-mensajes-activa="true"] {
+        overflow: hidden;
+    }
+
+    html[data-vista-mensajes-activa="true"] body {
+        overflow: hidden;
+    }
+
+    .contenedor-mensajes {
+        position: fixed;
+        top: calc(70px + var(--mensajes-viewport-offset-top, 0px));
+        right: 0;
+        left: 0;
+        z-index: 40;
+        width: 100%;
+        height: calc(var(--mensajes-viewport-alto, 100dvh) - 70px - 80px);
+        min-height: 0;
+        margin: 0;
+    }
+
+    html[data-teclado-mensajes="abierto"] .contenedor-mensajes {
+        height: calc(var(--mensajes-viewport-alto, 100dvh) - 70px);
+    }
+
+    html[data-teclado-mensajes="abierto"] .area-escribir {
+        padding-bottom: 10px;
+    }
+}
+
+@media (max-width: 576px) {
+    .item-chat {
+        padding: 12px 14px;
+    }
+
+    .avatar-chat {
+        margin-right: 11px;
+    }
+
+    .foto-avatar {
+        width: 44px;
+        height: 44px;
+    }
+
+    .texto-previo {
+        max-width: min(62vw, 250px);
+    }
+
+    .estado-tiempo-chat {
+        gap: 5px;
+        margin-left: 7px;
+    }
+}

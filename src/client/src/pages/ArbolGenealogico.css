@@ -6169,3 +6169,29 @@
         font-size: 0.7rem;
     }
 }
+
+/* =========================================================
+   FIX MÓVIL: BOTÓN ACTUALIZAR DEL MENÚ DE ÁRBOLES
+   Mantiene la forma de píldora sin afectar los controles
+   circulares del lienzo en modo edición.
+   ========================================================= */
+@media (max-width: 576px) {
+    .menu-cabecera-arbol .menu-refresh {
+        width: 100%;
+        min-width: 0;
+        height: 40px;
+        min-height: 40px;
+        padding: 0 16px;
+        gap: 7px;
+        border-radius: 20px;
+        justify-content: center;
+        font-size: 0.84rem;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .menu-cabecera-arbol .menu-refresh i {
+        flex: 0 0 auto;
+        font-size: 0.95rem;
+    }
+}

@@ -61,6 +61,9 @@ export default function Configuracion() {
     idioma, setIdioma,
     zonaHoraria, setZonaHoraria,
     formatoFecha, setFormatoFecha,
+    tema, setTema,
+    temaAplicado,
+    reducirAnimaciones, setReducirAnimaciones,
     actualizarPreferenciasGlobales
   } = usePreferencias();
 
@@ -106,9 +109,7 @@ export default function Configuracion() {
   const [cargandoZonasHorarias, setCargandoZonasHorarias] = useState(false);
   const [errorZonasHorarias, setErrorZonasHorarias] = useState('');
 
-  // Estados de Apariencia
-  const [tema, setTema] = useState(() => localStorage.getItem('tema') || 'claro');
-  const [reducirAnimaciones, setReducirAnimaciones] = useState(() => localStorage.getItem('reducirAnimaciones') === 'true');
+  // Estado informativo de Apariencia. El tema se administra globalmente desde PreferenciasContext.
   const [mensajeApariencia, setMensajeApariencia] = useState('');
 
   // 1. Agregar estados en la parte superior de Configuracion Component
@@ -405,41 +406,14 @@ export default function Configuracion() {
 
   const aplicarCambiosApariencia = (e) => {
     e.preventDefault();
-
-    localStorage.setItem('tema', tema);
-    localStorage.setItem('reducirAnimaciones', reducirAnimaciones);
-
-    if (tema === 'oscuro') {
-      document.documentElement.setAttribute('data-bs-theme', 'dark');
-      document.body.classList.add('dark-mode');
-    } else if (tema === 'claro') {
-      document.documentElement.setAttribute('data-bs-theme', 'light');
-      document.body.classList.remove('dark-mode');
-    } else {
-      const prefiereOscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefiereOscuro) {
-        document.documentElement.setAttribute('data-bs-theme', 'dark');
-        document.body.classList.add('dark-mode');
-      } else {
-        document.documentElement.setAttribute('data-bs-theme', 'light');
-        document.body.classList.remove('dark-mode');
-      }
-    }
-
     setMensajeApariencia('¡Apariencia aplicada y guardada con éxito!');
-    setTimeout(() => setMensajeApariencia(''), 3000);
+    window.setTimeout(() => setMensajeApariencia(''), 3000);
   };
 
   useEffect(() => {
     cargarDatosCuenta();
     cargarDatosPrivacidad();
     cargarZonasHorarias();
-
-    const temaGuardado = localStorage.getItem('tema') || 'claro';
-    if (temaGuardado === 'oscuro' || (temaGuardado === 'automatico' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.setAttribute('data-bs-theme', 'dark');
-      document.body.classList.add('dark-mode');
-    }
   }, []);
 
   useEffect(() => {
@@ -728,51 +702,50 @@ export default function Configuracion() {
                 </div>
               </div>
 
-              <div className="d-flex gap-3 mt-3 overflow-x-auto pb-2">
-                <div
-                  className="border rounded-3 p-3 text-center"
-                  style={{
-                    cursor: 'pointer',
-                    borderColor: tema === 'claro' ? 'var(--dorado)' : '#dee2e6',
-                    backgroundColor: tema === 'claro' ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
-                    minWidth: '110px'
+              <div className="selector-temas-configuracion" role="radiogroup" aria-label="Tema de la aplicación">
+                <button
+                  type="button"
+                  className={`opcion-tema-configuracion ${tema === 'claro' ? 'activo' : ''}`}
+                  aria-pressed={tema === 'claro'}
+                  onClick={() => {
+                    setTema('claro');
+                    setMensajeApariencia('');
                   }}
-                  onClick={() => setTema('claro')}
                 >
-                  <div className="rounded-circle mb-2 mx-auto" style={{ width: '40px', height: '40px', backgroundColor: '#ffffff', border: '1px solid #dee2e6' }}></div>
-                  <span className="small fw-bold">Modo Claro</span>
-                </div>
+                  <span className="vista-previa-tema tema-claro" aria-hidden="true"></span>
+                  <strong>Modo Claro</strong>
+                  <small>Siempre usa fondos claros.</small>
+                </button>
 
-                <div
-                  className="border rounded-3 p-3 text-center"
-                  style={{
-                    cursor: 'pointer',
-                    borderColor: tema === 'oscuro' ? 'var(--dorado)' : '#dee2e6',
-                    backgroundColor: tema === 'oscuro' ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
-                    minWidth: '110px'
+                <button
+                  type="button"
+                  className={`opcion-tema-configuracion ${tema === 'oscuro' ? 'activo' : ''}`}
+                  aria-pressed={tema === 'oscuro'}
+                  onClick={() => {
+                    setTema('oscuro');
+                    setMensajeApariencia('');
                   }}
-                  onClick={() => setTema('oscuro')}
                 >
-                  <div className="rounded-circle mb-2 mx-auto" style={{ width: '40px', height: '40px', backgroundColor: '#0D1B2A' }}></div>
-                  <span className="small fw-bold">Modo Oscuro</span>
-                </div>
+                  <span className="vista-previa-tema tema-oscuro" aria-hidden="true"></span>
+                  <strong>Modo Oscuro</strong>
+                  <small>Reduce el brillo de la interfaz.</small>
+                </button>
 
-                <div
-                  className="border rounded-3 p-3 text-center"
-                  style={{
-                    cursor: 'pointer',
-                    borderColor: tema === 'automatico' ? 'var(--dorado)' : '#dee2e6',
-                    backgroundColor: tema === 'automatico' ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
-                    minWidth: '110px'
+                <button
+                  type="button"
+                  className={`opcion-tema-configuracion ${tema === 'automatico' ? 'activo' : ''}`}
+                  aria-pressed={tema === 'automatico'}
+                  onClick={() => {
+                    setTema('automatico');
+                    setMensajeApariencia('');
                   }}
-                  onClick={() => setTema('automatico')}
                 >
-                  <div className="rounded-circle mb-2 mx-auto d-flex" style={{ width: '40px', height: '40px', overflow: 'hidden', border: '1px solid #dee2e6', transform: 'rotate(45deg)' }}>
-                    <div className="w-50 h-100" style={{ backgroundColor: '#ffffff' }}></div>
-                    <div className="w-50 h-100" style={{ backgroundColor: '#0D1B2A' }}></div>
-                  </div>
-                  <span className="small fw-bold">Automático</span>
-                </div>
+                  <span className="vista-previa-tema tema-automatico" aria-hidden="true">
+                    <span></span><span></span>
+                  </span>
+                  <strong>Automático</strong>
+                  <small>Ahora: {temaAplicado === 'dark' ? 'oscuro' : 'claro'}.</small>
+                </button>
               </div>
 
               <div className="opcion-switch mt-4">
@@ -786,12 +759,13 @@ export default function Configuracion() {
                     type="checkbox"
                     checked={reducirAnimaciones}
                     onChange={(e) => setReducirAnimaciones(e.target.checked)}
+                    aria-label="Reducir animaciones de la aplicación"
                   />
                 </div>
               </div>
 
               <div className="d-flex justify-content-end mt-4">
-                <button className="boton-guardar" type="submit">Aplicar Apariencia</button>
+                <button className="boton-guardar" type="submit">Confirmar Apariencia</button>
               </div>
             </form>
           </>

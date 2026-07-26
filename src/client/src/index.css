@@ -1,0 +1,254 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+/* =========================================================
+   SISTEMA GLOBAL DE APARIENCIA
+   El atributo principal es data-theme="light|dark".
+   data-tema="claro|oscuro" se conserva para compatibilidad
+   con estilos existentes de Eternal Legacy.
+   ========================================================= */
+:root,
+html[data-theme="light"] {
+    color-scheme: light;
+
+    --fondo-app: #f8f9fa;
+    --fondo-tarjeta: #ffffff;
+    --fondo-elevado: #ffffff;
+    --fondo-input: #f3f4f6;
+    --input-bg: #f3f4f6;
+    --hover-menu: #f4f5f7;
+    --seleccion-color: #edf1f5;
+
+    --texto-principal: #0d1b2a;
+    --texto-secundario: #6c757d;
+    --texto-terciario: #8b96a3;
+    --texto-inverso: #ffffff;
+
+    --borde-color: #e7eaee;
+    --borde-fuerte: #d4d9df;
+
+    --dorado: #cba135;
+    --dorado-oscuro: #a97f1f;
+    --dorado-fondo-suave: #fef8eb;
+    --dorado-borde-suave: rgba(203, 161, 53, 0.28);
+
+    --boton-primario-fondo: #0d1b2a;
+    --boton-primario-hover: #1a2d42;
+    --boton-primario-texto: #ffffff;
+
+    --peligro-fondo-suave: #fef2f2;
+    --exito-fondo-suave: rgba(16, 185, 129, 0.10);
+    --exito-texto: #047857;
+    --error-fondo-suave: rgba(239, 68, 68, 0.10);
+    --error-texto: #b91c1c;
+
+    --fondo-overlay: rgba(15, 23, 42, 0.60);
+    --fondo-icono-contraste: #ffffff;
+    --sombra-suave: 0 4px 14px rgba(15, 23, 42, 0.07);
+    --sombra-elevada: 0 14px 36px rgba(15, 23, 42, 0.14);
+    --scrollbar-track: #eef1f4;
+    --scrollbar-thumb: #c7ced6;
+
+    --bs-body-color: var(--texto-principal);
+    --bs-body-bg: var(--fondo-app);
+    --bs-emphasis-color: var(--texto-principal);
+    --bs-secondary-color: var(--texto-secundario);
+    --bs-tertiary-bg: var(--hover-menu);
+    --bs-border-color: var(--borde-color);
+    --bs-card-bg: var(--fondo-tarjeta);
+    --bs-modal-bg: var(--fondo-tarjeta);
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+
+    --fondo-app: #0a1118;
+    --fondo-tarjeta: #121b24;
+    --fondo-elevado: #18232e;
+    --fondo-input: #17222d;
+    --input-bg: #17222d;
+    --hover-menu: #1b2834;
+    --seleccion-color: #243443;
+
+    --texto-principal: #edf2f7;
+    --texto-secundario: #a6b2c0;
+    --texto-terciario: #7f8c9b;
+    --texto-inverso: #09111a;
+
+    --borde-color: #293746;
+    --borde-fuerte: #3a4a5b;
+
+    --dorado: #d4ae45;
+    --dorado-oscuro: #e3c369;
+    --dorado-fondo-suave: rgba(212, 174, 69, 0.13);
+    --dorado-borde-suave: rgba(212, 174, 69, 0.32);
+
+    --boton-primario-fondo: #d0aa3b;
+    --boton-primario-hover: #dfbd62;
+    --boton-primario-texto: #09111a;
+
+    --peligro-fondo-suave: rgba(239, 68, 68, 0.13);
+    --exito-fondo-suave: rgba(16, 185, 129, 0.14);
+    --exito-texto: #6ee7b7;
+    --error-fondo-suave: rgba(239, 68, 68, 0.14);
+    --error-texto: #fca5a5;
+
+    --fondo-overlay: rgba(0, 0, 0, 0.74);
+    --fondo-icono-contraste: #121b24;
+    --sombra-suave: 0 5px 18px rgba(0, 0, 0, 0.24);
+    --sombra-elevada: 0 18px 42px rgba(0, 0, 0, 0.42);
+    --scrollbar-track: #101923;
+    --scrollbar-thumb: #3a4a5b;
+
+    --bs-body-color: var(--texto-principal);
+    --bs-body-bg: var(--fondo-app);
+    --bs-emphasis-color: var(--texto-principal);
+    --bs-secondary-color: var(--texto-secundario);
+    --bs-tertiary-bg: var(--hover-menu);
+    --bs-border-color: var(--borde-color);
+    --bs-card-bg: var(--fondo-tarjeta);
+    --bs-modal-bg: var(--fondo-tarjeta);
+    --bs-form-control-bg: var(--input-bg);
+}
+
+html,
+body,
+#root {
+    min-height: 100%;
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+}
+
+html {
+    background-color: var(--fondo-app);
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+body {
+    margin: 0;
+    overflow-x: hidden;
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    font-family: 'Inter', sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.fuente-elegante {
+    font-family: 'Playfair Display', serif;
+    letter-spacing: -0.3px;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+}
+
+input,
+textarea,
+select {
+    color: var(--texto-principal);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--texto-terciario);
+    opacity: 1;
+}
+
+::selection {
+    background-color: var(--dorado);
+    color: #0d1b2a;
+}
+
+/* Ajustes comunes de Bootstrap para que las superficies sigan la paleta. */
+.card,
+.modal-content,
+.dropdown-menu,
+.offcanvas,
+.list-group-item,
+.toast {
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-principal);
+    border-color: var(--borde-color);
+}
+
+.form-control,
+.form-select,
+.input-group-text {
+    background-color: var(--input-bg);
+    color: var(--texto-principal);
+    border-color: var(--borde-color);
+}
+
+.form-control:focus,
+.form-select:focus {
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-principal);
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 0.2rem rgba(203, 161, 53, 0.18);
+}
+
+.text-muted {
+    color: var(--texto-secundario) !important;
+}
+
+html[data-theme="dark"] .bg-white {
+    background-color: var(--fondo-tarjeta) !important;
+}
+
+html[data-theme="dark"] .text-dark,
+html[data-theme="dark"] .text-black {
+    color: var(--texto-principal) !important;
+}
+
+html[data-theme="dark"] input:-webkit-autofill,
+html[data-theme="dark"] textarea:-webkit-autofill,
+html[data-theme="dark"] select:-webkit-autofill {
+    -webkit-text-fill-color: var(--texto-principal);
+    box-shadow: 0 0 0 1000px var(--input-bg) inset;
+    caret-color: var(--texto-principal);
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border: 2px solid var(--scrollbar-track);
+    border-radius: 999px;
+}
+
+/* Preferencia manual para reducir movimiento. */
+html[data-reducir-animaciones="true"] *,
+html[data-reducir-animaciones="true"] *::before,
+html[data-reducir-animaciones="true"] *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

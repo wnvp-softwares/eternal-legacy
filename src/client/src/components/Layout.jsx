@@ -625,7 +625,7 @@ export default function Layout() {
           <Link to="/notificaciones" className="position-relative iconos-nav text-decoration-none" title="En desarrollo">
             <i className="bi bi-bell"></i>
             {/* CORREGIDO: Se removió el punto rojo de notificaciones */}
-            <i className="bi bi-gear-fill position-absolute text-secondary" style={{ fontSize: '0.65rem', bottom: '-2px', left: '-2px', backgroundColor: 'white', borderRadius: '50%', padding: '1px' }}></i>
+            <i className="bi bi-gear-fill position-absolute text-secondary icono-estado-notificaciones"></i>
           </Link>
 
           {/* --- DROPDOWN DE PERFIL --- */}
@@ -733,7 +733,7 @@ export default function Layout() {
         </aside>
 
         {/* MENÚ INFERIOR MÓVIL */}
-        <div className="d-xl-none bg-white border-top w-100 position-fixed bottom-0 start-0 d-flex justify-content-around py-2" style={{ zIndex: 1000 }}>
+        <div className="navegacion-inferior-movil d-xl-none bg-white border-top w-100 position-fixed bottom-0 start-0 d-flex justify-content-around py-2" style={{ zIndex: 1000 }}>
           <Link to="/inicio" className={`${esActiva('/inicio') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>
             <i className={`bi bi-house-door${esActiva('/inicio') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/inicio') ? 'bold' : 'normal' }}>Inicio</span>
           </Link>

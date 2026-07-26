@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { Mensajeria, Usuario, Amigo, Familia, Seguidor } = require('../../models/index.model');
 
 // Función auxiliar para verificar si dos usuarios están conectados (Amigos, Familia o Seguimiento Mutuo)
@@ -66,18 +67,90 @@ const obtenerContactosPermitidos = async (req, res) => {
             .select('nombreUsuario email publicKey imagenPerfil')
             .populate({ path: 'imagenPerfil', select: 'urlArchivo' });
 
-        // --- NUEVO: Agregar el conteo de mensajes no leídos para cada contacto ---
-        const contactosConEstado = await Promise.all(contactos.map(async (contacto) => {
-            const noLeidos = await Mensajeria.countDocuments({
-                creador: contacto._id, // Mensajes enviados por el contacto
-                receptor: miId,        // Hacia mí
-                fechaVisto: null       // Que no he leído
-            });
+        // Resume todas las conversaciones en una sola agregación. El texto permanece cifrado.
+        const miObjectId = new mongoose.Types.ObjectId(String(miId));
+        const idsPermitidosObjectId = idsPermitidos
+            .filter(id => mongoose.Types.ObjectId.isValid(String(id)))
+            .map(id => new mongoose.Types.ObjectId(String(id)));
 
+        const resumenConversaciones = idsPermitidosObjectId.length > 0
+            ? await Mensajeria.aggregate([
+                {
+                    $match: {
+                        $or: [
+                            { creador: miObjectId, receptor: { $in: idsPermitidosObjectId } },
+                            { creador: { $in: idsPermitidosObjectId }, receptor: miObjectId }
+                        ]
+                    }
+                },
+                {
+                    $addFields: {
+                        contactoId: {
+                            $cond: [
+                                { $eq: ['$creador', miObjectId] },
+                                '$receptor',
+                                '$creador'
+                            ]
+                        }
+                    }
+                },
+                { $sort: { createdAt: -1 } },
+                {
+                    $group: {
+                        _id: '$contactoId',
+                        ultimoMensaje: { $first: '$$ROOT' },
+                        mensajesNoLeidos: {
+                            $sum: {
+                                $cond: [
+                                    {
+                                        $and: [
+                                            { $eq: ['$receptor', miObjectId] },
+                                            { $eq: ['$fechaVisto', null] }
+                                        ]
+                                    },
+                                    1,
+                                    0
+                                ]
+                            }
+                        }
+                    }
+                }
+            ])
+            : [];
+
+        const resumenPorContacto = new Map(
+            resumenConversaciones.map(item => [String(item._id), item])
+        );
+
+        const contactosConEstado = contactos.map(contacto => {
             const contactoObj = contacto.toObject();
-            contactoObj.mensajesNoLeidos = noLeidos;
+            const resumen = resumenPorContacto.get(String(contacto._id));
+            const ultimo = resumen?.ultimoMensaje || null;
+
+            contactoObj.mensajesNoLeidos = resumen?.mensajesNoLeidos || 0;
+            contactoObj.ultimoMensaje = ultimo
+                ? {
+                    _id: ultimo._id,
+                    creador: ultimo.creador,
+                    receptor: ultimo.receptor,
+                    contenidoCifrado: ultimo.contenidoCifrado,
+                    iv: ultimo.iv,
+                    claveCifradaReceptor: ultimo.claveCifradaReceptor,
+                    claveCifradaCreador: ultimo.claveCifradaCreador,
+                    fechaVisto: ultimo.fechaVisto,
+                    createdAt: ultimo.createdAt
+                }
+                : null;
+
             return contactoObj;
-        }));
+        });
+
+        contactosConEstado.sort((a, b) => {
+            const fechaA = a.ultimoMensaje?.createdAt ? new Date(a.ultimoMensaje.createdAt).getTime() : 0;
+            const fechaB = b.ultimoMensaje?.createdAt ? new Date(b.ultimoMensaje.createdAt).getTime() : 0;
+            if (fechaA !== fechaB) return fechaB - fechaA;
+            return String(a.nombreUsuario || '').localeCompare(String(b.nombreUsuario || ''), 'es');
+        });
 
         res.status(200).json(contactosConEstado);
     } catch (error) {

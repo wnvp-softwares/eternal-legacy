@@ -1,30 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
-
-/* VARIABLES GLOBALES (Modo Claro/Oscuro) */
-:root {
-    --fondo-app: #f8f9fa;
-    --fondo-tarjeta: #ffffff;
-    --texto-principal: #0D1B2A;
-    --texto-secundario: #6c757d;
-    --borde-color: #f0f0f0;
-    --dorado: #CBA135;
-    --dorado-oscuro: #b88e28;
-    --hover-menu: #f4f5f7;
-    --input-bg: #f3f4f6;
-}
-
-body {
-    background-color: var(--fondo-app);
-    color: var(--texto-principal);
-    font-family: 'Inter', sans-serif;
-    margin: 0;
-    overflow-x: hidden;
-}
-
-.fuente-elegante {
-    font-family: 'Playfair Display', serif;
-    letter-spacing: -0.3px;
-}
+/* Los tokens globales de color y tipografía viven en src/client/index.css. */
 
 /* NAVBAR SUPERIOR */
 .navbar-superior {
@@ -87,6 +61,16 @@ body {
     color: var(--texto-principal);
 }
 
+.icono-estado-notificaciones {
+    font-size: 0.65rem !important;
+    bottom: -2px;
+    left: -2px;
+    padding: 1px;
+    border-radius: 50%;
+    background-color: var(--fondo-icono-contraste);
+    box-shadow: 0 0 0 1px var(--fondo-icono-contraste);
+}
+
 .badge-notificacion {
     position: absolute;
     top: -5px;
@@ -113,11 +97,11 @@ body {
 }
 
 .sidebar-izquierda {
-    background-color: var(--fondo-tarjeta); 
+    background-color: var(--fondo-tarjeta);
     /* 1. Aumentamos ligeramente el ancho para que respire la negrita */
     width: 270px;
-    min-width: 270px; 
-    flex-shrink: 0;   
+    min-width: 270px;
+    flex-shrink: 0;
     position: sticky;
     top: 70px;
     height: calc(100vh - 70px);
@@ -136,7 +120,7 @@ body {
     margin-right: 16px;
     margin-bottom: 4px;
     /* 2. LA MAGIA: Prohíbe que el texto se rompa en dos líneas */
-    white-space: nowrap; 
+    white-space: nowrap;
 }
 
 .item-menu i {
@@ -171,13 +155,15 @@ body {
    ========================================= */
 .dropdown-perfil {
     position: absolute;
-    top: 50px; /* Lo empujamos debajo de la foto */
+    top: 50px;
+    /* Lo empujamos debajo de la foto */
     right: 0;
     background-color: var(--fondo-tarjeta);
     border: 1px solid var(--borde-color);
     border-radius: 12px;
     width: 220px;
-    z-index: 1050; /* Lo mantiene por encima del resto de la página */
+    z-index: 1050;
+    /* Lo mantiene por encima del resto de la página */
     overflow: hidden;
 }
 
@@ -206,12 +192,13 @@ body {
 }
 
 .item-dropdown.text-danger:hover {
-    background-color: #fef2f2; /* Fondo rojo muy pálido al pasar el mouse */
+    background-color: var(--peligro-fondo-suave);
 }
 
 .item-dropdown i {
     font-size: 1.1rem;
 }
+
 /* =========================================
    BUSCADOR GLOBAL (WEB Y MÓVIL)
    ========================================= */
@@ -257,7 +244,7 @@ body {
     z-index: 1200;
 }
 
-.busqueda-seccion + .busqueda-seccion {
+.busqueda-seccion+.busqueda-seccion {
     margin-top: 12px;
     border-top: 1px solid var(--borde-color);
     padding-top: 12px;
@@ -285,7 +272,7 @@ body {
 }
 
 .busqueda-seccion-header button:hover {
-    background-color: #fef8eb;
+    background-color: var(--dorado-fondo-suave);
 }
 
 .resultado-busqueda-item {
@@ -326,7 +313,7 @@ body {
 }
 
 .avatar-reciente {
-    background-color: #fef8eb;
+    background-color: var(--dorado-fondo-suave);
     color: var(--dorado-oscuro);
 }
 
@@ -534,4 +521,9 @@ body {
     outline: 2px solid var(--dorado);
     outline-offset: 3px;
     border-radius: 7px;
+}
+
+/* La navegación móvil se retira únicamente mientras el teclado cubre Mensajes. */
+html[data-vista-mensajes-activa="true"][data-teclado-mensajes="abierto"] .navegacion-inferior-movil {
+    display: none !important;
 }

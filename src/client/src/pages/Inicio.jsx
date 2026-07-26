@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import ImageCropperModal from '../components/ImageCropperModal';
@@ -388,6 +388,62 @@ const normalizarHandleMencion = (valor = '', { minusculas = false } = {}) => {
   return handle;
 };
 
+const normalizarBusquedaEventoMencion = (valor = '') => String(valor || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/^#+/, '')
+  .replace(/[_-]+/g, ' ')
+  .replace(/[^A-Za-z0-9.\s]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toLowerCase();
+
+const crearTokenEventoMencion = (titulo = '') => {
+  const token = String(titulo || '')
+    .trim()
+    .replace(/^#+/, '')
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_\-.]+|[_\-.]+$/g, '');
+
+  return token ? `#${token}` : '';
+};
+
+const detectarEventoMencionActivo = (valor = '', cursor = 0) => {
+  const textoPrevio = String(valor || '').slice(0, cursor);
+  const coincidencia = textoPrevio.match(/(^|[\s([{"'¿¡,;:!?])#([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]{0,120})$/);
+  if (!coincidencia) return null;
+
+  return {
+    query: coincidencia[2] || '',
+    inicio: textoPrevio.length - (coincidencia[2] || '').length - 1,
+    prefijo: coincidencia[1] || ''
+  };
+};
+
+const obtenerReferenciasEventoDelTexto = (texto = '') => (
+  String(texto || '').match(/#[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]+/g) || []
+);
+
+const referenciaCoincideConEvento = (referencia = '', evento = {}) => {
+  const titulo = evento?.titulo || evento?.tituloSnapshot || evento?.evento?.titulo || '';
+  return Boolean(
+    titulo &&
+    normalizarBusquedaEventoMencion(referencia) === normalizarBusquedaEventoMencion(titulo)
+  );
+};
+
+const textoContieneReferenciaEvento = (texto = '', evento = {}) => (
+  obtenerReferenciasEventoDelTexto(texto).some(referencia => referenciaCoincideConEvento(referencia, evento))
+);
+
+const quitarReferenciaEventoDelTexto = (texto = '', evento = {}) => String(texto || '')
+  .replace(/#[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]+/g, (referencia) => (
+    referenciaCoincideConEvento(referencia, evento) ? '' : referencia
+  ))
+  .replace(/[ \t]{2,}/g, ' ');
+
 // Conserva separados el nickname único y el nombre visible del perfil.
 const normalizarPersonaSugerida = (persona = {}) => {
   const id = obtenerId(persona) || obtenerId(persona.usuario) || obtenerId(persona.id) || obtenerNombreDeEntidad(persona);
@@ -617,6 +673,12 @@ export default function Inicio() {
   const [cargandoSugerenciasPublicacion, setCargandoSugerenciasPublicacion] = useState(false);
   const [mencionesPublicacion, setMencionesPublicacion] = useState([]);
   const [eventoRelacionadoPublicacion, setEventoRelacionadoPublicacion] = useState(null);
+  const [eventoRelacionadoDesdeHashtag, setEventoRelacionadoDesdeHashtag] = useState(false);
+  const [busquedaEventoPublicacion, setBusquedaEventoPublicacion] = useState('');
+  const [eventosProximosSelector, setEventosProximosSelector] = useState([]);
+  const [eventosPasadosSelector, setEventosPasadosSelector] = useState([]);
+  const [cargandoEventosSelector, setCargandoEventosSelector] = useState(false);
+  const [errorEventosSelector, setErrorEventosSelector] = useState('');
   const [arbolesAudienciaPublicacion, setArbolesAudienciaPublicacion] = useState([]);
   const [cargandoArbolesAudiencia, setCargandoArbolesAudiencia] = useState(false);
   const [arbolAudienciaPublicacion, setArbolAudienciaPublicacion] = useState(null);
@@ -641,6 +703,10 @@ export default function Inicio() {
   const overlayRef = useRef(null);
   const modalCuerpoPublicacionRef = useRef(null);
   const arbolAudienciaAnteriorRef = useRef(null);
+  const eventoMencionActivaRef = useRef(null);
+  const panelEventosAutomaticoRef = useRef(false);
+  const consultaEventosSelectorRef = useRef(null);
+  const resolucionEventoTextoIdRef = useRef(0);
 
   const token = localStorage.getItem('token');
   const [usuarioLogueado, setUsuarioLogueado] = useState(leerUsuarioSesion);
@@ -861,6 +927,132 @@ export default function Inicio() {
     }
   };
 
+
+  const cargarEventosSelectorPublicacion = async ({
+    query = busquedaEventoPublicacion,
+    signal = null
+  } = {}) => {
+    const arbolId = arbolAudienciaPublicacion?.id;
+
+    if (!token || tipoPublicacion !== 'familiar' || !arbolId) {
+      setEventosProximosSelector([]);
+      setEventosPasadosSelector([]);
+      setCargandoEventosSelector(false);
+      setErrorEventosSelector('');
+      return [];
+    }
+
+    const arbolContexto = arbolAudienciaPublicacion;
+    const termino = normalizarBusquedaEventoMencion(query);
+
+    try {
+      setCargandoEventosSelector(true);
+      setErrorEventosSelector('');
+
+      let proximos = [];
+      let pasados = [];
+
+      if (termino) {
+        const respuesta = await fetch(
+          `${API_BASE_URL}/eventos-familiares/arbol/${arbolId}?estado=Activo&limite=50&q=${encodeURIComponent(query)}`,
+          {
+            headers: { 'Authorization': `Bearer ${token}` },
+            ...(signal ? { signal } : {})
+          }
+        );
+
+        const datos = await respuesta.json().catch(() => ({}));
+        if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudieron buscar los eventos familiares.');
+
+        const eventos = (Array.isArray(datos.eventos) ? datos.eventos : [])
+          .map(evento => normalizarEventoInicio(evento, arbolContexto, { idioma, zonaHoraria }))
+          .filter(Boolean);
+
+        proximos = eventos.filter(evento => !evento.esPasado && evento.estado !== 'Cancelado');
+        pasados = eventos.filter(evento => evento.esPasado && evento.estado !== 'Cancelado');
+      } else {
+        const [respuestaProximos, respuestaPasados] = await Promise.all([
+          fetch(`${API_BASE_URL}/eventos-familiares/arbol/${arbolId}/proximos?limite=15`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            ...(signal ? { signal } : {})
+          }),
+          fetch(`${API_BASE_URL}/eventos-familiares/arbol/${arbolId}/pasados?limite=15`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            ...(signal ? { signal } : {})
+          })
+        ]);
+
+        const [datosProximos, datosPasados] = await Promise.all([
+          respuestaProximos.json().catch(() => ({})),
+          respuestaPasados.json().catch(() => ({}))
+        ]);
+
+        if (!respuestaProximos.ok) {
+          throw new Error(datosProximos.mensaje || 'No se pudieron cargar los próximos eventos.');
+        }
+        if (!respuestaPasados.ok) {
+          throw new Error(datosPasados.mensaje || 'No se pudieron cargar los eventos pasados.');
+        }
+
+        proximos = (Array.isArray(datosProximos.eventos) ? datosProximos.eventos : [])
+          .map(evento => normalizarEventoInicio(evento, arbolContexto, { idioma, zonaHoraria }))
+          .filter(evento => evento && evento.estado !== 'Cancelado');
+
+        pasados = (Array.isArray(datosPasados.eventos) ? datosPasados.eventos : [])
+          .map(evento => normalizarEventoInicio(evento, arbolContexto, { idioma, zonaHoraria }))
+          .filter(evento => evento && evento.estado !== 'Cancelado');
+      }
+
+      if (signal?.aborted) return [];
+
+      const deduplicar = (lista = []) => Array.from(
+        new Map(lista.map(evento => [String(evento.id), evento])).values()
+      );
+
+      const puntuarCoincidencia = (evento = {}) => {
+        if (!termino) return 0;
+        const tituloNormalizado = normalizarBusquedaEventoMencion(evento.titulo);
+        if (tituloNormalizado === termino) return 0;
+        if (tituloNormalizado.startsWith(termino)) return 1;
+        return 2;
+      };
+
+      const proximosFinales = deduplicar(proximos).sort((a, b) => {
+        const diferenciaRelevancia = puntuarCoincidencia(a) - puntuarCoincidencia(b);
+        if (diferenciaRelevancia !== 0) return diferenciaRelevancia;
+        return new Date(a.fechaInicio || 0).getTime() - new Date(b.fechaInicio || 0).getTime();
+      });
+      const pasadosFinales = deduplicar(pasados).sort((a, b) => {
+        const diferenciaRelevancia = puntuarCoincidencia(a) - puntuarCoincidencia(b);
+        if (diferenciaRelevancia !== 0) return diferenciaRelevancia;
+        return new Date(b.fechaInicio || 0).getTime() - new Date(a.fechaInicio || 0).getTime();
+      });
+
+      setEventosProximosSelector(proximosFinales);
+      setEventosPasadosSelector(pasadosFinales);
+      return [...proximosFinales, ...pasadosFinales];
+    } catch (error) {
+      if (error.name === 'AbortError') return [];
+      console.error('Error al cargar eventos para mencionar:', error);
+      setEventosProximosSelector([]);
+      setEventosPasadosSelector([]);
+      setErrorEventosSelector(error.message || 'No se pudieron cargar los eventos familiares.');
+      return [];
+    } finally {
+      if (!signal?.aborted) setCargandoEventosSelector(false);
+    }
+  };
+
+  const recargarEventosSelectorPublicacion = () => {
+    consultaEventosSelectorRef.current?.abort();
+    const controlador = new AbortController();
+    consultaEventosSelectorRef.current = controlador;
+    return cargarEventosSelectorPublicacion({
+      query: busquedaEventoPublicacion,
+      signal: controlador.signal
+    });
+  };
+
   useEffect(() => {
     const intervalo = setInterval(() => { setMarcaTiempoActual(Date.now()); }, 60000);
     return () => clearInterval(intervalo);
@@ -915,15 +1107,24 @@ export default function Inicio() {
 
     arbolAudienciaAnteriorRef.current = arbolId || null;
     setBusquedaNodoRelacionado('');
+    setBusquedaEventoPublicacion('');
+    setEventosProximosSelector([]);
+    setEventosPasadosSelector([]);
+    setErrorEventosSelector('');
+    eventoMencionActivaRef.current = null;
+    resolucionEventoTextoIdRef.current += 1;
 
     if (cambioRealDeArbol) {
       setPersonasRelacionadasPublicacion([]);
-      setEventoRelacionadoPublicacion((eventoActual) => {
-        if (!eventoActual) return null;
-        return eventoActual.arbolId && String(eventoActual.arbolId) === String(arbolId)
-          ? eventoActual
-          : null;
-      });
+      const eventoEsCompatible = Boolean(
+        eventoRelacionadoPublicacion?.arbolId &&
+        String(eventoRelacionadoPublicacion.arbolId) === String(arbolId)
+      );
+
+      if (eventoRelacionadoPublicacion && !eventoEsCompatible) {
+        setEventoRelacionadoPublicacion(null);
+        setEventoRelacionadoDesdeHashtag(false);
+      }
     }
 
     if (!token || tipoPublicacion !== 'familiar' || !arbolId) {
@@ -980,6 +1181,44 @@ export default function Inicio() {
     }, 300);
     return () => clearTimeout(temporizador);
   }, [busquedaPersonaPublicacion, panelHerramientaActivo, token]);
+
+
+  useEffect(() => {
+    if (
+      panelHerramientaActivo !== 'eventos' ||
+      tipoPublicacion !== 'familiar' ||
+      !arbolAudienciaPublicacion?.id ||
+      !token
+    ) {
+      consultaEventosSelectorRef.current?.abort();
+      setCargandoEventosSelector(false);
+      return undefined;
+    }
+
+    consultaEventosSelectorRef.current?.abort();
+    const controlador = new AbortController();
+    consultaEventosSelectorRef.current = controlador;
+
+    const temporizador = window.setTimeout(() => {
+      cargarEventosSelectorPublicacion({
+        query: busquedaEventoPublicacion,
+        signal: controlador.signal
+      });
+    }, busquedaEventoPublicacion.trim() ? 250 : 0);
+
+    return () => {
+      window.clearTimeout(temporizador);
+      controlador.abort();
+    };
+  }, [
+    panelHerramientaActivo,
+    busquedaEventoPublicacion,
+    arbolAudienciaPublicacion?.id,
+    tipoPublicacion,
+    token,
+    idioma,
+    zonaHoraria
+  ]);
 
   useEffect(() => {
     multimediaBorradorRef.current = multimediaBorrador;
@@ -1217,6 +1456,14 @@ export default function Inicio() {
     setSugerenciasPersonasPublicacion([]);
     setMencionesPublicacion([]);
     setEventoRelacionadoPublicacion(null);
+    setEventoRelacionadoDesdeHashtag(false);
+    setBusquedaEventoPublicacion('');
+    setEventosProximosSelector([]);
+    setEventosPasadosSelector([]);
+    setErrorEventosSelector('');
+    eventoMencionActivaRef.current = null;
+    panelEventosAutomaticoRef.current = false;
+    resolucionEventoTextoIdRef.current += 1;
     setEtiquetasImagen([]);
     setFechaRecuerdoPublicacion('');
     setFechaMomentoPublicacion('');
@@ -1247,9 +1494,56 @@ export default function Inicio() {
 
   const manejarCambioTextoPublicacion = (e) => {
     const valor = e.target.value;
-    const cursor = e.target.selectionStart || valor.length;
+    const cursor = e.target.selectionStart ?? valor.length;
     const mencionActiva = detectarMencionActiva(valor, cursor);
+    const eventoMencionActivo = tipoPublicacion === 'familiar'
+      ? detectarEventoMencionActivo(valor, cursor)
+      : null;
+
     setTextoPublicacion(valor);
+
+    if (
+      eventoRelacionadoPublicacion &&
+      eventoRelacionadoDesdeHashtag &&
+      !textoContieneReferenciaEvento(valor, eventoRelacionadoPublicacion)
+    ) {
+      setEventoRelacionadoPublicacion(null);
+      setEventoRelacionadoDesdeHashtag(false);
+    }
+
+    if (eventoMencionActivo) {
+      resolucionEventoTextoIdRef.current += 1;
+      eventoMencionActivaRef.current = eventoMencionActivo;
+      panelEventosAutomaticoRef.current = true;
+      setPanelHerramientaActivo('eventos');
+      setBusquedaEventoPublicacion(eventoMencionActivo.query);
+      return;
+    }
+
+    const eventoMencionAnterior = eventoMencionActivaRef.current;
+    eventoMencionActivaRef.current = null;
+
+    if (panelHerramientaActivo === 'eventos' && panelEventosAutomaticoRef.current) {
+      panelEventosAutomaticoRef.current = false;
+      setPanelHerramientaActivo(null);
+      setBusquedaEventoPublicacion('');
+    }
+
+    if (eventoMencionAnterior?.query) {
+      const referenciaCerrada = `#${eventoMencionAnterior.query}`;
+      const idResolucion = ++resolucionEventoTextoIdRef.current;
+
+      resolverEventoRelacionadoDesdeReferencia(referenciaCerrada).then((eventoResuelto) => {
+        if (!eventoResuelto || idResolucion !== resolucionEventoTextoIdRef.current) return;
+
+        const textoActual = textareaPublicacionRef.current?.value ?? valor;
+        if (!textoContieneReferenciaEvento(textoActual, eventoResuelto)) return;
+
+        setEventoRelacionadoPublicacion(eventoResuelto);
+        setEventoRelacionadoDesdeHashtag(true);
+      });
+    }
+
     if (mencionActiva) {
       setPanelHerramientaActivo('menciones');
       setBusquedaPersonaPublicacion(mencionActiva.query);
@@ -1263,11 +1557,23 @@ export default function Inicio() {
   };
 
   const abrirPanelHerramienta = (panel) => {
-    setPanelHerramientaActivo(prev => prev === panel ? null : panel);
+    const seCerrara = panelHerramientaActivo === panel;
+    setPanelHerramientaActivo(seCerrara ? null : panel);
+
     if (panel === 'ubicacion') setUbicacionTemporal(ubicacionPublicacion);
     if (panel === 'menciones' || panel === 'etiquetas') {
       setBusquedaPersonaPublicacion('');
       setSugerenciasPersonasPublicacion([]);
+    }
+    if (panel === 'eventos') {
+      panelEventosAutomaticoRef.current = false;
+      eventoMencionActivaRef.current = detectarEventoMencionActivo(
+        textoPublicacion,
+        textareaPublicacionRef.current?.selectionStart ?? textoPublicacion.length
+      );
+      if (!seCerrara) {
+        setBusquedaEventoPublicacion(eventoMencionActivaRef.current?.query || '');
+      }
     }
     if (panel === 'familiares') {
       setBusquedaNodoRelacionado('');
@@ -1469,7 +1775,14 @@ export default function Inicio() {
       setMencionesPublicacion((Array.isArray(publicacion.menciones) ? publicacion.menciones : []).map(normalizarPersonaParaEditor));
       setEtiquetasImagen((Array.isArray(publicacion.etiquetasMultimedia) ? publicacion.etiquetasMultimedia : []).map(normalizarPersonaParaEditor));
       setPersonasRelacionadasPublicacion((Array.isArray(publicacion.personasRelacionadas) ? publicacion.personasRelacionadas : []).map(normalizarFamiliarParaEditor));
-      setEventoRelacionadoPublicacion(tipoSeguro === 'familiar' ? obtenerEventoRelacionadoDePublicacion(publicacion) : null);
+      const eventoEdicion = tipoSeguro === 'familiar' ? obtenerEventoRelacionadoDePublicacion(publicacion) : null;
+      setEventoRelacionadoPublicacion(eventoEdicion);
+      setEventoRelacionadoDesdeHashtag(Boolean(
+        eventoEdicion && textoContieneReferenciaEvento(publicacion.contenido || '', eventoEdicion)
+      ));
+      setBusquedaEventoPublicacion('');
+      setEventosProximosSelector([]);
+      setEventosPasadosSelector([]);
       setArbolAudienciaPublicacion(arbolSeleccionado);
       arbolAudienciaAnteriorRef.current = arbolSeleccionado?.id || null;
       actualizarMultimediaBorrador(
@@ -1550,6 +1863,26 @@ export default function Inicio() {
     try {
       setPublicando(true);
 
+      let eventoRelacionadoParaGuardar = eventoRelacionadoPublicacion;
+
+      if (
+        tipoPublicacion === 'familiar' &&
+        eventoRelacionadoParaGuardar &&
+        eventoRelacionadoDesdeHashtag &&
+        !textoContieneReferenciaEvento(contenidoLimpio, eventoRelacionadoParaGuardar)
+      ) {
+        eventoRelacionadoParaGuardar = null;
+      }
+
+      if (tipoPublicacion === 'familiar' && !eventoRelacionadoParaGuardar) {
+        eventoRelacionadoParaGuardar = await resolverEventoRelacionadoDesdeTexto(contenidoLimpio);
+
+        if (eventoRelacionadoParaGuardar) {
+          setEventoRelacionadoPublicacion(eventoRelacionadoParaGuardar);
+          setEventoRelacionadoDesdeHashtag(true);
+        }
+      }
+
       const formData = new FormData();
       formData.append('tipo', tipoPublicacion);
       formData.append('contenido', contenidoLimpio);
@@ -1582,15 +1915,15 @@ export default function Inicio() {
         formData.append('personasRelacionadas', JSON.stringify(
           personasRelacionadasPublicacion.map(persona => ({ nodoId: persona.id }))
         ));
-        formData.append('eventoRelacionadoId', eventoRelacionadoPublicacion?.id || '');
-        formData.append('eventoRelacionado', eventoRelacionadoPublicacion
+        formData.append('eventoRelacionadoId', eventoRelacionadoParaGuardar?.id || '');
+        formData.append('eventoRelacionado', eventoRelacionadoParaGuardar
           ? JSON.stringify({
-            id: eventoRelacionadoPublicacion.id,
-            titulo: eventoRelacionadoPublicacion.titulo,
-            fechaInicio: eventoRelacionadoPublicacion.fechaInicio,
-            tipoEvento: eventoRelacionadoPublicacion.tipoEvento,
-            nombreFamilia: eventoRelacionadoPublicacion.nombreFamilia,
-            arbolId: eventoRelacionadoPublicacion.arbolId
+            id: eventoRelacionadoParaGuardar.id,
+            titulo: eventoRelacionadoParaGuardar.titulo,
+            fechaInicio: eventoRelacionadoParaGuardar.fechaInicio,
+            tipoEvento: eventoRelacionadoParaGuardar.tipoEvento,
+            nombreFamilia: eventoRelacionadoParaGuardar.nombreFamilia,
+            arbolId: eventoRelacionadoParaGuardar.arbolId
           })
           : '');
       }
@@ -2176,7 +2509,7 @@ export default function Inicio() {
 
       const comentarioRender = {
         ...datos.comentario,
-        autor: datos.comentario?.autor || { nombreUsuario: usuarioLogueado?.nombreUsuario || 'Yo' }
+        autor: datos.comentario?.autor || usuarioLogueado || { nombreUsuario: 'Yo' }
       };
 
       setComentariosPorPub(prev => ({
@@ -2311,10 +2644,20 @@ export default function Inicio() {
     const etiquetaTipo = ETIQUETAS_TIPO_EVENTO[tipoEvento] || 'Evento familiar';
     const detalle = normalizarTexto(evento.detalle || eventoBase?.detalle || [fecha?.date ? `${fecha.dia} ${fecha.mes}` : '', etiquetaTipo, nombreFamilia].filter(Boolean).join(' • '));
 
+    const fechaReferencia = evento.fechaReferencia || eventoBase?.fechaReferencia || fechaInicio;
+    const fechaReferenciaDate = fechaReferencia ? new Date(fechaReferencia) : null;
+    const esPasado = typeof evento.esPasado === 'boolean'
+      ? evento.esPasado
+      : (typeof eventoBase?.esPasado === 'boolean'
+        ? eventoBase.esPasado
+        : Boolean(fechaReferenciaDate && !Number.isNaN(fechaReferenciaDate.getTime()) && fechaReferenciaDate.getTime() < Date.now()));
+
     return {
       id: id || `${titulo}-${fechaInicio || Date.now()}`,
       arbolId: obtenerId(evento.arbol) || obtenerId(eventoBase?.arbol) || evento.arbolId || eventoBase?.arbolId || null,
       titulo, fechaInicio, tipoEvento, nombreFamilia, detalle, fecha, etiquetaTipo,
+      esPasado,
+      estado: evento.estado || eventoBase?.estado || 'Activo',
       descripcion: evento.descripcion || eventoBase?.descripcion || '',
       ubicacion: obtenerTextoUbicacionEvento(eventoBase || evento)
     };
@@ -2334,8 +2677,55 @@ export default function Inicio() {
   const seleccionarEventoPublicacion = (evento) => {
     const eventoNormalizado = normalizarEventoParaPublicacion(evento);
     if (!eventoNormalizado) return;
+
+    resolucionEventoTextoIdRef.current += 1;
+    const textarea = textareaPublicacionRef.current;
+    const cursor = textarea?.selectionStart ?? textoPublicacion.length;
+    const eventoActivo = detectarEventoMencionActivo(textoPublicacion, cursor) || eventoMencionActivaRef.current;
+    const tokenEventoSinEspacio = crearTokenEventoMencion(eventoNormalizado.titulo);
+    const tokenEvento = `${tokenEventoSinEspacio} `;
+    let nuevoTexto = textoPublicacion;
+    let nuevaPosicion = cursor;
+    let textoModificado = false;
+
+    if (eventoActivo) {
+      const antes = textoPublicacion.slice(0, eventoActivo.inicio);
+      const despues = textoPublicacion.slice(cursor);
+      nuevoTexto = `${antes}${tokenEvento}${despues}`;
+      nuevaPosicion = antes.length + tokenEvento.length;
+      textoModificado = true;
+    } else if (!textoContieneReferenciaEvento(textoPublicacion, eventoNormalizado)) {
+      const inicio = textarea?.selectionStart ?? textoPublicacion.length;
+      const fin = textarea?.selectionEnd ?? inicio;
+      nuevoTexto = `${textoPublicacion.slice(0, inicio)}${tokenEvento}${textoPublicacion.slice(fin)}`;
+      nuevaPosicion = inicio + tokenEvento.length;
+      textoModificado = true;
+    }
+
+    const eventoAnteriorTieneOtroTitulo = Boolean(
+      eventoRelacionadoPublicacion &&
+      !referenciaCoincideConEvento(tokenEventoSinEspacio, eventoRelacionadoPublicacion)
+    );
+
+    if (eventoAnteriorTieneOtroTitulo && textoContieneReferenciaEvento(nuevoTexto, eventoRelacionadoPublicacion)) {
+      nuevoTexto = quitarReferenciaEventoDelTexto(nuevoTexto, eventoRelacionadoPublicacion);
+      const indiceTokenNuevo = nuevoTexto.indexOf(tokenEventoSinEspacio);
+      if (indiceTokenNuevo >= 0) nuevaPosicion = indiceTokenNuevo + tokenEvento.length;
+      textoModificado = true;
+    }
+
+    if (textoModificado) {
+      setTextoPublicacion(nuevoTexto);
+      window.setTimeout(() => {
+        textarea?.focus();
+        textarea?.setSelectionRange(nuevaPosicion, nuevaPosicion);
+      }, 0);
+    }
+
     setEventoRelacionadoPublicacion(eventoNormalizado);
-    if (!fechaMomentoPublicacion && eventoNormalizado.fechaInicio) {
+    setEventoRelacionadoDesdeHashtag(true);
+
+    if (!fechaMomentoPublicacion && eventoNormalizado.esPasado && eventoNormalizado.fechaInicio) {
       const fechaCruda = String(eventoNormalizado.fechaInicio);
       const coincidenciaFecha = fechaCruda.match(/^\d{4}-\d{2}-\d{2}/);
       if (coincidenciaFecha) {
@@ -2347,7 +2737,73 @@ export default function Inicio() {
         }
       }
     }
+
+    setBusquedaEventoPublicacion('');
+    eventoMencionActivaRef.current = null;
+    panelEventosAutomaticoRef.current = false;
     setPanelHerramientaActivo(null);
+  };
+
+  const resolverEventoRelacionadoDesdeReferencia = async (referencia = '') => {
+    const arbolId = arbolAudienciaPublicacion?.id;
+    const referenciaLimpia = String(referencia || '').trim();
+
+    if (!token || tipoPublicacion !== 'familiar' || !arbolId || !referenciaLimpia) {
+      return null;
+    }
+
+    const eventosLocales = [...eventosProximosSelector, ...eventosPasadosSelector];
+    const coincidenciasLocales = eventosLocales.filter(evento => (
+      String(evento?.arbolId || '') === String(arbolId) &&
+      referenciaCoincideConEvento(referenciaLimpia, evento)
+    ));
+
+    if (coincidenciasLocales.length === 1) {
+      return normalizarEventoParaPublicacion(coincidenciasLocales[0]);
+    }
+
+    try {
+      const respuesta = await fetch(
+        `${API_BASE_URL}/eventos-familiares/arbol/${arbolId}?estado=Activo&limite=50&q=${encodeURIComponent(referenciaLimpia)}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) return null;
+
+      const coincidencias = (Array.isArray(datos.eventos) ? datos.eventos : [])
+        .map(evento => normalizarEventoInicio(evento, arbolAudienciaPublicacion, { idioma, zonaHoraria }))
+        .filter(evento => evento && referenciaCoincideConEvento(referenciaLimpia, evento));
+
+      return coincidencias.length === 1
+        ? normalizarEventoParaPublicacion(coincidencias[0])
+        : null;
+    } catch (error) {
+      console.error('No se pudo resolver la referencia de evento escrita manualmente:', error);
+      return null;
+    }
+  };
+
+  const resolverEventoRelacionadoDesdeTexto = async (texto = '') => {
+    const referencias = obtenerReferenciasEventoDelTexto(texto);
+
+    for (const referencia of referencias) {
+      const evento = await resolverEventoRelacionadoDesdeReferencia(referencia);
+      if (evento) return evento;
+    }
+
+    return null;
+  };
+
+  const quitarEventoRelacionadoDelEditor = () => {
+    resolucionEventoTextoIdRef.current += 1;
+    const eventoActual = eventoRelacionadoPublicacion;
+    setEventoRelacionadoPublicacion(null);
+    setEventoRelacionadoDesdeHashtag(false);
+    setBusquedaEventoPublicacion('');
+
+    if (eventoActual && textoContieneReferenciaEvento(textoPublicacion, eventoActual)) {
+      setTextoPublicacion(prev => quitarReferenciaEventoDelTexto(prev, eventoActual));
+    }
   };
 
   const cerrarAlbumEvento = () => {
@@ -2398,13 +2854,29 @@ export default function Inicio() {
     const eventoNormalizado = normalizarEventoParaPublicacion(evento);
     if (!eventoNormalizado) return null;
 
+    const fechaCompacta = eventoNormalizado.fechaInicio
+      ? formatearFechaContextoPublicacion(eventoNormalizado.fechaInicio)
+      : '';
+    const estadoTemporal = eventoNormalizado.esPasado ? 'Pasado' : 'Próximo';
+
     return (
-      <button type="button" className="evento-post-render evento-post-render-clickable" onClick={() => abrirAlbumEvento(eventoNormalizado)} title={`Ver publicaciones de ${eventoNormalizado.titulo}`}>
-        <i className="bi bi-calendar-heart-fill"></i>
-        <div>
-          <strong>{eventoNormalizado.titulo}</strong>
-          <span>{eventoNormalizado.detalle || eventoNormalizado.nombreFamilia}</span>
-        </div>
+      <button
+        type="button"
+        className="evento-post-render evento-post-render-clickable"
+        onClick={() => abrirAlbumEvento(eventoNormalizado)}
+        title={`Ver publicaciones de ${eventoNormalizado.titulo}`}
+      >
+        <i className="bi bi-calendar-heart-fill" aria-hidden="true"></i>
+        <span className="evento-post-render-titulo">{eventoNormalizado.titulo}</span>
+        <span className={`evento-post-render-estado ${eventoNormalizado.esPasado ? 'pasado' : 'proximo'}`}>
+          {estadoTemporal}
+        </span>
+        {fechaCompacta && (
+          <>
+            <span className="evento-post-render-separador" aria-hidden="true">·</span>
+            <span className="evento-post-render-fecha">{fechaCompacta}</span>
+          </>
+        )}
       </button>
     );
   };
@@ -2415,6 +2887,7 @@ export default function Inicio() {
       : Boolean(pub.multimedia);
     const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
     const autorId = obtenerIdPersonaPerfil(pub.autor) || obtenerIdPersonaPerfil(pub.usuario);
+    const eventoRelacionadoAlbum = obtenerEventoRelacionadoDePublicacion(pub);
 
     const imagenAutorAlbum = obtenerImagenDeEntidad(pub.autor) || obtenerImagenDeEntidad(pub.usuario);
     const nombreAutorAlbum = obtenerNombreDeEntidad(pub.autor) || obtenerNombreDeEntidad(pub.usuario, 'Familiar');
@@ -2443,7 +2916,7 @@ export default function Inicio() {
 
         {pub.contenido && (
           <p className="album-evento-publicacion-texto">
-            {renderTextoConMenciones(pub.contenido, pub.menciones)}
+            {renderTextoConMenciones(pub.contenido, pub.menciones, eventoRelacionadoAlbum)}
           </p>
         )}
 
@@ -2460,8 +2933,9 @@ export default function Inicio() {
     );
   };
 
-  const renderTextoConMenciones = (texto = '', menciones = []) => {
-    const partes = String(texto || '').split(/(@[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]+)/g);
+  const renderTextoConMenciones = (texto = '', menciones = [], eventoRelacionado = null) => {
+    const eventoNormalizado = normalizarEventoParaPublicacion(eventoRelacionado);
+    const partes = String(texto || '').split(/(@[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]+|#[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9._-]+)/g);
 
     return partes.map((parte, index) => {
       if (parte.startsWith('@')) {
@@ -2487,6 +2961,32 @@ export default function Inicio() {
           </span>
         );
       }
+
+      if (parte.startsWith('#')) {
+        const correspondeAlEvento = Boolean(
+          eventoNormalizado && referenciaCoincideConEvento(parte, eventoNormalizado)
+        );
+
+        return (
+          <span
+            key={`evento-mencion-${index}`}
+            className={`mencion-evento ${correspondeAlEvento ? 'mencion-evento-clickeable' : ''}`}
+            role={correspondeAlEvento ? 'button' : undefined}
+            tabIndex={correspondeAlEvento ? 0 : undefined}
+            onClick={correspondeAlEvento ? () => abrirAlbumEvento(eventoNormalizado) : undefined}
+            onKeyDown={correspondeAlEvento ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                abrirAlbumEvento(eventoNormalizado);
+              }
+            } : undefined}
+            title={correspondeAlEvento ? `Ver ${eventoNormalizado.titulo}` : undefined}
+          >
+            {parte}
+          </span>
+        );
+      }
+
       return <React.Fragment key={`texto-${index}`}>{parte}</React.Fragment>;
     });
   };
@@ -2514,7 +3014,7 @@ export default function Inicio() {
           <span className="chip-publicacion evento">
             <i className="bi bi-calendar-heart-fill"></i>
             {eventoRelacionadoPublicacion.titulo}
-            <button type="button" onClick={() => setEventoRelacionadoPublicacion(null)} aria-label="Quitar evento relacionado"><i className="bi bi-x"></i></button>
+            <button type="button" onClick={quitarEventoRelacionadoDelEditor} aria-label="Quitar evento relacionado"><i className="bi bi-x"></i></button>
           </span>
         )}
         {personasRelacionadasPublicacion.map(persona => (
@@ -2557,42 +3057,102 @@ export default function Inicio() {
     }
 
     if (panelHerramientaActivo === 'eventos') {
-      const eventosDelArbolActual = proximosEventosFamiliares.filter(evento => (
-        !evento.arbolId || String(evento.arbolId) === String(arbolAudienciaPublicacion?.id)
-      ));
+      const renderGrupoEventos = (titulo, eventos, tipo) => {
+        if (!Array.isArray(eventos) || eventos.length === 0) return null;
+
+        return (
+          <section className={`grupo-eventos-mencion ${tipo}`}>
+            <div className="titulo-grupo-eventos-mencion">
+              <span>{titulo}</span>
+              <small>{eventos.length}</small>
+            </div>
+            {eventos.map(evento => (
+              <button
+                key={`${tipo}-${evento.id}`}
+                type="button"
+                className="evento-sugerido-publicacion"
+                onClick={() => seleccionarEventoPublicacion(evento)}
+              >
+                <span className="evento-sugerido-fecha">
+                  <strong>{evento.fecha?.dia || '--'}</strong>
+                  <small>{evento.fecha?.mes || '---'}</small>
+                </span>
+                <span className="evento-sugerido-info">
+                  <strong>{evento.titulo}</strong>
+                  <small>{evento.detalle || evento.nombreFamilia}</small>
+                </span>
+                <span className={`evento-sugerido-estado ${tipo}`}>
+                  {tipo === 'pasados' ? 'Pasado' : 'Próximo'}
+                </span>
+              </button>
+            ))}
+          </section>
+        );
+      };
+
+      const noHayResultados = !cargandoEventosSelector &&
+        !errorEventosSelector &&
+        eventosProximosSelector.length === 0 &&
+        eventosPasadosSelector.length === 0;
 
       return (
         <div className="panel-herramienta-publicacion panel-eventos-publicacion">
           <div className="encabezado-panel-eventos-publicacion">
             <div>
               <strong>Mencionar evento familiar</strong>
-              <small>Relaciona esta publicación con un evento del árbol.</small>
+              <small>Escribe # o busca por el título del evento.</small>
             </div>
-            <button type="button" onClick={cargarProximosEventosFamiliares} disabled={cargandoEventosFamiliares} title="Actualizar eventos">
-              <i className={`bi ${cargandoEventosFamiliares ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
+            <button
+              type="button"
+              onClick={recargarEventosSelectorPublicacion}
+              disabled={cargandoEventosSelector}
+              title="Actualizar eventos"
+              aria-label="Actualizar eventos"
+            >
+              <i className={`bi ${cargandoEventosSelector ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
             </button>
           </div>
 
+          <div className="buscador-eventos-mencion">
+            <i className="bi bi-search" aria-hidden="true"></i>
+            <input
+              type="search"
+              value={busquedaEventoPublicacion}
+              onChange={(event) => setBusquedaEventoPublicacion(event.target.value)}
+              placeholder="Buscar evento por título..."
+              aria-label="Buscar evento familiar"
+            />
+            {busquedaEventoPublicacion && (
+              <button
+                type="button"
+                onClick={() => setBusquedaEventoPublicacion('')}
+                aria-label="Limpiar búsqueda de eventos"
+              >
+                <i className="bi bi-x-lg"></i>
+              </button>
+            )}
+          </div>
+
           <div className="lista-eventos-publicacion">
-            {cargandoEventosFamiliares ? (
-              <div className="estado-sugerencias-publicacion"><span className="spinner-border spinner-border-sm me-2"></span>Cargando eventos...</div>
-            ) : errorEventosFamiliares ? (
-              <div className="estado-sugerencias-publicacion error">{errorEventosFamiliares}</div>
-            ) : eventosDelArbolActual.length > 0 ? (
-              eventosDelArbolActual.map(evento => (
-                <button key={evento.id} type="button" className="evento-sugerido-publicacion" onClick={() => seleccionarEventoPublicacion(evento)}>
-                  <span className="evento-sugerido-fecha">
-                    <strong>{evento.fecha?.dia || '--'}</strong>
-                    <small>{evento.fecha?.mes || '---'}</small>
-                  </span>
-                  <span className="evento-sugerido-info">
-                    <strong>{evento.titulo}</strong>
-                    <small>{evento.detalle || evento.nombreFamilia}</small>
-                  </span>
-                </button>
-              ))
+            {cargandoEventosSelector ? (
+              <div className="estado-sugerencias-publicacion">
+                <span className="spinner-border spinner-border-sm me-2"></span>
+                Buscando eventos...
+              </div>
+            ) : errorEventosSelector ? (
+              <div className="estado-sugerencias-publicacion error">{errorEventosSelector}</div>
             ) : (
-              <div className="estado-sugerencias-publicacion">No hay próximos eventos familiares para mencionar.</div>
+              <>
+                {renderGrupoEventos('Próximos eventos', eventosProximosSelector, 'proximos')}
+                {renderGrupoEventos('Eventos pasados', eventosPasadosSelector, 'pasados')}
+                {noHayResultados && (
+                  <div className="estado-sugerencias-publicacion">
+                    {busquedaEventoPublicacion
+                      ? 'No se encontraron eventos con ese título.'
+                      : 'No hay eventos familiares disponibles para mencionar.'}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -3018,7 +3578,7 @@ export default function Inicio() {
 
               <div className="contenedor-input-superpuesto">
                 <div className="form-control input-publicacion input-overlay" ref={overlayRef} aria-hidden="true">
-                  {textoPublicacion ? renderTextoConMenciones(textoPublicacion) : ''}
+                  {textoPublicacion ? renderTextoConMenciones(textoPublicacion, mencionesPublicacion, eventoRelacionadoPublicacion) : ''}
                 </div>
                 <textarea
                   ref={textareaPublicacionRef}
@@ -3204,7 +3764,7 @@ export default function Inicio() {
                 )}
 
                 {pub.contenido && (
-                  <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones)}</p>
+                  <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones, eventoRelacionadoPost)}</p>
                 )}
 
                 {tieneMultimedia && (
@@ -3250,12 +3810,55 @@ export default function Inicio() {
                   <div className="mt-3 border-top pt-3" style={{ borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
                     <div className="lista-comentarios mb-3" style={{ maxHeight: '200px', overflowY: 'auto' }}>
                       {comentariosPorPub[pub._id]?.length > 0 ? (
-                        comentariosPorPub[pub._id].map(com => (
-                          <div key={com._id} className="p-2 rounded-3 mb-2 border shadow-sm" style={{ backgroundColor: 'var(--fondo-app)', fontSize: '0.85rem' }}>
-                            <span className="fw-bold d-block" style={{ color: 'var(--texto-principal)' }}>{com.autor?.nombreUsuario}</span>
-                            <p className="mb-0" style={{ color: 'var(--texto-secundario)' }}>{com.texto}</p>
-                          </div>
-                        ))
+                        comentariosPorPub[pub._id].map(com => {
+                          const autorComentario = com.autor && typeof com.autor === 'object' ? com.autor : {};
+                          const autorComentarioId = obtenerIdPersonaPerfil(com.autor || autorComentario);
+                          const nombreComentario = obtenerNombreDeEntidad(autorComentario, 'Usuario');
+                          const avatarComentario = obtenerUrlImagenPerfil(
+                            obtenerImagenDeEntidad(autorComentario),
+                            nombreComentario
+                          );
+                          const esMiComentario = Boolean(
+                            autorComentarioId && miId && String(autorComentarioId) === String(miId)
+                          );
+                          const rutaPerfilComentario = autorComentarioId
+                            ? (esMiComentario ? '/perfil' : `/perfil/${autorComentarioId}`)
+                            : null;
+
+                          const encabezadoComentario = (
+                            <>
+                              <img
+                                src={avatarComentario}
+                                alt={`Perfil de ${nombreComentario}`}
+                                className="avatar-autor-comentario"
+                                onError={(evento) => {
+                                  evento.currentTarget.onerror = null;
+                                  evento.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreComentario)}&background=0D1B2A&color=fff`;
+                                }}
+                              />
+                              <span className="nombre-autor-comentario">{nombreComentario}</span>
+                            </>
+                          );
+
+                          return (
+                            <div key={com._id} className="comentario-inicio">
+                              {rutaPerfilComentario ? (
+                                <Link
+                                  to={rutaPerfilComentario}
+                                  className="enlace-autor-comentario"
+                                  aria-label={`Ver perfil de ${nombreComentario}`}
+                                >
+                                  {encabezadoComentario}
+                                </Link>
+                              ) : (
+                                <div className="enlace-autor-comentario sin-enlace">
+                                  {encabezadoComentario}
+                                </div>
+                              )}
+                              <p className="texto-comentario-inicio">{com.texto}</p>
+                            </div>
+                          );
+                        })
                       ) : (
                         <p className="small mb-2 ps-1" style={{ color: 'var(--texto-secundario)' }}>Aún no hay comentarios en esta historia familiar...</p>
                       )}
@@ -3275,7 +3878,7 @@ export default function Inicio() {
         <div className="columna-widgets-inicio d-none d-xl-block">
           <div className="tarjeta shadow-sm mb-4">
             <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
-              <h3 className="titulo-widget mb-0">Próximos Aniversarios</h3>
+              <h3 className="titulo-widget mb-0">Próximos Eventos</h3>
               <button type="button" className="btn-recargar-eventos" title="Actualizar eventos" onClick={cargarProximosEventosFamiliares} disabled={cargandoEventosFamiliares}><i className={`bi ${cargandoEventosFamiliares ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i></button>
             </div>
 
