@@ -1042,3 +1042,65 @@
         width: 100%;
     }
 }
+
+/* =========================================
+   INDICADORES DE NOVEDADES EN MI RED
+   ========================================= */
+.contador-tab-red,
+.contador-pendientes-red {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 21px;
+    height: 21px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background-color: #dc3545;
+    color: #ffffff;
+    font-size: 0.68rem;
+    font-weight: 850;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 2px 7px rgba(220, 53, 69, 0.24);
+    flex: 0 0 auto;
+}
+
+.tab-red.activo .contador-tab-red {
+    background-color: #ffffff;
+    color: #b42332;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+}
+
+.titulo-pendientes-red {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.contador-pendientes-red {
+    min-width: 25px;
+    height: 25px;
+    font-size: 0.73rem;
+}
+
+[data-tema="oscuro"] .tab-red.activo .contador-tab-red,
+[data-theme="dark"] .tab-red.activo .contador-tab-red {
+    background-color: var(--fondo-tarjeta);
+    color: #f87171;
+}
+
+@media (max-width: 576px) {
+    .contador-tab-red {
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        font-size: 0.6rem;
+    }
+
+    .titulo-pendientes-red {
+        align-items: flex-start;
+        font-size: 0.96rem !important;
+        line-height: 1.25;
+    }
+}

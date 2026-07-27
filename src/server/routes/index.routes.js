@@ -26,6 +26,7 @@ router.use('/uploads', require('./publicaciones/uploads.routes'));
 
 // --- 4. INTERACCIÓN ---
 router.use('/mensajes', require('./interaccion/mensajeria.routes'));
+router.use('/indicadores', require('./interaccion/indicadores.routes'));
 router.use('/notificaciones', require('./interaccion/notificacion.routes'));
 router.use('/interaccion', require('./interaccion/logInteraccion.routes'));
 

@@ -17,6 +17,15 @@ import './ArbolGenealogico.css';
 const URL_BASE_BACKEND = BACKEND_BASE_URL;
 const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
 
+const formatearCantidadIndicadorArbol = (cantidad) => {
+  const total = Number(cantidad) || 0;
+  return total > 99 ? '99+' : String(total);
+};
+
+const notificarActualizacionIndicadoresArbol = () => {
+  window.dispatchEvent(new CustomEvent('legacy:indicadores-actualizados'));
+};
+
 const resolverUrlImagen = (url) => {
   if (!url) return null;
 
@@ -3199,6 +3208,7 @@ export default function ArbolGenealogico() {
       await apiFetch(`/api/invitaciones-familiares/${invitacionId}/aceptar`, { method: 'PATCH' });
       establecerMensajeSistema('Invitación aceptada. Ya puedes ver el árbol.');
       await cargarMenuArboles();
+      notificarActualizacionIndicadoresArbol();
     } catch (error) {
       console.error('Error al aceptar invitación:', error);
       window.alert(error.message || 'No se pudo aceptar la invitación.');
@@ -3215,6 +3225,7 @@ export default function ArbolGenealogico() {
       await apiFetch(`/api/invitaciones-familiares/${invitacionId}/rechazar`, { method: 'PATCH' });
       establecerMensajeSistema('Invitación rechazada.');
       await cargarMenuArboles();
+      notificarActualizacionIndicadoresArbol();
     } catch (error) {
       console.error('Error al rechazar invitación:', error);
       window.alert(error.message || 'No se pudo rechazar la invitación.');
@@ -6373,7 +6384,14 @@ La persona seguirá dentro del árbol como miembro normal.`
                   <span>Invitaciones</span>
                   <h3>Solicitudes para unirte</h3>
                 </div>
-                <i className="bi bi-envelope-open"></i>
+                <div className="icono-invitaciones-arbol" aria-label={`${totalInvitaciones} invitaciones pendientes`}>
+                  <i className="bi bi-envelope-open"></i>
+                  {totalInvitaciones > 0 && (
+                    <span className="contador-invitaciones-arbol">
+                      {formatearCantidadIndicadorArbol(totalInvitaciones)}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {invitacionesPendientes.length > 0 ? (

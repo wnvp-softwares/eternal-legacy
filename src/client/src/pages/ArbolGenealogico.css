@@ -6195,3 +6195,57 @@
         font-size: 0.95rem;
     }
 }
+
+/* =========================================
+   INDICADOR DE INVITACIONES A ÁRBOLES
+   ========================================= */
+.icono-invitaciones-arbol {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: var(--texto-secundario);
+}
+
+.icono-invitaciones-arbol > i {
+    font-size: 1.25rem;
+}
+
+.contador-invitaciones-arbol {
+    position: absolute;
+    top: -5px;
+    right: -8px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border: 2px solid var(--fondo-tarjeta);
+    border-radius: 999px;
+    background-color: #dc3545;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.62rem;
+    font-weight: 850;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 2px 7px rgba(220, 53, 69, 0.25);
+}
+
+@media (max-width: 576px) {
+    .icono-invitaciones-arbol {
+        width: 31px;
+        height: 31px;
+    }
+
+    .contador-invitaciones-arbol {
+        top: -6px;
+        right: -7px;
+        min-width: 18px;
+        height: 18px;
+        font-size: 0.58rem;
+    }
+}

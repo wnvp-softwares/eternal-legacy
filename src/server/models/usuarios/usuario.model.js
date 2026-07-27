@@ -24,6 +24,17 @@ const preferenciasFeedSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
+const indicadoresVistosSchema = new mongoose.Schema({
+    seguidores: {
+        type: Date,
+        default: null
+    },
+    amigos: {
+        type: Date,
+        default: null
+    }
+}, { _id: false });
+
 const usuarioSchema = new mongoose.Schema({
     nombreUsuario: {
         type: String,
@@ -122,6 +133,15 @@ const usuarioSchema = new mongoose.Schema({
         default: null
     }
 ,
+
+    // Fechas privadas usadas para calcular novedades de Red entre dispositivos.
+    indicadoresVistos: {
+        type: indicadoresVistosSchema,
+        default: () => ({
+            seguidores: null,
+            amigos: null
+        })
+    },
 
     // Preferencias privadas que solo afectan el contenido mostrado en Inicio.
     preferenciasFeed: {

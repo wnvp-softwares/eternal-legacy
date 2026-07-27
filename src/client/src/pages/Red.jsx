@@ -4,6 +4,22 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Red.css';
 import { BACKEND_BASE_URL } from '../config/env';
 
+const INDICADORES_RED_INICIALES = {
+  total: 0,
+  invitacionesFamiliares: 0,
+  seguidoresNuevos: 0,
+  amigosNuevos: 0
+};
+
+const formatearCantidadIndicador = (cantidad) => {
+  const total = Number(cantidad) || 0;
+  return total > 99 ? '99+' : String(total);
+};
+
+const notificarActualizacionIndicadores = () => {
+  window.dispatchEvent(new CustomEvent('legacy:indicadores-actualizados'));
+};
+
 export default function Red() {
   const [familiares, setFamiliares] = useState([]);
   const [invitacionesPendientes, setInvitacionesPendientes] = useState([]);
@@ -22,9 +38,71 @@ export default function Red() {
   const [confirmacionMarcada, setConfirmacionMarcada] = useState(false);
   const [procesandoEliminacion, setProcesandoEliminacion] = useState(false);
   const [errorConfirmacion, setErrorConfirmacion] = useState('');
+  const [indicadoresRed, setIndicadoresRed] = useState(INDICADORES_RED_INICIALES);
 
   const token = localStorage.getItem('token');
   const URL_BASE_BACKEND = BACKEND_BASE_URL;
+
+  const cargarIndicadoresRed = async () => {
+    if (!token) return;
+
+    try {
+      const respuesta = await fetch(`${URL_BASE_BACKEND}/api/indicadores/resumen`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!respuesta.ok) return;
+
+      const datos = await respuesta.json();
+      setIndicadoresRed({
+        total: Number(datos?.red?.total) || 0,
+        invitacionesFamiliares: Number(datos?.red?.invitacionesFamiliares) || 0,
+        seguidoresNuevos: Number(datos?.red?.seguidoresNuevos) || 0,
+        amigosNuevos: Number(datos?.red?.amigosNuevos) || 0
+      });
+    } catch (error) {
+      console.error('Error al cargar indicadores de Mi Red:', error);
+    }
+  };
+
+  const marcarSeccionRedComoVista = async (seccion) => {
+    if (!token || !['seguidores', 'amigos'].includes(seccion)) return;
+
+    try {
+      const respuesta = await fetch(`${URL_BASE_BACKEND}/api/indicadores/red/vistos`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ secciones: [seccion] })
+      });
+
+      if (!respuesta.ok) return;
+
+      setIndicadoresRed((prev) => {
+        const campo = seccion === 'seguidores' ? 'seguidoresNuevos' : 'amigosNuevos';
+        const descontar = Number(prev[campo]) || 0;
+        return {
+          ...prev,
+          [campo]: 0,
+          total: Math.max(0, (Number(prev.total) || 0) - descontar)
+        };
+      });
+
+      notificarActualizacionIndicadores();
+    } catch (error) {
+      console.error(`Error al marcar ${seccion} como vistos:`, error);
+    }
+  };
+
+  const cambiarTab = (nuevaTab) => {
+    setTabActiva(nuevaTab);
+
+    if (nuevaTab === 'seguidores' || nuevaTab === 'amigos') {
+      marcarSeccionRedComoVista(nuevaTab);
+    }
+  };
 
   // 🌟 FUNCIÓN CENTRALIZADA PARA CARGAR FAMILIA
   const cargarDatosFamilia = async () => {
@@ -98,6 +176,22 @@ export default function Red() {
     fetchConexiones();
   }, [tabActiva, token]);
 
+  useEffect(() => {
+    if (!token) {
+      setIndicadoresRed(INDICADORES_RED_INICIALES);
+      return undefined;
+    }
+
+    const manejarActualizacion = () => cargarIndicadoresRed();
+
+    cargarIndicadoresRed();
+    window.addEventListener('legacy:indicadores-actualizados', manejarActualizacion);
+
+    return () => {
+      window.removeEventListener('legacy:indicadores-actualizados', manejarActualizacion);
+    };
+  }, [token]);
+
   // EFECTO: BUSCADOR GLOBAL
   useEffect(() => {
     if (!busqueda.trim()) {
@@ -161,7 +255,9 @@ export default function Red() {
       if (res.ok) {
         alert("¡Ahora sigues a este usuario!");
         manejarEliminarSugerencia(usuarioId);
-        if (tabActiva === 'seguidores' || tabActiva === 'siguiendo') fetchConexiones();
+        if (tabActiva === 'seguidores' || tabActiva === 'siguiendo') await fetchConexiones();
+        await cargarIndicadoresRed();
+        notificarActualizacionIndicadores();
       }
     } catch (error) {
       console.error(error);
@@ -212,6 +308,8 @@ export default function Red() {
         setConexiones(prev => prev.filter(contacto => String(contacto.idConexion) !== String(usuarioId)));
       }
 
+      await cargarIndicadoresRed();
+      notificarActualizacionIndicadores();
       setConfirmacionEliminar(null);
       setConfirmacionMarcada(false);
     } catch (error) {
@@ -242,7 +340,9 @@ export default function Red() {
       });
 
       if (res.ok) {
-        cargarDatosFamilia();
+        await cargarDatosFamilia();
+        await cargarIndicadoresRed();
+        notificarActualizacionIndicadores();
       } else {
         const datos = await res.json();
         alert(datos.mensaje || "Error al procesar la solicitud");
@@ -285,17 +385,30 @@ export default function Red() {
       {!mostrandoBusqueda && (
         <div className="tabs-red-container">
           <div className="tabs-red">
-            <button className={`tab-red ${tabActiva === 'familia' ? 'activo' : ''}`} onClick={() => setTabActiva('familia')}>
-              <i className="bi bi-diagram-3"></i> Familiares
+            <button className={`tab-red ${tabActiva === 'familia' ? 'activo' : ''}`} onClick={() => cambiarTab('familia')}>
+              <i className="bi bi-diagram-3"></i>
+              <span>Familiares</span>
+              {indicadoresRed.invitacionesFamiliares > 0 && (
+                <span className="contador-tab-red">{formatearCantidadIndicador(indicadoresRed.invitacionesFamiliares)}</span>
+              )}
             </button>
-            <button className={`tab-red ${tabActiva === 'amigos' ? 'activo' : ''}`} onClick={() => setTabActiva('amigos')}>
-              <i className="bi bi-people"></i> Amigos
+            <button className={`tab-red ${tabActiva === 'amigos' ? 'activo' : ''}`} onClick={() => cambiarTab('amigos')}>
+              <i className="bi bi-people"></i>
+              <span>Amigos</span>
+              {indicadoresRed.amigosNuevos > 0 && (
+                <span className="contador-tab-red">{formatearCantidadIndicador(indicadoresRed.amigosNuevos)}</span>
+              )}
             </button>
-            <button className={`tab-red ${tabActiva === 'seguidores' ? 'activo' : ''}`} onClick={() => setTabActiva('seguidores')}>
-              <i className="bi bi-person-lines-fill"></i> Seguidores
+            <button className={`tab-red ${tabActiva === 'seguidores' ? 'activo' : ''}`} onClick={() => cambiarTab('seguidores')}>
+              <i className="bi bi-person-lines-fill"></i>
+              <span>Seguidores</span>
+              {indicadoresRed.seguidoresNuevos > 0 && (
+                <span className="contador-tab-red">{formatearCantidadIndicador(indicadoresRed.seguidoresNuevos)}</span>
+              )}
             </button>
-            <button className={`tab-red ${tabActiva === 'siguiendo' ? 'activo' : ''}`} onClick={() => setTabActiva('siguiendo')}>
-              <i className="bi bi-person-check"></i> Siguiendo
+            <button className={`tab-red ${tabActiva === 'siguiendo' ? 'activo' : ''}`} onClick={() => cambiarTab('siguiendo')}>
+              <i className="bi bi-person-check"></i>
+              <span>Siguiendo</span>
             </button>
           </div>
         </div>
@@ -354,8 +467,9 @@ export default function Red() {
               {/* SUBSECCIÓN A: SOLICITUDES PENDIENTES */}
               {invitacionesPendientes.length > 0 && (
                 <div className="mb-5">
-                  <h4 className="text-warning fw-bold mb-3 fs-5">
-                    <i className="bi bi-envelope-open-heart me-2"></i> Solicitudes de Familia Pendientes
+                  <h4 className="text-warning fw-bold mb-3 fs-5 titulo-pendientes-red">
+                    <span><i className="bi bi-envelope-open-heart me-2"></i> Solicitudes de Familia Pendientes</span>
+                    <span className="contador-pendientes-red">{formatearCantidadIndicador(invitacionesPendientes.length)}</span>
                   </h4>
                   <div className="row g-3">
                     {invitacionesPendientes.map((inv) => (

@@ -141,6 +141,21 @@ const leerBusquedasRecientes = () => {
   }
 };
 
+const INDICADORES_NAVEGACION_INICIALES = {
+  arbol: { invitacionesPendientes: 0 },
+  red: {
+    total: 0,
+    invitacionesFamiliares: 0,
+    seguidoresNuevos: 0,
+    amigosNuevos: 0
+  }
+};
+
+const formatearCantidadIndicador = (cantidad) => {
+  const total = Number(cantidad) || 0;
+  return total > 99 ? '99+' : String(total);
+};
+
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -159,10 +174,13 @@ export default function Layout() {
   const [busquedasRecientes, setBusquedasRecientes] = useState(leerBusquedasRecientes);
 
   const [mensajesNoLeidos, setMensajesNoLeidos] = useState(0);
+  const [indicadoresNavegacion, setIndicadoresNavegacion] = useState(INDICADORES_NAVEGACION_INICIALES);
   const [usuarioLogueado, setUsuarioLogueado] = useState(leerUsuarioSesion);
 
   const token = localStorage.getItem('token');
   const queryBusqueda = textoBusqueda.trim();
+  const invitacionesArbolPendientes = Number(indicadoresNavegacion?.arbol?.invitacionesPendientes) || 0;
+  const totalIndicadoresRed = Number(indicadoresNavegacion?.red?.total) || 0;
 
   const esActiva = (ruta) => location.pathname.includes(ruta);
 
@@ -345,6 +363,60 @@ export default function Layout() {
 
     const intervalo = setInterval(obtenerTotalNoLeidos, 5000);
     return () => clearInterval(intervalo);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      setIndicadoresNavegacion(INDICADORES_NAVEGACION_INICIALES);
+      return undefined;
+    }
+
+    let componenteActivo = true;
+
+    const obtenerIndicadoresNavegacion = async () => {
+      try {
+        const respuesta = await fetch(`${API_BASE_URL}/indicadores/resumen`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!respuesta.ok) return;
+
+        const datos = await respuesta.json();
+        if (!componenteActivo) return;
+
+        setIndicadoresNavegacion({
+          arbol: {
+            invitacionesPendientes: Number(datos?.arbol?.invitacionesPendientes) || 0
+          },
+          red: {
+            total: Number(datos?.red?.total) || 0,
+            invitacionesFamiliares: Number(datos?.red?.invitacionesFamiliares) || 0,
+            seguidoresNuevos: Number(datos?.red?.seguidoresNuevos) || 0,
+            amigosNuevos: Number(datos?.red?.amigosNuevos) || 0
+          }
+        });
+      } catch (error) {
+        console.error('Error al obtener indicadores de navegación en Layout:', error);
+      }
+    };
+
+    const manejarActualizacionIndicadores = () => obtenerIndicadoresNavegacion();
+    const manejarVisibilidad = () => {
+      if (document.visibilityState === 'visible') obtenerIndicadoresNavegacion();
+    };
+
+    obtenerIndicadoresNavegacion();
+
+    const intervalo = setInterval(obtenerIndicadoresNavegacion, 5000);
+    window.addEventListener('legacy:indicadores-actualizados', manejarActualizacionIndicadores);
+    document.addEventListener('visibilitychange', manejarVisibilidad);
+
+    return () => {
+      componenteActivo = false;
+      clearInterval(intervalo);
+      window.removeEventListener('legacy:indicadores-actualizados', manejarActualizacionIndicadores);
+      document.removeEventListener('visibilitychange', manejarVisibilidad);
+    };
   }, [token]);
 
   useEffect(() => {
@@ -612,12 +684,40 @@ export default function Layout() {
             <i className="bi bi-search"></i>
           </button>
 
-          {/* --- MENSAJES Y NOTIFICACIONES --- */}
-          <Link to="/mensajes" className="position-relative iconos-nav text-decoration-none">
+          {/* --- INDICADORES RÁPIDOS --- */}
+          <Link
+            to="/arbol-genealogico"
+            className="position-relative iconos-nav indicador-nav-superior text-decoration-none d-none d-md-flex"
+            aria-label={`Árbol Genealógico: ${invitacionesArbolPendientes} invitaciones pendientes`}
+            title="Invitaciones a árboles"
+          >
+            <i className="bi bi-diagram-3"></i>
+            {invitacionesArbolPendientes > 0 && (
+              <span className="badge-notificacion badge-indicador-navegacion">
+                {formatearCantidadIndicador(invitacionesArbolPendientes)}
+              </span>
+            )}
+          </Link>
+
+          <Link
+            to="/red"
+            className="position-relative iconos-nav indicador-nav-superior text-decoration-none d-none d-md-flex"
+            aria-label={`Red: ${totalIndicadoresRed} novedades`}
+            title="Novedades de Mi Red"
+          >
+            <i className="bi bi-people"></i>
+            {totalIndicadoresRed > 0 && (
+              <span className="badge-notificacion badge-indicador-navegacion">
+                {formatearCantidadIndicador(totalIndicadoresRed)}
+              </span>
+            )}
+          </Link>
+
+          <Link to="/mensajes" className="position-relative iconos-nav indicador-nav-superior text-decoration-none" aria-label={`Mensajes: ${mensajesNoLeidos} no leídos`}>
             <i className="bi bi-chat"></i>
             {mensajesNoLeidos > 0 && (
-              <span className="position-absolute badge-notificacion bg-danger text-white rounded-circle">
-                {mensajesNoLeidos}
+              <span className="badge-notificacion badge-indicador-navegacion">
+                {formatearCantidadIndicador(mensajesNoLeidos)}
               </span>
             )}
           </Link>
@@ -710,18 +810,32 @@ export default function Layout() {
         {/* --- SIDEBAR IZQUIERDA --- */}
         <aside className="sidebar-izquierda d-none d-xl-flex flex-column border-end py-4">
           <Link to="/inicio" className={`item-menu ${esActiva('/inicio') ? 'activo' : ''}`}><i className="bi bi-house-door"></i> Inicio</Link>
-          <Link to="/arbol-genealogico" className={`item-menu ${esActiva('/arbol-genealogico') ? 'activo' : ''}`}><i className="bi bi-diagram-3"></i> Árbol Genealógico</Link>
-
-          <Link to="/mensajes" className={`item-menu ${esActiva('/mensajes') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
-            <span><i className="bi bi-chat-dots"></i> Mensajes</span>
-            {mensajesNoLeidos > 0 && (
-              <span className="badge bg-danger rounded-pill px-2 py-1 me-3" style={{ fontSize: '0.75rem' }}>
-                {mensajesNoLeidos}
+          <Link to="/arbol-genealogico" className={`item-menu ${esActiva('/arbol-genealogico') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
+            <span><i className="bi bi-diagram-3"></i> Árbol Genealógico</span>
+            {invitacionesArbolPendientes > 0 && (
+              <span className="badge-contador-sidebar me-3">
+                {formatearCantidadIndicador(invitacionesArbolPendientes)}
               </span>
             )}
           </Link>
 
-          <Link to="/red" className={`item-menu ${esActiva('/red') ? 'activo' : ''}`}><i className="bi bi-people"></i> Red</Link>
+          <Link to="/mensajes" className={`item-menu ${esActiva('/mensajes') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
+            <span><i className="bi bi-chat-dots"></i> Mensajes</span>
+            {mensajesNoLeidos > 0 && (
+              <span className="badge-contador-sidebar me-3">
+                {formatearCantidadIndicador(mensajesNoLeidos)}
+              </span>
+            )}
+          </Link>
+
+          <Link to="/red" className={`item-menu ${esActiva('/red') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
+            <span><i className="bi bi-people"></i> Red</span>
+            {totalIndicadoresRed > 0 && (
+              <span className="badge-contador-sidebar me-3">
+                {formatearCantidadIndicador(totalIndicadoresRed)}
+              </span>
+            )}
+          </Link>
 
           <Link to="/notificaciones" className={`item-menu ${esActiva('/notificaciones') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
             <span><i className="bi bi-bell"></i> Notificaciones</span>
@@ -738,8 +852,14 @@ export default function Layout() {
             <i className={`bi bi-house-door${esActiva('/inicio') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/inicio') ? 'bold' : 'normal' }}>Inicio</span>
           </Link>
 
-          <Link to="/arbol-genealogico" className={`${esActiva('/arbol-genealogico') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>
-            <i className={`bi bi-diagram-3${esActiva('/arbol-genealogico') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/arbol-genealogico') ? 'bold' : 'normal' }}>Árbol</span>
+          <Link to="/arbol-genealogico" className={`${esActiva('/arbol-genealogico') ? 'text-dark' : 'text-secondary'} nav-movil-item d-flex flex-column align-items-center text-decoration-none`}>
+            <span className="icono-nav-movil-con-indicador">
+              <i className={`bi bi-diagram-3${esActiva('/arbol-genealogico') ? '-fill text-warning' : ''} fs-5`}></i>
+              {invitacionesArbolPendientes > 0 && (
+                <span className="badge-indicador-movil">{formatearCantidadIndicador(invitacionesArbolPendientes)}</span>
+              )}
+            </span>
+            <span style={{ fontSize: '0.7rem', fontWeight: esActiva('/arbol-genealogico') ? 'bold' : 'normal' }}>Árbol</span>
           </Link>
 
           <button
@@ -756,8 +876,14 @@ export default function Layout() {
             <span>Publicar</span>
           </button>
 
-          <Link to="/red" className={`${esActiva('/red') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>
-            <i className={`bi bi-people${esActiva('/red') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/red') ? 'bold' : 'normal' }}>Red</span>
+          <Link to="/red" className={`${esActiva('/red') ? 'text-dark' : 'text-secondary'} nav-movil-item d-flex flex-column align-items-center text-decoration-none`}>
+            <span className="icono-nav-movil-con-indicador">
+              <i className={`bi bi-people${esActiva('/red') ? '-fill text-warning' : ''} fs-5`}></i>
+              {totalIndicadoresRed > 0 && (
+                <span className="badge-indicador-movil">{formatearCantidadIndicador(totalIndicadoresRed)}</span>
+              )}
+            </span>
+            <span style={{ fontSize: '0.7rem', fontWeight: esActiva('/red') ? 'bold' : 'normal' }}>Red</span>
           </Link>
 
           <Link to="/perfil" className={`${esActiva('/perfil') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>
