@@ -1,4 +1,8 @@
-const { Usuario, InformacionPerfil, Seguidor, Familia } = require('../../models/index.model');
+const { Usuario, InformacionPerfil, Seguidor, Familia, Amigo } = require('../../models/index.model');
+const {
+    puedeVerPerfilCompleto,
+    normalizarPrivacidadPerfil
+} = require('../../services/privacidadPerfil.service');
 
 const quitarBarraFinal = (valor = '') => String(valor || '').replace(/\/+$/, '');
 
@@ -70,7 +74,18 @@ const formatearUsuarioCuenta = (usuario, req) => ({
     twoFactorEnabled: Boolean(usuario.twoFactorEnabled),
     idioma: usuario.idioma || 'es-MX',
     zonaHoraria: usuario.zonaHoraria || 'America/Mexico_City',
-    formatoFecha: usuario.formatoFecha || 'DD/MM/AAAA'
+    formatoFecha: usuario.formatoFecha || 'DD/MM/AAAA',
+    createdAt: usuario.createdAt
+});
+
+const formatearUsuarioPublico = (usuario, req) => ({
+    id: usuario._id,
+    _id: usuario._id,
+    nombreUsuario: usuario.nombreUsuario,
+    nickname: usuario.nickname || null,
+    imagenPerfil: resolverUrlArchivo(usuario.imagenPerfil, req),
+    imagenPortada: resolverUrlArchivo(usuario.imagenPortada, req),
+    createdAt: usuario.createdAt
 });
 
 const crearPerfilSiNoExiste = async (usuario) => {
@@ -85,7 +100,8 @@ const crearPerfilSiNoExiste = async (usuario) => {
         lugarNacimiento: '',
         ubicacionActual: '',
         ocupacionEducacion: '',
-        intereses: []
+        intereses: [],
+        privacidadPerfil: 'publico'
     });
 
     usuario.informacionPerfil = nuevoPerfil._id;
@@ -134,7 +150,9 @@ const obtenerMiPerfil = async (req, res) => {
         res.status(200).json({
             mensaje: 'Perfil recuperado con éxito',
             usuario: formatearUsuarioCuenta(usuario, req),
-            perfil: usuario.informacionPerfil
+            perfil: usuario.informacionPerfil,
+            privacidadPerfil: normalizarPrivacidadPerfil(usuario.informacionPerfil?.privacidadPerfil),
+            puedeVerPerfilCompleto: true
         });
     } catch (error) {
         console.error('❌ Error al obtener perfil:', error);
@@ -311,9 +329,55 @@ const actualizarMiPerfil = async (req, res) => {
     }
 };
 
+const obtenerPrivacidadMiPerfil = async (req, res) => {
+    try {
+        const usuario = await Usuario.findById(req.usuario.id).select('informacionPerfil');
+        if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+
+        await crearPerfilSiNoExiste(usuario);
+        const perfil = await InformacionPerfil.findById(usuario.informacionPerfil)
+            .select('privacidadPerfil');
+
+        return res.status(200).json({
+            privacidadPerfil: normalizarPrivacidadPerfil(perfil?.privacidadPerfil)
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener privacidad del perfil:', error);
+        return res.status(500).json({ mensaje: 'No se pudo obtener la privacidad del perfil.' });
+    }
+};
+
+const actualizarPrivacidadMiPerfil = async (req, res) => {
+    try {
+        const privacidadSolicitada = String(req.body?.privacidadPerfil || '').trim().toLowerCase();
+        if (!['publico', 'privado'].includes(privacidadSolicitada)) {
+            return res.status(400).json({ mensaje: 'La privacidad seleccionada no es válida.' });
+        }
+
+        const usuario = await Usuario.findById(req.usuario.id).select('informacionPerfil');
+        if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+        await crearPerfilSiNoExiste(usuario);
+
+        const perfil = await InformacionPerfil.findByIdAndUpdate(
+            usuario.informacionPerfil,
+            { $set: { privacidadPerfil: privacidadSolicitada } },
+            { new: true, runValidators: true }
+        );
+
+        return res.status(200).json({
+            mensaje: 'Configuración de privacidad actualizada correctamente.',
+            privacidadPerfil: normalizarPrivacidadPerfil(perfil?.privacidadPerfil)
+        });
+    } catch (error) {
+        console.error('❌ Error al actualizar privacidad del perfil:', error);
+        return res.status(500).json({ mensaje: 'No se pudo actualizar la privacidad del perfil.' });
+    }
+};
+
 const obtenerPerfilPorId = async (req, res) => {
     try {
         const { id } = req.params;
+        const visitanteId = req.usuario.id || req.usuario._id;
 
         let usuario = await Usuario.findById(id)
             .populate({ path: 'informacionPerfil' })
@@ -324,36 +388,67 @@ const obtenerPerfilPorId = async (req, res) => {
             return res.status(404).json({ mensaje: 'Usuario no encontrado' });
         }
 
-        // 1. Verificar seguimiento mutuo (Amigos)
-        const loSigo = await Seguidor.findOne({ seguidor: req.usuario.id, seguido: id });
-        const meSigue = await Seguidor.findOne({ seguidor: id, seguido: req.usuario.id });
-        const sonAmigos = !!loSigo && !!meSigue;
+        if (!usuario.informacionPerfil) {
+            await crearPerfilSiNoExiste(usuario);
+            usuario = await Usuario.findById(id)
+                .populate({ path: 'informacionPerfil' })
+                .populate({ path: 'imagenPerfil', select: 'urlArchivo secure_url url path ruta location filename' })
+                .populate({ path: 'imagenPortada', select: 'urlArchivo secure_url url path ruta location filename' });
+        }
 
-        // 2. Verificar si ya existe relación o invitación familiar (en cualquier dirección)
-        const relacionFamilia = await Familia.findOne({
-            $or: [
-                { usuarioPrincipal: req.usuario.id, familiar: id },
-                { usuarioPrincipal: id, familiar: req.usuario.id }
-            ]
-        });
+        const [loSigo, meSigue, amistadAceptada, relacionFamilia, accesoCompleto] = await Promise.all([
+            Seguidor.findOne({ seguidor: visitanteId, seguido: id }).lean(),
+            Seguidor.findOne({ seguidor: id, seguido: visitanteId }).lean(),
+            Amigo.findOne({
+                estado: 'Aceptado',
+                $or: [
+                    { usuarioSolicitante: visitanteId, usuarioReceptor: id },
+                    { usuarioSolicitante: id, usuarioReceptor: visitanteId }
+                ]
+            }).lean(),
+            Familia.findOne({
+                $or: [
+                    { usuarioPrincipal: visitanteId, familiar: id },
+                    { usuarioPrincipal: id, familiar: visitanteId }
+                ]
+            }).lean(),
+            puedeVerPerfilCompleto({ propietarioId: id, visitanteId })
+        ]);
 
-        res.status(200).json({
+        const privacidadPerfil = normalizarPrivacidadPerfil(usuario.informacionPerfil?.privacidadPerfil);
+        const sonAmigos = Boolean(amistadAceptada);
+        const esInvitadoPorMi = Boolean(
+            relacionFamilia && String(relacionFamilia.usuarioPrincipal) === String(visitanteId)
+        );
+
+        const perfilVisible = accesoCompleto
+            ? usuario.informacionPerfil
+            : {
+                privacidadPerfil,
+                createdAt: usuario.createdAt
+            };
+
+        return res.status(200).json({
             mensaje: 'Perfil recuperado con éxito',
-            usuario: formatearUsuarioCuenta(usuario, req),
-            perfil: usuario.informacionPerfil,
-            siguiendo: !!loSigo,
-            sonAmigos, // 🌟 True si se siguen mutuamente
-            estadoFamilia: relacionFamilia ? relacionFamilia.estado : null, // 🌟 Pendiente, Aceptado, o null
-            esInvitadoPorMi: relacionFamilia ? (relacionFamilia.usuarioPrincipal.toString() === req.usuario.id) : false
+            usuario: formatearUsuarioPublico(usuario, req),
+            perfil: perfilVisible,
+            privacidadPerfil,
+            puedeVerPerfilCompleto: Boolean(accesoCompleto),
+            siguiendo: Boolean(loSigo),
+            sonAmigos,
+            estadoFamilia: relacionFamilia ? relacionFamilia.estado : null,
+            esInvitadoPorMi
         });
     } catch (error) {
         console.error('❌ Error al obtener perfil por ID:', error);
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
+        return res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 };
 
 module.exports = {
     obtenerMiPerfil,
     actualizarMiPerfil,
-    obtenerPerfilPorId
+    obtenerPerfilPorId,
+    obtenerPrivacidadMiPerfil,
+    actualizarPrivacidadMiPerfil
 };

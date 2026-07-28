@@ -1,5 +1,11 @@
 const mongoose = require('mongoose');
 const { Familia } = require('../../models/index.model');
+const {
+    crearNotificacion,
+    crearClaveEvento,
+    eliminarNotificacionPorClave,
+    eliminarNotificaciones
+} = require('../../services/notificacion.service');
 
 // 1. ENVIAR INVITACIÓN AL ÁRBOL GENEALÓGICO
 const enviarInvitacionFamiliar = async (req, res) => {
@@ -23,6 +29,16 @@ const enviarInvitacionFamiliar = async (req, res) => {
             estado: 'Pendiente' // Entra en estado de invitación
         });
         await nuevaRelacion.save();
+
+        await crearNotificacion({
+            destinatarioId: familiarId,
+            actorId: req.usuario.id,
+            tipo: 'solicitud_familiar_recibida',
+            solicitudId: nuevaRelacion._id,
+            enlaceReferencia: '/red',
+            claveEvento: crearClaveEvento('solicitud_familiar_recibida', nuevaRelacion._id)
+        });
+
         res.status(201).json({ mensaje: 'Invitación familiar enviada con éxito' });
     } catch (error) {
         console.error('❌ Error al invitar familiar:', error);
@@ -34,23 +50,45 @@ const enviarInvitacionFamiliar = async (req, res) => {
 const responderInvitacionFamiliar = async (req, res) => {
     try {
         const { idInvitacion } = req.params;
-        const { respuesta } = req.body; // Debe ser 'Aceptado' o 'Rechazado'
+        const { respuesta } = req.body;
 
         if (!['Aceptado', 'Rechazado'].includes(respuesta)) {
             return res.status(400).json({ mensaje: 'Respuesta no válida' });
         }
 
-        const invitacion = await Familia.findByIdAndUpdate(
-            idInvitacion,
-            { estado: respuesta },
-            { new: true }
-        );
+        const invitacion = await Familia.findOne({
+            _id: idInvitacion,
+            familiar: req.usuario.id,
+            estado: 'Pendiente'
+        });
 
         if (!invitacion) return res.status(404).json({ mensaje: 'Invitación no encontrada' });
 
-        res.status(200).json({ mensaje: `Invitación familiar ${respuesta.toLowerCase()}`, invitacion });
+        invitacion.estado = respuesta;
+        await invitacion.save();
+
+        await eliminarNotificacionPorClave(
+            crearClaveEvento('solicitud_familiar_recibida', invitacion._id)
+        );
+
+        if (respuesta === 'Aceptado') {
+            await crearNotificacion({
+                destinatarioId: invitacion.usuarioPrincipal,
+                actorId: req.usuario.id,
+                tipo: 'solicitud_familiar_aceptada',
+                solicitudId: invitacion._id,
+                enlaceReferencia: `/perfil/${req.usuario.id}`,
+                claveEvento: crearClaveEvento('solicitud_familiar_aceptada', invitacion._id)
+            });
+        }
+
+        return res.status(200).json({
+            mensaje: `Invitación familiar ${respuesta.toLowerCase()}`,
+            invitacion
+        });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al responder la invitación' });
+        console.error('❌ Error al responder invitación familiar:', error);
+        return res.status(500).json({ mensaje: 'Error al responder la invitación' });
     }
 };
 
@@ -118,9 +156,8 @@ const obtenerInvitacionesPendientes = async (req, res) => {
             idSender: inv.usuarioPrincipal._id,
             nombre: inv.usuarioPrincipal.nombreUsuario,
             relacion: inv.parentesco,
-            img: inv.usuarioPrincipal.imagenPerfil?.urlArchivo
-                ? `http://localhost:3000${inv.usuarioPrincipal.imagenPerfil.urlArchivo}`
-                : `https://ui-avatars.com/api/?name=${encodeURIComponent(inv.usuarioPrincipal.nombreUsuario)}&background=cbd5e1`
+            img: inv.usuarioPrincipal.imagenPerfil?.urlArchivo ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(inv.usuarioPrincipal.nombreUsuario)}&background=cbd5e1`
         }));
 
         res.status(200).json(lista);
@@ -155,7 +192,10 @@ const eliminarRelacionFamiliar = async (req, res) => {
             return res.status(403).json({ mensaje: 'No tienes permiso para eliminar esta relación familiar.' });
         }
 
-        await relacion.deleteOne();
+        await Promise.all([
+            relacion.deleteOne(),
+            eliminarNotificaciones({ solicitud: relacion._id })
+        ]);
 
         return res.status(200).json({
             mensaje: 'La relación familiar fue eliminada de Mi Red.',

@@ -30,10 +30,12 @@ const arbolSchema = new mongoose.Schema({
         default: ''
     },
 
+    // Campo legado conservado para no requerir una migración destructiva.
+    // La aplicación fuerza todos los árboles a visibilidad exclusiva de Familia.
     privacidad: {
         type: String,
-        enum: ['Publico', 'Privado', 'Familia', 'Conexiones'], // 👈 Añadimos 'Conexiones' al enum
-        default: 'Familia' // Puedes cambiar el default si lo deseas
+        enum: ['Familia'],
+        default: 'Familia'
     },
 
     // Admins adicionales del árbol. El creador NO cuenta dentro de este arreglo.
@@ -78,6 +80,7 @@ arbolSchema.index({ creador: 1 }, { unique: true });
 // - El creador nunca ocupa espacio dentro de admins.
 // - admins solo guarda admins extra, únicos y máximo 5.
 arbolSchema.pre('validate', function () {
+    this.privacidad = 'Familia';
     if (!this.creador) return;
 
     const creadorId = obtenerIdSeguro(this.creador);

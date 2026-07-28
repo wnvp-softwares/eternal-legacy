@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import {
   obtenerOGenerarLlavesE2E,
@@ -200,6 +201,7 @@ const obtenerUrlImagenUsuario = (usuario, nombreFallback = 'Usuario') => {
 
 export default function Mensajes() {
   const { idioma, zonaHoraria } = usePreferencias();
+  const location = useLocation();
   const [chats, setChats] = useState([]);
   const [busquedaPersona, setBusquedaPersona] = useState('');
   const [chatSeleccionado, setChatSeleccionado] = useState(null);
@@ -331,6 +333,24 @@ export default function Mensajes() {
     const intervalo = window.setInterval(cargarBandeja, 5000);
     return () => window.clearInterval(intervalo);
   }, [token, miPublicKey, cargarBandeja]);
+
+  useEffect(() => {
+    if (chats.length === 0) return;
+    const parametros = new URLSearchParams(location.search);
+    const tipo = parametros.get('tipo');
+    const idObjetivo = parametros.get('id');
+    if (!idObjetivo) return;
+
+    const chatObjetivo = chats.find((chat) => {
+      const coincideId = String(obtenerIdChat(chat)) === String(idObjetivo);
+      if (!coincideId) return false;
+      if (tipo === 'grupo' || tipo === 'grupo-familiar') return esGrupoFamiliar(chat);
+      if (tipo === 'directo') return !esGrupoFamiliar(chat);
+      return true;
+    });
+
+    if (chatObjetivo) setChatSeleccionado(chatObjetivo);
+  }, [chats, location.search]);
 
   useLayoutEffect(() => {
     const raiz = document.documentElement;

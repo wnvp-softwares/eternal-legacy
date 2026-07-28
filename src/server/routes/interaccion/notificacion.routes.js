@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { verificarToken } = require('../../middlewares/auth.middleware');
-const { crearNotificacionInterna, obtenerMisNotificaciones } = require('../../controllers/interaccion/notificacion.controller');
+const {
+    obtenerMisNotificaciones,
+    marcarNotificacionLeida,
+    marcarTodasLeidas
+} = require('../../controllers/interaccion/notificacion.controller');
 
-router.post('/crear-prueba', verificarToken, crearNotificacionInterna);
-router.get('/mis-notificaciones', verificarToken, obtenerMisNotificaciones);
+router.get('/', verificarToken, obtenerMisNotificaciones);
+router.put('/marcar-todas-leidas', verificarToken, marcarTodasLeidas);
+router.put('/:notificacionId/marcar-leida', verificarToken, marcarNotificacionLeida);
 
 module.exports = router;

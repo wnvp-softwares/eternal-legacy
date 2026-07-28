@@ -3177,7 +3177,7 @@ export default function ArbolGenealogico() {
         body: JSON.stringify({
           nombreFamilia,
           descripcion: descripcionNuevoArbol.trim(),
-          privacidad: 'Privado',
+          privacidad: 'Familia',
           nombrePersona: 'Yo',
           generacion: 0,
           fila: 0
@@ -6185,7 +6185,7 @@ La persona seguirá dentro del árbol como miembro normal.`
         <div className="meta-arbol-menu">
           <span><i className="bi bi-person-circle"></i> {obtenerNombreCreador(arbolItem)}</span>
           <span><i className="bi bi-people"></i> {totalMiembros || 1} miembros</span>
-          <span><i className="bi bi-lock"></i> {arbolItem.privacidad || 'Privado'}</span>
+          <span><i className="bi bi-shield-lock-fill"></i> Solo Familia</span>
         </div>
 
         <button className="btn-menu-dorado w-100" onClick={() => abrirArbol(arbolItem)}>

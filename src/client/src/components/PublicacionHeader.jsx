@@ -80,14 +80,11 @@ export default function PublicacionHeader({
   const eventoTituloLimpio = normalizarTexto(eventoTitulo);
   const eventoEsInteractivo = eventoTituloLimpio && typeof onEventoClick === 'function';
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombre || 'Usuario')}&background=0D1B2A&color=fff`;
-  const esPublica = esHistorico || privacidad === 'publico';
   const nombreTipoPublicacion = esHistorico ? 'Recuerdo Histórico' : 'Momento Familiar';
   const iconoTipoPublicacion = esHistorico ? 'bi-globe-americas' : 'bi-people-fill';
   const descripcionTipoPublicacion = esHistorico
-    ? 'Publicación pública que puede ver cualquier persona en Legacy.'
-    : esPublica
-      ? 'Momento Familiar publicado de forma pública y visible para cualquier persona en Legacy.'
-      : `Publicación visible únicamente para los integrantes autorizados de ${formatearNombreFamilia(nombreFamilia)}.`;
+    ? 'Recuerdo Histórico cuya visibilidad respeta la privacidad actual del perfil de su autor.'
+    : `Publicación visible únicamente para los integrantes autorizados de ${formatearNombreFamilia(nombreFamilia)}.`;
   const informacionTipoId = useId();
   const informacionTipoTituloId = useId();
   const informacionTipoDescripcionId = useId();

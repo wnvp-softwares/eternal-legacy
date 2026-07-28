@@ -8,6 +8,12 @@ const {
     Seguidor,
     Arbol
 } = require('../../models/index.model');
+const {
+    crearNotificacion,
+    crearNotificacionesMultiples,
+    crearClaveEvento,
+    marcarNotificacionesConversacionLeidas
+} = require('../../services/notificacion.service');
 
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
@@ -334,7 +340,7 @@ const construirResumenGrupo = async (arbol, usuarioId) => {
         tipoChat: 'grupo-familiar',
         nombreFamilia: arbol.nombreFamilia || 'Mi Familia',
         descripcion: arbol.descripcion || '',
-        privacidad: arbol.privacidad || 'Familia',
+        privacidad: 'Familia',
         totalMiembros: miembros.length,
         miembros,
         miembrosSinCifrado,
@@ -450,6 +456,17 @@ const enviarMensaje = async (req, res) => {
         });
 
         await nuevoMensaje.save();
+
+        await crearNotificacion({
+            destinatarioId: receptorId,
+            actorId: miId,
+            tipo: 'mensaje_directo',
+            conversacionId: miId,
+            tipoConversacion: 'directo',
+            enlaceReferencia: `/mensajes?tipo=directo&id=${miId}`,
+            claveEvento: crearClaveEvento('mensaje_directo', nuevoMensaje._id)
+        });
+
         return res.status(201).json({ mensaje: 'Mensaje enviado con éxito', data: nuevoMensaje });
     } catch (error) {
         console.error('❌ Error al enviar mensaje:', error);
@@ -466,6 +483,12 @@ const marcarComoLeido = async (req, res) => {
             { creador: contactoId, receptor: miId, fechaVisto: null },
             { $set: { fechaVisto: new Date() } }
         );
+
+        await marcarNotificacionesConversacionLeidas({
+            usuarioId: miId,
+            conversacionId: contactoId,
+            tipo: 'mensaje_directo'
+        });
 
         return res.status(200).json({ mensaje: 'Mensajes marcados como leídos con éxito.' });
     } catch (error) {
@@ -588,6 +611,21 @@ const enviarMensajeGrupoFamiliar = async (req, res) => {
             populate: { path: 'imagenPerfil', select: 'urlArchivo' }
         });
 
+        await crearNotificacionesMultiples(
+            contexto.miembros
+                .filter((miembro) => !sonMismoId(miembro.id, miId))
+                .map((miembro) => ({
+                    destinatarioId: miembro.id,
+                    actorId: miId,
+                    tipo: 'mensaje_grupo',
+                    arbolId,
+                    conversacionId: arbolId,
+                    tipoConversacion: 'grupo-familiar',
+                    enlaceReferencia: `/mensajes?tipo=grupo-familiar&id=${arbolId}`,
+                    claveEvento: crearClaveEvento('mensaje_grupo', nuevoMensaje._id, miembro.id)
+                }))
+        );
+
         return res.status(201).json({
             mensaje: 'Mensaje familiar enviado con éxito.',
             data: serializarMensajeGrupoParaUsuario(nuevoMensaje, miId)
@@ -625,6 +663,12 @@ const marcarGrupoFamiliarComoLeido = async (req, res) => {
                 }
             }
         );
+
+        await marcarNotificacionesConversacionLeidas({
+            usuarioId: miId,
+            conversacionId: arbolId,
+            tipo: 'mensaje_grupo'
+        });
 
         return res.status(200).json({
             mensaje: 'Mensajes familiares marcados como leídos.',

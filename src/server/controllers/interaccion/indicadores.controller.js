@@ -2,7 +2,8 @@ const {
     Usuario,
     Seguidor,
     Familia,
-    InvitacionFamiliar
+    InvitacionFamiliar,
+    Notificacion
 } = require('../../models/index.model');
 
 const SECCIONES_RED_VALIDAS = new Set(['seguidores', 'amigos']);
@@ -112,7 +113,7 @@ const obtenerResumenIndicadores = async (req, res) => {
 
         const vistos = await asegurarLineaBaseIndicadores(usuario);
 
-        const [invitacionesArbol, invitacionesFamiliares, novedadesRed] = await Promise.all([
+        const [invitacionesArbol, invitacionesFamiliares, novedadesRed, notificacionesNoLeidas] = await Promise.all([
             InvitacionFamiliar.countDocuments({
                 invitado: usuarioId,
                 estado: 'Pendiente'
@@ -121,7 +122,8 @@ const obtenerResumenIndicadores = async (req, res) => {
                 familiar: usuarioId,
                 estado: 'Pendiente'
             }),
-            contarNovedadesRed({ usuarioId, vistos })
+            contarNovedadesRed({ usuarioId, vistos }),
+            Notificacion.countDocuments({ usuarioDestino: usuarioId, fueLeida: false })
         ]);
 
         const totalRed =
@@ -138,6 +140,9 @@ const obtenerResumenIndicadores = async (req, res) => {
                 invitacionesFamiliares,
                 seguidoresNuevos: novedadesRed.seguidoresNuevos,
                 amigosNuevos: novedadesRed.amigosNuevos
+            },
+            notificaciones: {
+                totalNoLeidas: notificacionesNoLeidas
             },
             lineaBaseInicializada: vistos.inicializadaAhora
         });

@@ -281,3 +281,238 @@
         font-size: 0.82rem;
     }
 }
+
+.notificaciones-pagina {
+    padding-bottom: 80px !important;
+}
+
+.notificaciones-subtitulo {
+    margin-top: 5px;
+    color: var(--texto-secundario);
+    font-size: 0.9rem;
+}
+
+.boton-marcar-leidas {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.boton-marcar-leidas:disabled {
+    opacity: 0.48;
+    cursor: default;
+    text-decoration: none;
+}
+
+.notificaciones-filtros {
+    max-width: 800px;
+    margin: 0 auto 14px;
+    display: flex;
+    gap: 8px;
+}
+
+.notificaciones-filtros button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 13px;
+    border: 1px solid var(--borde-color);
+    border-radius: 999px;
+    color: var(--texto-secundario);
+    background: var(--fondo-tarjeta);
+    font-weight: 700;
+}
+
+.notificaciones-filtros button.activo {
+    color: var(--boton-primario-texto);
+    border-color: var(--boton-primario-fondo);
+    background: var(--boton-primario-fondo);
+}
+
+.notificaciones-filtros button span {
+    min-width: 22px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    color: var(--texto-principal);
+    background: var(--dorado);
+    text-align: center;
+    font-size: 0.72rem;
+}
+
+.item-notificacion {
+    position: relative;
+    border: 0;
+}
+
+.item-notificacion:focus-visible {
+    z-index: 1;
+    outline: 2px solid var(--dorado);
+    outline-offset: -3px;
+}
+
+.item-notificacion.no-leida {
+    background: color-mix(in srgb, var(--dorado-fondo-suave) 48%, var(--fondo-tarjeta));
+}
+
+.badge-tipo.red { background: #2563eb; }
+.badge-tipo.familia { background: #be123c; }
+.badge-tipo.publicacion { background: #7c3aed; }
+.badge-tipo.arbol { background: #15803d; }
+.badge-tipo.mensaje { background: #0369a1; }
+.badge-tipo.general { background: #64748b; }
+
+.texto-notificacion strong {
+    color: var(--texto-principal);
+}
+
+.notificacion-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.notificacion-meta time {
+    color: var(--texto-terciario);
+    font-size: 0.78rem;
+}
+
+.notificacion-categoria {
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--fondo-input);
+    color: var(--texto-secundario);
+    font-size: 0.68rem;
+    font-weight: 750;
+}
+
+.notificacion-categoria.red { color: #2563eb; }
+.notificacion-categoria.familia { color: #be123c; }
+.notificacion-categoria.publicacion { color: #7c3aed; }
+.notificacion-categoria.arbol { color: #15803d; }
+.notificacion-categoria.mensaje { color: #0369a1; }
+
+.notificacion-flecha {
+    margin-left: 12px;
+    color: var(--texto-terciario);
+    font-size: 0.85rem;
+}
+
+.notificaciones-estado {
+    min-height: 340px;
+    padding: 38px 24px;
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--texto-secundario);
+    background: var(--fondo-tarjeta);
+}
+
+.notificaciones-estado > i {
+    margin-bottom: 14px;
+    color: var(--dorado);
+    font-size: 3.2rem;
+}
+
+.notificaciones-estado h3 {
+    color: var(--texto-principal);
+    font-size: 1.2rem;
+}
+
+.notificaciones-estado p {
+    max-width: 470px;
+    margin: 5px 0 0;
+}
+
+.notificaciones-error {
+    max-width: 800px;
+    margin: 0 auto 14px;
+    padding: 11px 13px;
+    border: 1px solid color-mix(in srgb, var(--error-texto) 28%, transparent);
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--error-texto);
+    background: var(--error-fondo-suave);
+}
+
+.notificaciones-error span {
+    flex: 1;
+}
+
+.notificaciones-error button {
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font-weight: 800;
+    text-decoration: underline;
+}
+
+.notificaciones-paginacion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.notificaciones-paginacion button {
+    padding: 8px 12px;
+    border: 1px solid var(--borde-color);
+    border-radius: 9px;
+    color: var(--texto-principal);
+    background: var(--fondo-tarjeta);
+}
+
+.notificaciones-paginacion button:disabled {
+    opacity: 0.42;
+}
+
+.notificaciones-paginacion span {
+    color: var(--texto-secundario);
+    font-size: 0.86rem;
+}
+
+@media (max-width: 576px) {
+    .cabecera-notificaciones {
+        flex-direction: row;
+        align-items: flex-start;
+    }
+
+    .boton-marcar-leidas {
+        max-width: 145px;
+        justify-content: flex-end;
+        text-align: right;
+    }
+
+    .item-notificacion {
+        align-items: flex-start;
+    }
+
+    .avatar-notificacion-container {
+        margin-right: 12px;
+    }
+
+    .contenido-notificacion {
+        padding-right: 4px;
+    }
+
+    .notificacion-flecha {
+        display: none;
+    }
+
+    .notificaciones-paginacion {
+        flex-wrap: wrap;
+    }
+
+    .notificaciones-paginacion span {
+        order: -1;
+        width: 100%;
+        text-align: center;
+    }
+}

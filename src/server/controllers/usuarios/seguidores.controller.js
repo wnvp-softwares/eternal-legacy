@@ -1,4 +1,11 @@
 const { Seguidor } = require('../../models/index.model');
+const {
+    crearNotificacion,
+    crearNotificacionesMultiples,
+    crearClaveEvento,
+    eliminarNotificacionPorClave,
+    eliminarNotificaciones
+} = require('../../services/notificacion.service');
 
 const seguirUsuario = async (req, res) => {
     try {
@@ -21,12 +28,45 @@ const seguirUsuario = async (req, res) => {
             return res.status(200).json({ mensaje: 'Ya sigues a este usuario' });
         }
 
+        const seguimientoReciproco = await Seguidor.findOne({
+            seguidor: seguidoId,
+            seguido: req.usuario.id
+        });
+
         const nuevoSeguidor = new Seguidor({
             seguidor: req.usuario.id,
             seguido: seguidoId
         });
 
         await nuevoSeguidor.save();
+
+        await crearNotificacion({
+            destinatarioId: seguidoId,
+            actorId: req.usuario.id,
+            tipo: 'nuevo_seguidor',
+            enlaceReferencia: `/perfil/${req.usuario.id}`,
+            claveEvento: crearClaveEvento('nuevo_seguidor', req.usuario.id, seguidoId)
+        });
+
+        if (seguimientoReciproco) {
+            const par = [String(req.usuario.id), String(seguidoId)].sort().join('-');
+            await crearNotificacionesMultiples([
+                {
+                    destinatarioId: seguidoId,
+                    actorId: req.usuario.id,
+                    tipo: 'nuevo_amigo',
+                    enlaceReferencia: `/perfil/${req.usuario.id}`,
+                    claveEvento: crearClaveEvento('nuevo_amigo', par, seguidoId)
+                },
+                {
+                    destinatarioId: req.usuario.id,
+                    actorId: seguidoId,
+                    tipo: 'nuevo_amigo',
+                    enlaceReferencia: `/perfil/${seguidoId}`,
+                    claveEvento: crearClaveEvento('nuevo_amigo', par, req.usuario.id)
+                }
+            ]);
+        }
 
         res.status(201).json({ mensaje: '¡Ahora sigues a este usuario!' });
     } catch (error) {
@@ -154,6 +194,19 @@ const dejarDeSeguirUsuario = async (req, res) => {
         if (!relacionEliminada) {
             return res.status(404).json({ mensaje: 'No sigues a este usuario' });
         }
+
+        const par = [String(req.usuario.id), String(seguidoId)].sort().join('-');
+        await Promise.allSettled([
+            eliminarNotificacionPorClave(crearClaveEvento('nuevo_seguidor', req.usuario.id, seguidoId)),
+            eliminarNotificaciones({
+                claveEvento: {
+                    $in: [
+                        crearClaveEvento('nuevo_amigo', par, seguidoId),
+                        crearClaveEvento('nuevo_amigo', par, req.usuario.id)
+                    ]
+                }
+            })
+        ]);
 
         res.status(200).json({ mensaje: 'Has dejado de seguir a este usuario' });
     } catch (error) {

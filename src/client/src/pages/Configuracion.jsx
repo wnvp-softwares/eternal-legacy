@@ -82,7 +82,7 @@ export default function Configuracion() {
   });
 
   // Estados de Privacidad
-  const [privacidadArbol, setPrivacidadArbol] = useState('Familia');
+  const [privacidadPerfil, setPrivacidadPerfil] = useState('publico');
   const [cargandoPrivacidad, setCargandoPrivacidad] = useState(false);
   const [guardandoPrivacidad, setGuardandoPrivacidad] = useState(false);
   const [mensajePrivacidad, setMensajePrivacidad] = useState('');
@@ -305,12 +305,10 @@ export default function Configuracion() {
     if (!token) return;
     try {
       setCargandoPrivacidad(true);
-      const data = await apiFetch('/api/arboles/mi-arbol');
-      if (data.arbol && data.arbol.privacidad) {
-        setPrivacidadArbol(data.arbol.privacidad);
-      }
+      const data = await apiFetch('/api/perfil/privacidad');
+      setPrivacidadPerfil(data.privacidadPerfil || 'publico');
     } catch (error) {
-      console.error('Error al cargar la privacidad del árbol:', error);
+      console.error('Error al cargar la privacidad del perfil:', error);
     } finally {
       setCargandoPrivacidad(false);
     }
@@ -323,9 +321,9 @@ export default function Configuracion() {
       setErrorPrivacidad('');
       setMensajePrivacidad('');
 
-      await apiFetch('/api/arboles/mi-arbol', {
+      await apiFetch('/api/perfil/privacidad', {
         method: 'PATCH',
-        body: JSON.stringify({ privacidad: privacidadArbol })
+        body: JSON.stringify({ privacidadPerfil })
       });
 
       setMensajePrivacidad('Configuración de privacidad actualizada correctamente.');
@@ -502,13 +500,21 @@ export default function Configuracion() {
             <form onSubmit={guardarPrivacidad}>
               <div className="opcion-switch">
                 <div className="opcion-textos">
-                  <h6>Visibilidad del Árbol Genealógico</h6>
-                  <p>Define si tu árbol es visible para todas tus conexiones o solo para tu Familia.</p>
+                  <h6>Visibilidad del perfil</h6>
+                  <p>En un perfil privado, solo tus amistades y familiares aceptados podrán consultar tu información, publicaciones, compartidos y Etapas.</p>
                 </div>
-                <select className="input-config" style={{ width: 'auto' }} value={privacidadArbol} onChange={(e) => setPrivacidadArbol(e.target.value)}>
-                  <option value="Familia">Familia</option>
-                  <option value="Conexiones">Conexiones</option>
+                <select className="input-config" style={{ width: 'auto' }} value={privacidadPerfil} onChange={(e) => setPrivacidadPerfil(e.target.value)}>
+                  <option value="publico">Público</option>
+                  <option value="privado">Privado</option>
                 </select>
+              </div>
+
+              <div className="opcion-switch privacidad-arbol-informativa">
+                <div className="opcion-textos">
+                  <h6><i className="bi bi-tree-fill me-2"></i>Árbol Genealógico protegido</h6>
+                  <p>Tu árbol y sus Momentos Familiares siempre son visibles únicamente para los integrantes autorizados de la familia. Esta protección no se puede convertir en pública.</p>
+                </div>
+                <span className="insignia-privacidad-fija"><i className="bi bi-shield-lock-fill"></i> Solo Familia</span>
               </div>
 
               <div className="opcion-switch opacity-50">

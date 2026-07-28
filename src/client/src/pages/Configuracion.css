@@ -517,3 +517,33 @@ html[data-theme="dark"] .input-config option {
         font-size: 0.82rem;
     }
 }
+.privacidad-arbol-informativa {
+  margin-top: 14px;
+  border: 1px solid var(--dorado-borde-suave);
+  background: var(--dorado-fondo-suave);
+}
+
+.insignia-privacidad-fija {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 7px 11px;
+  border: 1px solid var(--dorado-borde-suave);
+  border-radius: 999px;
+  color: var(--dorado-oscuro);
+  background: var(--fondo-tarjeta);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 576px) {
+  .privacidad-arbol-informativa {
+    align-items: flex-start;
+  }
+
+  .insignia-privacidad-fija {
+    align-self: flex-start;
+  }
+}

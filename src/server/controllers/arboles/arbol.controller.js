@@ -249,7 +249,6 @@ const crearMiArbol = async (req, res) => {
         const {
             nombreFamilia,
             descripcion = '',
-            privacidad = 'Privado',
             nombrePersona,
             generacion = 0,
             fila = 0,
@@ -278,7 +277,7 @@ const crearMiArbol = async (req, res) => {
             creador: usuarioId,
             nombreFamilia: nombreFamilia.trim(),
             descripcion,
-            privacidad,
+            privacidad: 'Familia',
             admins: []
         });
 
@@ -450,7 +449,7 @@ const obtenerArbolesDondeParticipo = async (req, res) => {
 const actualizarMiArbol = async (req, res) => {
     try {
         const usuarioId = req.usuario.id;
-        const { nombreFamilia, descripcion, privacidad } = req.body;
+        const { nombreFamilia, descripcion } = req.body;
 
         const arbol = await Arbol.findOne({
             creador: usuarioId,
@@ -472,7 +471,7 @@ const actualizarMiArbol = async (req, res) => {
         }
 
         if (descripcion !== undefined) arbol.descripcion = descripcion;
-        if (privacidad !== undefined) arbol.privacidad = privacidad;
+        arbol.privacidad = 'Familia';
 
         await sincronizarAdminsYRoles(arbol);
         await arbol.save();

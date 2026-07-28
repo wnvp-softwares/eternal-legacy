@@ -6,6 +6,18 @@ const {
     Seguidor,
     InvitacionFamiliar
 } = require('../../models/index.model');
+const {
+    crearNotificacion,
+    crearClaveEvento,
+    eliminarNotificacionPorClave
+} = require('../../services/notificacion.service');
+
+const retirarNotificacionInvitacion = async (invitacionId) => {
+    if (!invitacionId) return;
+    await eliminarNotificacionPorClave(
+        crearClaveEvento('invitacion_arbol', invitacionId)
+    );
+};
 
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
@@ -299,6 +311,17 @@ const enviarInvitacionFamiliar = async (req, res) => {
             mensaje
         });
 
+        await crearNotificacion({
+            destinatarioId: invitadoId,
+            actorId: req.usuario.id,
+            tipo: 'invitacion_arbol',
+            arbolId,
+            solicitudId: nuevaInvitacion._id,
+            nombreFamilia: arbol.nombreFamilia || 'Mi Familia',
+            enlaceReferencia: '/arbol-genealogico?seccion=invitaciones',
+            claveEvento: crearClaveEvento('invitacion_arbol', nuevaInvitacion._id)
+        });
+
         res.status(201).json({
             mensaje: 'Invitación familiar enviada correctamente',
             invitacion: nuevaInvitacion
@@ -378,6 +401,7 @@ const aceptarInvitacionFamiliar = async (req, res) => {
             invitacion.estado = 'Cancelada';
             invitacion.respondidaEn = new Date();
             await invitacion.save();
+            await retirarNotificacionInvitacion(invitacion._id);
 
             return res.status(404).json({
                 mensaje: 'El árbol de esta invitación ya no existe o fue eliminado. La invitación se canceló automáticamente.'
@@ -408,6 +432,7 @@ const aceptarInvitacionFamiliar = async (req, res) => {
             invitacion.estado = 'Aceptada';
             invitacion.respondidaEn = new Date();
             await invitacion.save();
+            await retirarNotificacionInvitacion(invitacion._id);
 
             return res.status(200).json({
                 mensaje: 'Ya pertenecías a este árbol. Invitación marcada como aceptada.',
@@ -516,6 +541,7 @@ const aceptarInvitacionFamiliar = async (req, res) => {
         invitacion.estado = 'Aceptada';
         invitacion.respondidaEn = new Date();
         await invitacion.save();
+        await retirarNotificacionInvitacion(invitacion._id);
 
         res.status(200).json({
             mensaje: 'Invitación aceptada. Ya formas parte del árbol.',
@@ -554,6 +580,7 @@ const rechazarInvitacionFamiliar = async (req, res) => {
         invitacion.estado = 'Rechazada';
         invitacion.respondidaEn = new Date();
         await invitacion.save();
+        await retirarNotificacionInvitacion(invitacion._id);
 
         res.status(200).json({
             mensaje: 'Invitación rechazada correctamente'
@@ -588,6 +615,7 @@ const cancelarInvitacionFamiliar = async (req, res) => {
             invitacion.estado = 'Cancelada';
             invitacion.respondidaEn = new Date();
             await invitacion.save();
+            await retirarNotificacionInvitacion(invitacion._id);
 
             return res.status(404).json({
                 mensaje: 'El árbol de esta invitación ya no existe. La invitación fue cancelada.'
@@ -607,6 +635,7 @@ const cancelarInvitacionFamiliar = async (req, res) => {
         invitacion.estado = 'Cancelada';
         invitacion.respondidaEn = new Date();
         await invitacion.save();
+        await retirarNotificacionInvitacion(invitacion._id);
 
         res.status(200).json({
             mensaje: 'Invitación cancelada correctamente'

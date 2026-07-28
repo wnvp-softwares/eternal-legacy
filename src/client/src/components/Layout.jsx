@@ -148,7 +148,8 @@ const INDICADORES_NAVEGACION_INICIALES = {
     invitacionesFamiliares: 0,
     seguidoresNuevos: 0,
     amigosNuevos: 0
-  }
+  },
+  notificaciones: { totalNoLeidas: 0 }
 };
 
 const formatearCantidadIndicador = (cantidad) => {
@@ -181,6 +182,7 @@ export default function Layout() {
   const queryBusqueda = textoBusqueda.trim();
   const invitacionesArbolPendientes = Number(indicadoresNavegacion?.arbol?.invitacionesPendientes) || 0;
   const totalIndicadoresRed = Number(indicadoresNavegacion?.red?.total) || 0;
+  const totalNotificacionesNoLeidas = Number(indicadoresNavegacion?.notificaciones?.totalNoLeidas) || 0;
 
   const esActiva = (ruta) => location.pathname.includes(ruta);
 
@@ -402,6 +404,9 @@ export default function Layout() {
             invitacionesFamiliares: Number(datos?.red?.invitacionesFamiliares) || 0,
             seguidoresNuevos: Number(datos?.red?.seguidoresNuevos) || 0,
             amigosNuevos: Number(datos?.red?.amigosNuevos) || 0
+          },
+          notificaciones: {
+            totalNoLeidas: Number(datos?.notificaciones?.totalNoLeidas) || 0
           }
         });
       } catch (error) {
@@ -731,10 +736,13 @@ export default function Layout() {
             )}
           </Link>
 
-          <Link to="/notificaciones" className="position-relative iconos-nav text-decoration-none" title="En desarrollo">
+          <Link to="/notificaciones" className="position-relative iconos-nav indicador-nav-superior text-decoration-none" title="Notificaciones" aria-label={`Notificaciones: ${totalNotificacionesNoLeidas} no leídas`}>
             <i className="bi bi-bell"></i>
-            {/* CORREGIDO: Se removió el punto rojo de notificaciones */}
-            <i className="bi bi-gear-fill position-absolute text-secondary icono-estado-notificaciones"></i>
+            {totalNotificacionesNoLeidas > 0 && (
+              <span className="badge-notificacion badge-indicador-navegacion">
+                {formatearCantidadIndicador(totalNotificacionesNoLeidas)}
+              </span>
+            )}
           </Link>
 
           {/* --- DROPDOWN DE PERFIL --- */}
@@ -848,7 +856,11 @@ export default function Layout() {
 
           <Link to="/notificaciones" className={`item-menu ${esActiva('/notificaciones') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
             <span><i className="bi bi-bell"></i> Notificaciones</span>
-            <i className="bi bi-gear-fill text-muted me-3" style={{ fontSize: '0.85rem' }} title="En desarrollo"></i>
+            {totalNotificacionesNoLeidas > 0 && (
+              <span className="badge-contador-sidebar me-3">
+                {formatearCantidadIndicador(totalNotificacionesNoLeidas)}
+              </span>
+            )}
           </Link>
 
           <Link to="/perfil" className={`item-menu ${esActiva('/perfil') ? 'activo' : ''}`}><i className="bi bi-person"></i> Perfil</Link>
@@ -893,6 +905,16 @@ export default function Layout() {
               )}
             </span>
             <span style={{ fontSize: '0.7rem', fontWeight: esActiva('/red') ? 'bold' : 'normal' }}>Red</span>
+          </Link>
+
+          <Link to="/notificaciones" className={`${esActiva('/notificaciones') ? 'text-dark' : 'text-secondary'} nav-movil-item d-flex flex-column align-items-center text-decoration-none`}>
+            <span className="icono-nav-movil-con-indicador">
+              <i className={`bi bi-bell${esActiva('/notificaciones') ? '-fill text-warning' : ''} fs-5`}></i>
+              {totalNotificacionesNoLeidas > 0 && (
+                <span className="badge-indicador-movil">{formatearCantidadIndicador(totalNotificacionesNoLeidas)}</span>
+              )}
+            </span>
+            <span style={{ fontSize: '0.7rem', fontWeight: esActiva('/notificaciones') ? 'bold' : 'normal' }}>Avisos</span>
           </Link>
 
           <Link to="/perfil" className={`${esActiva('/perfil') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>

@@ -277,6 +277,106 @@ const enviarReporteFeedback = async ({ usuario, emailUsuario, mensaje, tipo = 'R
     }
 };
 
+
+/**
+ * Envía los únicos correos transaccionales permitidos para notificaciones.
+ * Nunca recibe ni incluye contenido de publicaciones, comentarios o mensajes.
+ */
+const enviarCorreoNotificacion = async ({
+    email,
+    tipo,
+    actorNombre = 'Alguien de tu familia',
+    nombreFamilia = '',
+    enlace = ''
+} = {}) => {
+    const configuraciones = {
+        solicitud_familiar_recibida: {
+            asunto: 'Nueva solicitud familiar en Legacy',
+            titulo: 'Tienes una nueva solicitud familiar',
+            descripcion: `${actorNombre} quiere conectar contigo como familiar en Legacy.`,
+            accion: 'Revisar solicitud familiar'
+        },
+        invitacion_arbol: {
+            asunto: 'Invitación a un Árbol Genealógico en Legacy',
+            titulo: 'Te invitaron a un Árbol Genealógico',
+            descripcion: `${actorNombre} te invitó a participar${nombreFamilia ? ` en ${nombreFamilia}` : ' en un Árbol Genealógico'} de Legacy.`,
+            accion: 'Revisar invitación'
+        },
+        mencion_publicacion: {
+            asunto: 'Te mencionaron en Legacy',
+            titulo: 'Tienes una nueva mención',
+            descripcion: `${actorNombre} te mencionó en una publicación de Legacy.`,
+            accion: 'Ver publicación'
+        }
+    };
+
+    const configuracion = configuraciones[tipo];
+    if (!configuracion || !email) return false;
+
+    const escaparHtml = (valor = '') => String(valor)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const titulo = escaparHtml(configuracion.titulo);
+    const descripcion = escaparHtml(configuracion.descripcion);
+    const accion = escaparHtml(configuracion.accion);
+    const enlaceSeguro = /^https?:\/\//i.test(String(enlace || '').trim())
+        ? escaparHtml(String(enlace).trim())
+        : '';
+
+    const textContent = `${configuracion.titulo}\n\n${configuracion.descripcion}` +
+        (enlaceSeguro ? `\n\n${configuracion.accion}: ${enlace}` : '') +
+        '\n\nPor privacidad, este correo no incluye el contenido de la publicación o conversación.';
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titulo}</title>
+    </head>
+    <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:30px 10px;">
+            <tr><td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 10px 25px rgba(0,0,0,.06);">
+                    <tr><td align="center" style="background:#0D1B2A;padding:30px 20px;border-bottom:3px solid #CBA135;">
+                        <h1 style="margin:0;color:#ffffff;font-family:Georgia,serif;font-size:26px;letter-spacing:2px;">LEGACY</h1>
+                        <p style="margin:5px 0 0;color:#CBA135;font-size:11px;text-transform:uppercase;letter-spacing:3px;font-weight:700;">Preservando tu historia</p>
+                    </td></tr>
+                    <tr><td style="padding:36px 32px;text-align:center;">
+                        <div style="width:54px;height:54px;margin:0 auto 18px;border-radius:50%;background:#fef8eb;border:1px solid rgba(203,161,53,.35);line-height:54px;font-size:24px;">🔔</div>
+                        <h2 style="margin:0 0 12px;color:#0D1B2A;font-family:Georgia,serif;font-size:22px;">${titulo}</h2>
+                        <p style="margin:0;color:#475569;font-size:15px;line-height:1.65;">${descripcion}</p>
+                        ${enlaceSeguro ? `<a href="${enlaceSeguro}" style="display:inline-block;margin-top:26px;padding:12px 22px;border-radius:10px;background:#0D1B2A;color:#ffffff;text-decoration:none;font-weight:700;border-bottom:3px solid #CBA135;">${accion}</a>` : ''}
+                        <p style="margin:26px 0 0;color:#94a3b8;font-size:12px;line-height:1.55;">Por privacidad, este correo no incluye el contenido de la publicación o conversación.</p>
+                    </td></tr>
+                    <tr><td style="background:#f8fafc;padding:18px;text-align:center;border-top:1px solid #f1f5f9;color:#94a3b8;font-size:12px;">&copy; ${new Date().getFullYear()} Legacy.</td></tr>
+                </table>
+            </td></tr>
+        </table>
+    </body>
+    </html>`;
+
+    try {
+        await enviarCorreoGmailAPI({
+            to: email,
+            subject: configuracion.asunto,
+            htmlContent,
+            textContent,
+            senderName: 'Legacy'
+        });
+        return true;
+    } catch (error) {
+        console.error('Error al enviar correo de notificación:', error.message);
+        return false;
+    }
+};
+
 module.exports = enviarCodigoVerificacion;
 module.exports.enviarCodigoVerificacion = enviarCodigoVerificacion;
 module.exports.enviarReporteFeedback = enviarReporteFeedback;
+module.exports.enviarCorreoNotificacion = enviarCorreoNotificacion;

@@ -29,7 +29,8 @@ const {
     obtenerMomentosFamiliaresPorNodo,
     asignarEtapaPublicacion,
     eliminarEtapaPublicacion,
-    reaccionarPublicacion
+    reaccionarPublicacion,
+    compartirPublicacion
 } = require('../../controllers/publicaciones/publicacion.controller');
 
 const subirMultimediaPublicacion = upload.array('archivo', MAX_PUBLICATION_MEDIA_FILES);
@@ -102,6 +103,9 @@ router.get('/evento/:eventoId', verificarToken, obtenerPublicacionesPorEvento);
 
 // Momentos Familiares fotográficos de una persona concreta del árbol.
 router.get('/arbol/:arbolId/nodo/:nodoId/momentos-familiares', verificarToken, obtenerMomentosFamiliaresPorNodo);
+
+// Compartir crea inmediatamente un repost en el perfil del usuario.
+router.post('/:id/compartir', verificarToken, compartirPublicacion);
 
 // Ruta para dar me gusta / reaccionar.
 router.post('/:id/reaccionar', verificarToken, reaccionarPublicacion);

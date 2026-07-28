@@ -5,6 +5,7 @@ import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../conf
 import ImageCropperModal from '../components/ImageCropperModal';
 import PublicacionMediaCarousel from '../components/PublicacionMediaCarousel';
 import PublicacionHeader from '../components/PublicacionHeader';
+import PublicacionCompartida from '../components/PublicacionCompartida';
 import EventoPublicacionesModal from '../components/EventoPublicacionesModal';
 import EtapaDestacadaModal, { obtenerColorContrasteEtapa } from '../components/EtapaDestacadaModal';
 import AsignarEtapaPublicacionModal from '../components/AsignarEtapaPublicacionModal';
@@ -17,6 +18,34 @@ const obtenerId = (valor) => {
 };
 
 const normalizarTexto = (texto = '') => String(texto || '').trim();
+
+const actualizarPublicacionIncluyendoOriginal = (publicacion, publicacionId, actualizador) => {
+  if (!publicacion || !publicacionId || typeof actualizador !== 'function') return publicacion;
+  const idPrincipal = publicacion._id || publicacion.id;
+  if (String(idPrincipal) === String(publicacionId)) return actualizador(publicacion);
+
+  const original = publicacion.publicacionOriginal;
+  const idOriginal = original?._id || original?.id;
+  if (original && idOriginal && String(idOriginal) === String(publicacionId)) {
+    return { ...publicacion, publicacionOriginal: actualizador(original) };
+  }
+
+  return publicacion;
+};
+
+const obtenerPublicacionesConOriginal = (lista = []) => {
+  const resultado = [];
+  const ids = new Set();
+  (Array.isArray(lista) ? lista : []).forEach((publicacion) => {
+    [publicacion, publicacion?.publicacionOriginal].filter(Boolean).forEach((item) => {
+      const itemId = item?._id || item?.id;
+      if (!itemId || ids.has(String(itemId))) return;
+      ids.add(String(itemId));
+      resultado.push(item);
+    });
+  });
+  return resultado;
+};
 
 const leerUsuarioSesion = () => {
   try {
@@ -845,7 +874,7 @@ export default function Inicio() {
   const cargarComentariosDePublicaciones = async (listaPublicaciones = []) => {
     if (!token || !Array.isArray(listaPublicaciones) || listaPublicaciones.length === 0) return;
     try {
-      const publicacionesConId = listaPublicaciones
+      const publicacionesConId = obtenerPublicacionesConOriginal(listaPublicaciones)
         .map(pub => ({ ...pub, idSeguro: pub?._id || pub?.id }))
         .filter(pub => pub.idSeguro);
 
@@ -2074,7 +2103,15 @@ export default function Inicio() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const datos = await respuesta.json();
-      if (respuesta.ok) setPublicaciones(prev => prev.map(p => p._id === pubId ? { ...p, reacciones: datos.reacciones } : p));
+      if (respuesta.ok) {
+        setPublicaciones(prev => prev.map(publicacion => (
+          actualizarPublicacionIncluyendoOriginal(
+            publicacion,
+            pubId,
+            item => ({ ...item, reacciones: datos.reacciones })
+          )
+        )));
+      }
     } catch (err) { console.error(err); }
   };
 
@@ -2305,8 +2342,8 @@ export default function Inicio() {
         subtitulo: 'Visibilidad pública',
         icono: 'bi-globe-americas',
         parrafos: [
-          'Los Recuerdos Históricos son publicaciones públicas dentro de Eternal Legacy.',
-          'Esta publicación puede aparecer en tu Inicio porque forma parte del contenido público disponible para la comunidad.'
+          'Los Recuerdos Históricos respetan la privacidad actual del perfil de su autor.',
+          'Esta publicación aparece porque actualmente tienes permiso para ver el perfil de su autor.'
         ],
         nota: 'Ocultarla o pausar a su autor solo cambia tu propio Inicio; la publicación no se elimina.'
       };
@@ -2336,14 +2373,56 @@ export default function Inicio() {
       const datos = await respuesta.json().catch(() => ({}));
       if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo guardar la publicación.');
 
-      setPublicaciones(prev => prev.map(item => (
-        String(item._id || item.id) === String(pubId)
-          ? { ...item, guardadaPorMi: Boolean(datos.guardadaPorMi) }
-          : item
+      setPublicaciones(prev => prev.map(publicacion => (
+        actualizarPublicacionIncluyendoOriginal(
+          publicacion,
+          pubId,
+          item => ({ ...item, guardadaPorMi: Boolean(datos.guardadaPorMi) })
+        )
       )));
       return true;
     } catch (error) {
       alert(error.message || 'No se pudo guardar la publicación.');
+      return false;
+    }
+  };
+
+  const manejarCompartirPublicacion = async (pub) => {
+    const pubId = pub?._id || pub?.id;
+    if (!pubId) return false;
+
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${pubId}/compartir`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo compartir la publicación.');
+
+      if (!datos.compartidaExistente) {
+        setPublicaciones(prev => prev.map(publicacion => (
+          actualizarPublicacionIncluyendoOriginal(
+            publicacion,
+            pubId,
+            item => ({ ...item, compartido: (Number(item.compartido) || 0) + 1 })
+          )
+        )));
+
+        if (datos.publicacion) {
+          setPublicaciones(prev => {
+            const repostId = datos.publicacion._id || datos.publicacion.id;
+            return prev.some(item => String(item._id || item.id) === String(repostId))
+              ? prev
+              : [datos.publicacion, ...prev];
+          });
+          cargarComentariosDePublicaciones([datos.publicacion]);
+        }
+      }
+
+      mostrarAvisoPreferenciaFeed({ mensaje: datos.mensaje || 'Publicación compartida en tu perfil.' });
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo compartir la publicación.');
       return false;
     }
   };
@@ -2496,7 +2575,7 @@ export default function Inicio() {
           id: 'por-que-la-veo',
           etiqueta: esHistorico ? '¿Por qué veo este Recuerdo Histórico?' : '¿Por qué veo este Momento Familiar?',
           descripcion: esHistorico
-            ? 'Conoce por qué este contenido público puede aparecer en tu Inicio.'
+            ? 'Conoce por qué este contenido está disponible según la privacidad actual de su autor.'
             : 'Consulta qué árbol familiar te permite acceder a este momento.',
           icono: 'bi-info-circle-fill',
           informacion: construirInformacionVisibilidad(pub)
@@ -2576,14 +2655,14 @@ export default function Inicio() {
         separadorAntes: true,
         onClick: () => manejarAgregarEtapaPublicacion(pub)
       },
-      {
+      ...(!(pub.esRepost || pub.publicacionOriginal) ? [{
         id: 'editar',
         etiqueta: 'Editar publicación',
         icono: 'bi-pencil-fill',
         separadorAntes: true,
         onClick: () => cargarPublicacionParaEditar(pub._id || pub.id)
-      },
-      ...(!esHistorico ? [{
+      }] : []),
+      ...(!(pub.esRepost || pub.publicacionOriginal) && !esHistorico ? [{
         id: 'audiencia',
         etiqueta: 'Cambiar árbol de audiencia',
         descripcion: 'Solo los miembros del árbol seleccionado podrán verla.',
@@ -3945,6 +4024,27 @@ export default function Inicio() {
                   </div>
                 )}
 
+                {(pub.esRepost || Object.prototype.hasOwnProperty.call(pub, 'publicacionOriginal')) && (
+                  <PublicacionCompartida
+                    original={pub.publicacionOriginal}
+                    disponible={pub.publicacionOriginalDisponible !== false}
+                    usuarioHaReaccionado={usuarioHaReaccionado}
+                    comentarios={comentariosPorPub[pub.publicacionOriginal?._id] || []}
+                    comentariosAbiertos={Boolean(comentarioAbierto[pub.publicacionOriginal?._id])}
+                    comentarioTexto={nuevoComentarioTexto[pub.publicacionOriginal?._id] || ''}
+                    onAutorClick={irAPerfil}
+                    onLike={manejarLike}
+                    onToggleComentarios={toggleComentarios}
+                    onGuardar={manejarGuardarPublicacion}
+                    onCompartir={manejarCompartirPublicacion}
+                    onComentarioTextoChange={(publicacionId, valor) => setNuevoComentarioTexto(prev => ({ ...prev, [publicacionId]: valor }))}
+                    onEnviarComentario={enviarComentario}
+                    renderContenido={(contenido, menciones, original) => (
+                      <p className="texto-post historico mb-0">{renderTextoConMenciones(contenido, menciones, obtenerEventoRelacionadoDePublicacion(original))}</p>
+                    )}
+                  />
+                )}
+
                 <div className="acciones-post d-flex justify-content-between mt-3 pt-2 border-top">
                   <div className="d-flex gap-4">
                     <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarLike(pub._id)}>
@@ -3965,7 +4065,7 @@ export default function Inicio() {
                     >
                       <i className={`bi ${pub.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark'}`}></i>
                     </button>
-                    <button className="boton-interaccion border-0 bg-transparent p-0"><i className="bi bi-share"></i> {pub.compartido || 0}</button>
+                    <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarCompartirPublicacion(pub)}><i className="bi bi-share"></i> {pub.compartido || 0}</button>
                   </div>
                 </div>
 

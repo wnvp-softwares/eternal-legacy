@@ -6,6 +6,7 @@ import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../conf
 import ImageCropperModal from '../components/ImageCropperModal';
 import PublicacionMediaCarousel from '../components/PublicacionMediaCarousel';
 import PublicacionHeader from '../components/PublicacionHeader';
+import PublicacionCompartida from '../components/PublicacionCompartida';
 import EventoPublicacionesModal from '../components/EventoPublicacionesModal';
 import EtapaDestacadaModal, { obtenerColorContrasteEtapa } from '../components/EtapaDestacadaModal';
 import AsignarEtapaPublicacionModal from '../components/AsignarEtapaPublicacionModal';
@@ -20,6 +21,32 @@ const obtenerIdEntidad = (valor) => {
 };
 
 const normalizarTexto = (valor = '') => String(valor || '').trim();
+
+const actualizarPublicacionIncluyendoOriginal = (publicacion, publicacionId, actualizador) => {
+  if (!publicacion || !publicacionId || typeof actualizador !== 'function') return publicacion;
+  const idPrincipal = publicacion._id || publicacion.id;
+  if (String(idPrincipal) === String(publicacionId)) return actualizador(publicacion);
+  const original = publicacion.publicacionOriginal;
+  const idOriginal = original?._id || original?.id;
+  if (original && idOriginal && String(idOriginal) === String(publicacionId)) {
+    return { ...publicacion, publicacionOriginal: actualizador(original) };
+  }
+  return publicacion;
+};
+
+const obtenerPublicacionesConOriginal = (lista = []) => {
+  const resultado = [];
+  const ids = new Set();
+  (Array.isArray(lista) ? lista : []).forEach((publicacion) => {
+    [publicacion, publicacion?.publicacionOriginal].filter(Boolean).forEach((item) => {
+      const itemId = item?._id || item?.id;
+      if (!itemId || ids.has(String(itemId))) return;
+      ids.add(String(itemId));
+      resultado.push(item);
+    });
+  });
+  return resultado;
+};
 
 const normalizarHandleMencion = (valor = '', { minusculas = false } = {}) => {
   let handle = String(valor || '')
@@ -493,10 +520,20 @@ const obtenerTextoPublicacion = (publicacion = {}) => normalizarTexto(
 );
 
 const crearResumenPublicacion = (publicacion = {}, limite = 135) => {
-  const texto = obtenerTextoPublicacion(publicacion);
-  if (!texto) return 'Publicación guardada';
-  if (texto.length <= limite) return texto;
-  return `${texto.slice(0, Math.max(0, limite - 1)).trim()}…`;
+  const esRepost = Boolean(publicacion?.esRepost || Object.prototype.hasOwnProperty.call(publicacion || {}, 'publicacionOriginal'));
+  const originalDisponible = publicacion?.publicacionOriginalDisponible !== false;
+  const fuente = esRepost && originalDisponible && publicacion?.publicacionOriginal
+    ? publicacion.publicacionOriginal
+    : publicacion;
+  const texto = obtenerTextoPublicacion(fuente);
+
+  if (esRepost && !originalDisponible) return 'Contenido original no disponible';
+  if (!texto) return esRepost ? 'Publicación compartida' : 'Publicación guardada';
+
+  const prefijo = esRepost ? 'Compartido: ' : '';
+  const textoCompleto = `${prefijo}${texto}`;
+  if (textoCompleto.length <= limite) return textoCompleto;
+  return `${textoCompleto.slice(0, Math.max(0, limite - 1)).trim()}…`;
 };
 
 const ordenarPublicacionesPerfil = (lista = []) => [...lista].sort((a, b) => {
@@ -635,6 +672,8 @@ export default function Perfil() {
   });
 
   const [usuarioPerfil, setUsuarioPerfil] = useState(null);
+  const [puedeVerPerfilCompleto, setPuedeVerPerfilCompleto] = useState(true);
+  const [privacidadPerfil, setPrivacidadPerfil] = useState('publico');
 
   // --- CONFIGURACIÓN DE DATOS REALES DE SESIÓN Y BACKEND ---
   const token = localStorage.getItem('token');
@@ -788,22 +827,23 @@ export default function Perfil() {
 
     try {
       const entradas = await Promise.all(
-        listaPublicaciones.map(async (post) => {
+        obtenerPublicacionesConOriginal(listaPublicaciones).map(async (post) => {
           try {
-            const res = await fetch(`${API_BASE_URL}/comentarios/publicacion/${post._id}`, {
+            const postId = post._id || post.id;
+            const res = await fetch(`${API_BASE_URL}/comentarios/publicacion/${postId}`, {
               method: 'GET',
               headers: {
                 'Authorization': `Bearer ${token}`
               }
             });
 
-            if (!res.ok) return [post._id, []];
+            if (!res.ok) return [postId, []];
 
             const data = await res.json();
-            return [post._id, Array.isArray(data) ? data : []];
+            return [postId, Array.isArray(data) ? data : []];
           } catch (error) {
-            console.error(`❌ Error al obtener comentarios de ${post._id}:`, error);
-            return [post._id, []];
+            console.error(`❌ Error al obtener comentarios de ${postId}:`, error);
+            return [postId, []];
           }
         })
       );
@@ -862,6 +902,9 @@ export default function Perfil() {
         const datosPerfil = await resPerfil.json();
         const datosPublicaciones = await resPublicaciones.json();
 
+        const accesoPerfilCompleto = esMiPerfil || datosPerfil.puedeVerPerfilCompleto !== false;
+        setPuedeVerPerfilCompleto(accesoPerfilCompleto);
+        setPrivacidadPerfil(datosPerfil.privacidadPerfil || datosPerfil.perfil?.privacidadPerfil || 'publico');
         setPerfilBd(datosPerfil.perfil);
 
         // Guardamos la información fresca del usuario dueño de este perfil.
@@ -892,8 +935,9 @@ export default function Perfil() {
 
         setPublicaciones(publicacionesOrdenadas);
         if (esMiPerfil) await cargarEtapasPropias();
-        else setEtapasDestacadas(derivarEtapasVisibles(publicacionesOrdenadas));
-        await cargarComentariosDePublicaciones(publicacionesOrdenadas);
+        else if (accesoPerfilCompleto) setEtapasDestacadas(derivarEtapasVisibles(publicacionesOrdenadas));
+        else setEtapasDestacadas([]);
+        if (accesoPerfilCompleto) await cargarComentariosDePublicaciones(publicacionesOrdenadas);
         setError('');
       } catch (err) {
         console.error("Error cargando datos del perfil:", err);
@@ -910,6 +954,21 @@ export default function Perfil() {
     if (esMiPerfil) return;
     setEtapasDestacadas(derivarEtapasVisibles(publicaciones));
   }, [esMiPerfil, publicaciones]);
+
+  useEffect(() => {
+    const publicacionId = new URLSearchParams(location.search).get('publicacion');
+    if (!publicacionId || cargando || publicaciones.length === 0) return;
+
+    const temporizador = window.setTimeout(() => {
+      const elemento = document.getElementById(`publicacion-${publicacionId}`);
+      if (!elemento) return;
+      elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      elemento.classList.add('perfil-publicacion-destacada-enlace');
+      window.setTimeout(() => elemento.classList.remove('perfil-publicacion-destacada-enlace'), 2600);
+    }, 120);
+
+    return () => window.clearTimeout(temporizador);
+  }, [location.search, cargando, publicaciones]);
 
   useEffect(() => {
     const idConsulta = new URLSearchParams(location.search).get('destacada') || '';
@@ -1165,10 +1224,10 @@ export default function Perfil() {
       const data = await res.json();
 
       if (res.ok) {
-        const actualizarReacciones = (post) => (
-          String(post._id || post.id) === String(postId)
-            ? { ...post, reacciones: data.reacciones }
-            : post
+        const actualizarReacciones = (post) => actualizarPublicacionIncluyendoOriginal(
+          post,
+          postId,
+          item => ({ ...item, reacciones: data.reacciones })
         );
 
         setPublicaciones(prev => prev.map(actualizarReacciones));
@@ -1380,18 +1439,18 @@ export default function Perfil() {
           subtitulo: 'Publicación guardada',
           icono: 'bi-bookmark-check-fill',
           parrafos: [
-            'Los Recuerdos Históricos son publicaciones públicas dentro de Eternal Legacy.',
+            'Los Recuerdos Históricos respetan la privacidad actual del perfil de su autor.',
             'Esta publicación aparece aquí porque decidiste guardarla para consultarla más tarde.'
           ],
           nota: 'Quitarla de Guardados no elimina la publicación original ni modifica el perfil de su autor.'
         }
         : {
           titulo: '¿Por qué ves este Recuerdo Histórico?',
-          subtitulo: 'Perfil público del autor',
+          subtitulo: 'Acceso vigente al perfil del autor',
           icono: 'bi-globe-americas',
           parrafos: [
-            'Los Recuerdos Históricos son publicaciones públicas dentro de Eternal Legacy.',
-            'Puedes ver esta publicación porque estás visitando el perfil de su autor.'
+            'Los Recuerdos Históricos respetan la privacidad actual del perfil de su autor.',
+            'Puedes ver esta publicación porque actualmente tienes acceso al perfil de su autor.'
           ],
           nota: 'Ocultarla o pausar a su autor solo cambia lo que aparece en tu Inicio; seguirá disponible en este perfil.'
         };
@@ -1435,10 +1494,10 @@ export default function Perfil() {
       if (!res.ok) throw new Error(data.mensaje || 'No se pudo guardar la publicación.');
 
       const guardadaPorMi = Boolean(data.guardadaPorMi);
-      const actualizarGuardado = (item) => (
-        String(item._id || item.id) === String(postId)
-          ? { ...item, guardadaPorMi }
-          : item
+      const actualizarGuardado = (item) => actualizarPublicacionIncluyendoOriginal(
+        item,
+        postId,
+        publicacion => ({ ...publicacion, guardadaPorMi })
       );
 
       setPublicaciones(prev => prev.map(actualizarGuardado));
@@ -1479,14 +1538,25 @@ export default function Perfil() {
       }
 
       setPublicacionVisorSeleccionada(prev => {
-        if (!prev || String(prev._id || prev.id) !== String(postId)) return prev;
-        if (guardadaPorMi) return { ...prev, guardadaPorMi: true };
-        return origenVisorPublicacion === 'guardados'
-          ? null
-          : { ...prev, guardadaPorMi: false };
+        if (!prev) return prev;
+
+        const esSeleccionDirecta = String(prev._id || prev.id) === String(postId);
+        if (esSeleccionDirecta && !guardadaPorMi && origenVisorPublicacion === 'guardados') {
+          return null;
+        }
+
+        return actualizarPublicacionIncluyendoOriginal(
+          prev,
+          postId,
+          publicacion => ({ ...publicacion, guardadaPorMi })
+        );
       });
 
-      if (!guardadaPorMi && origenVisorPublicacion === 'guardados') {
+      if (
+        !guardadaPorMi &&
+        origenVisorPublicacion === 'guardados' &&
+        String(publicacionVisorSeleccionada?._id || publicacionVisorSeleccionada?.id) === String(postId)
+      ) {
         setOrigenVisorPublicacion(null);
       }
 
@@ -1505,6 +1575,41 @@ export default function Perfil() {
       return true;
     } catch (error) {
       alert(error.message || 'No se pudo guardar la publicación.');
+      return false;
+    }
+  };
+
+  const manejarCompartirPublicacion = async (post) => {
+    const postId = post?._id || post?.id;
+    if (!postId) return false;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/publicaciones/${postId}/compartir`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.mensaje || 'No se pudo compartir la publicación.');
+
+      if (!data.compartidaExistente) {
+        const actualizarCompartidos = item => actualizarPublicacionIncluyendoOriginal(
+          item,
+          postId,
+          publicacion => ({ ...publicacion, compartido: (Number(publicacion.compartido) || 0) + 1 })
+        );
+        setPublicaciones(prev => prev.map(actualizarCompartidos));
+        setPublicacionesGuardadas(prev => prev.map(actualizarCompartidos));
+
+        if (data.publicacion && esMiPerfil) {
+          setPublicaciones(prev => ordenarPublicacionesPerfil([data.publicacion, ...prev.filter(item => String(item._id || item.id) !== String(data.publicacion._id || data.publicacion.id))]));
+          cargarComentariosDePublicaciones([data.publicacion]);
+        }
+      }
+
+      mostrarAvisoPreferenciaFeed({ mensaje: data.mensaje || 'Publicación compartida en tu perfil.' });
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo compartir la publicación.');
       return false;
     }
   };
@@ -1695,7 +1800,7 @@ export default function Perfil() {
           descripcion: esHistorico
             ? (
               desdeGuardados
-                ? 'Consulta por qué este contenido público permanece disponible en tus Guardados.'
+                ? 'Consulta por qué este contenido permanece disponible en tus Guardados.'
                 : 'Conoce por qué este contenido es visible desde el perfil del autor.'
             )
             : 'Consulta qué árbol familiar te permite acceder a este momento.',
@@ -1783,14 +1888,14 @@ export default function Perfil() {
         separadorAntes: true,
         onClick: () => manejarAgregarEtapaPublicacion(post)
       },
-      {
+      ...(!(post.esRepost || post.publicacionOriginal) ? [{
         id: 'editar',
         etiqueta: 'Editar publicación',
         icono: 'bi-pencil-fill',
         separadorAntes: true,
         onClick: () => abrirEditorPublicacion(post)
-      },
-      ...(!esHistorico ? [{
+      }] : []),
+      ...(!(post.esRepost || post.publicacionOriginal) && !esHistorico ? [{
         id: 'audiencia',
         etiqueta: 'Cambiar árbol de audiencia',
         descripcion: 'Solo los miembros del árbol seleccionado podrán verla.',
@@ -2491,6 +2596,13 @@ export default function Perfil() {
     : -1;
   const puedeIrPublicacionAnterior = indiceVisor > 0;
   const puedeIrPublicacionSiguiente = indiceVisor >= 0 && indiceVisor < coleccionVisorPublicacion.length - 1;
+  const esRepostVisor = Boolean(
+    publicacionVisor?.esRepost ||
+    (publicacionVisor && Object.prototype.hasOwnProperty.call(publicacionVisor, 'publicacionOriginal'))
+  );
+  const originalVisor = publicacionVisor?.publicacionOriginal || null;
+  const originalVisorId = originalVisor?._id || originalVisor?.id || null;
+  const originalVisorDisponible = publicacionVisor?.publicacionOriginalDisponible !== false;
   const tieneMultimediaVisor = obtenerCantidadMultimediaPublicacion(publicacionVisor?.multimedia) > 0;
 
   const visorPublicacionPortal = publicacionVisor && typeof document !== 'undefined'
@@ -2542,10 +2654,10 @@ export default function Perfil() {
             ) : (
               <div className={`perfil-visor-guardados-texto-visual ${esHistoricoVisor ? 'historico' : 'familiar'}`}>
                 <span className="perfil-visor-guardados-texto-icono">
-                  <i className={`bi ${esHistoricoVisor ? 'bi-journal-richtext' : 'bi-people-fill'}`} aria-hidden="true"></i>
+                  <i className={`bi ${esRepostVisor ? 'bi-arrow-repeat' : (esHistoricoVisor ? 'bi-journal-richtext' : 'bi-people-fill')}`} aria-hidden="true"></i>
                 </span>
                 <span className="perfil-visor-guardados-texto-tipo">
-                  {esHistoricoVisor ? 'Recuerdo Histórico' : 'Momento Familiar'}
+                  {esRepostVisor ? 'Publicación compartida' : (esHistoricoVisor ? 'Recuerdo Histórico' : 'Momento Familiar')}
                 </span>
                 <p>{crearResumenPublicacion(publicacionVisor, 260)}</p>
               </div>
@@ -2606,6 +2718,32 @@ export default function Perfil() {
               {contenidoVisor && (
                 <div className="perfil-visor-guardados-texto">
                   {renderTextoConMenciones(contenidoVisor, publicacionVisor.menciones)}
+                </div>
+              )}
+
+              {esRepostVisor && (
+                <div className="perfil-visor-guardados-original">
+                  <PublicacionCompartida
+                    original={originalVisor}
+                    disponible={originalVisorDisponible}
+                    usuarioHaReaccionado={usuarioHaReaccionado}
+                    comentarios={originalVisorId ? (comentariosPorPub[originalVisorId] || []) : []}
+                    comentariosAbiertos={Boolean(originalVisorId && comentariosAbiertos[originalVisorId])}
+                    comentarioTexto={originalVisorId ? (nuevoComentarioTexto[originalVisorId] || '') : ''}
+                    onAutorClick={irAPerfil}
+                    onLike={manejarLike}
+                    onToggleComentarios={toggleComentarios}
+                    onGuardar={manejarGuardarPublicacion}
+                    onCompartir={manejarCompartirPublicacion}
+                    onComentarioTextoChange={(publicacionId, valor) => setNuevoComentarioTexto(prev => ({
+                      ...prev,
+                      [publicacionId]: valor
+                    }))}
+                    onEnviarComentario={manejarEnviarComentario}
+                    renderContenido={(contenido, menciones) => (
+                      <p className="texto-post historico mb-0">{renderTextoConMenciones(contenido, menciones)}</p>
+                    )}
+                  />
                 </div>
               )}
 
@@ -3178,9 +3316,22 @@ export default function Perfil() {
               <p className="usuario-tag">
                 @{usuarioPerfil?.nickname || usuarioPerfil?.nombreUsuario?.toLowerCase().replace(/\s+/g, '_') || 'sin_usuario'}
               </p>
-              <p className="bio-perfil">{perfilBd?.biografia || 'Sin biografía aún.'}</p>
+              {puedeVerPerfilCompleto && (
+                <p className="bio-perfil">{perfilBd?.biografia || 'Sin biografía aún.'}</p>
+              )}
             </div>
 
+            {!puedeVerPerfilCompleto && !esMiPerfil && (
+              <div className="perfil-privado-aviso" role="status">
+                <i className="bi bi-lock-fill" aria-hidden="true"></i>
+                <div>
+                  <strong>Este perfil es privado</strong>
+                  <p>Solo sus amistades y familiares aceptados pueden ver su información, publicaciones y Etapas.</p>
+                </div>
+              </div>
+            )}
+
+            {puedeVerPerfilCompleto && (
             <div className="datos-extra-perfil">
               {perfilBd?.ubicacionActual && (
                 <span><i className="bi bi-geo-alt-fill"></i> Vive en <strong>{perfilBd.ubicacionActual}</strong></span>
@@ -3197,10 +3348,17 @@ export default function Perfil() {
               {perfilBd?.fechaNacimiento && (
                 <span><i className="bi bi-cake2-fill"></i> Cumpleaños: <strong>{formatearCumpleanos(perfilBd.fechaNacimiento)}</strong></span>
               )}
-              <span><i className="bi bi-calendar3"></i> Miembro desde <strong>{formatearFecha(perfilBd?.createdAt, 'completo')}</strong></span>
+              <span><i className="bi bi-calendar3"></i> Miembro desde <strong>{formatearFecha(perfilBd?.createdAt || usuarioPerfil?.createdAt, 'completo')}</strong></span>
             </div>
+            )}
 
-            {Array.isArray(perfilBd?.intereses) && perfilBd.intereses.length > 0 && (
+            {!puedeVerPerfilCompleto && (
+              <div className="datos-extra-perfil perfil-fecha-unica">
+                <span><i className="bi bi-calendar3"></i> Miembro desde <strong>{formatearFecha(perfilBd?.createdAt || usuarioPerfil?.createdAt, 'completo')}</strong></span>
+              </div>
+            )}
+
+            {puedeVerPerfilCompleto && Array.isArray(perfilBd?.intereses) && perfilBd.intereses.length > 0 && (
               <div className="intereses-perfil-contenedor">
                 <p className="perfil-subtitulo-seccion"><i className="bi bi-heart-pulse-fill"></i> Intereses y pasiones</p>
                 <div className="perfil-intereses-lista">
@@ -3211,7 +3369,7 @@ export default function Perfil() {
               </div>
             )}
 
-            {(esMiPerfil || etapasDestacadas.length > 0) && (
+            {puedeVerPerfilCompleto && (esMiPerfil || etapasDestacadas.length > 0) && (
               <div className="contenedor-etiquetas perfil-destacados-compactos" aria-label="Etapas destacadas del perfil">
                 {esMiPerfil && (
                   <button type="button" className="perfil-destacado-nuevo" title="Crear una nueva Etapa" onClick={() => {
@@ -3248,6 +3406,7 @@ export default function Perfil() {
             )}
           </div>
 
+          {puedeVerPerfilCompleto && (
           <nav className="tabs-perfil" aria-label="Secciones del perfil">
             <button type="button" className={`tab-perfil ${tabActiva === 'memories' ? 'activo' : ''}`} onClick={() => setTabActiva('memories')}>
               Recuerdos ({publicacionesFiltradas.length})
@@ -3268,6 +3427,7 @@ export default function Perfil() {
               </button>
             )}
           </nav>
+          )}
         </div>
       </section>
 
@@ -3282,7 +3442,7 @@ export default function Perfil() {
         )}
 
         {/* PESTAÑA 1: RECUERDOS (MISMO FORMATO QUE INICIO) */}
-        {tabActiva === 'memories' && (
+        {puedeVerPerfilCompleto && tabActiva === 'memories' && (
           <div className="col-12 perfil-recuerdos-feed">
             {publicacionesFiltradas.length > 0 ? (
               publicacionesFiltradas.map((post) => {
@@ -3307,6 +3467,7 @@ export default function Perfil() {
                 return (
                   <article
                     key={post._id}
+                    id={`publicacion-${post._id || post.id}`}
                     className={`tarjeta tarjeta-publicacion perfil-publicacion-card shadow-sm ${tieneMultimedia ? 'con-multimedia' : 'sin-multimedia'}`}
                   >
                     <div className={`perfil-publicacion-layout ${tieneMultimedia ? 'con-multimedia' : 'sin-multimedia'}`}>
@@ -3374,6 +3535,29 @@ export default function Perfil() {
                         </div>
                       )}
 
+                      {(post.esRepost || Object.prototype.hasOwnProperty.call(post, 'publicacionOriginal')) && (
+                        <div className="perfil-publicacion-area-compartida">
+                          <PublicacionCompartida
+                            original={post.publicacionOriginal}
+                            disponible={post.publicacionOriginalDisponible !== false}
+                            usuarioHaReaccionado={usuarioHaReaccionado}
+                            comentarios={comentariosPorPub[post.publicacionOriginal?._id] || []}
+                            comentariosAbiertos={Boolean(comentariosAbiertos[post.publicacionOriginal?._id])}
+                            comentarioTexto={nuevoComentarioTexto[post.publicacionOriginal?._id] || ''}
+                            onAutorClick={irAPerfil}
+                            onLike={manejarLike}
+                            onToggleComentarios={toggleComentarios}
+                            onGuardar={manejarGuardarPublicacion}
+                            onCompartir={manejarCompartirPublicacion}
+                            onComentarioTextoChange={(publicacionId, valor) => setNuevoComentarioTexto(prev => ({ ...prev, [publicacionId]: valor }))}
+                            onEnviarComentario={manejarEnviarComentario}
+                            renderContenido={(contenido, menciones) => (
+                              <p className="texto-post historico mb-0">{renderTextoConMenciones(contenido, menciones)}</p>
+                            )}
+                          />
+                        </div>
+                      )}
+
                       <div className="acciones-post perfil-publicacion-area-acciones d-flex justify-content-between mt-3 pt-2 border-top">
                         <div className="d-flex gap-4">
                           <button className="boton-interaccion border-0 bg-transparent p-0" type="button" onClick={() => manejarLike(post._id)}>
@@ -3398,7 +3582,7 @@ export default function Perfil() {
                           >
                             <i className={`bi ${post.guardadaPorMi ? 'bi-bookmark-fill' : 'bi-bookmark'}`}></i>
                           </button>
-                          <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Compartir" aria-label="Compartir">
+                          <button className="boton-interaccion border-0 bg-transparent p-0" type="button" title="Compartir" aria-label="Compartir" onClick={() => manejarCompartirPublicacion(post)}>
                             <i className="bi bi-share"></i> {post.compartido || 0}
                           </button>
                         </div>
@@ -3460,7 +3644,7 @@ export default function Perfil() {
         )}
 
         {/* PESTAÑA 2: LÍNEA DE TIEMPO (MODIFICADO AQUÍ) */}
-        {tabActiva === 'timeline' && (
+        {puedeVerPerfilCompleto && tabActiva === 'timeline' && (
           <div className="col-12">
             <div className="timeline-contenedor">
               <div className="timeline-hilo"></div>
@@ -3487,8 +3671,12 @@ export default function Perfil() {
                             </div>
                             <div className="d-flex flex-column flex-sm-row align-items-sm-start justify-content-between gap-3">
                               <div className="flex-grow-1">
-                                <p className="texto-post mb-2 fw-bold">{post.titulo || (post.tipo === 'familiar' ? 'Momento Familiar' : 'Recuerdo Histórico')}</p>
-                                <p className="texto-post historico text-muted small mb-0">{post.texto || post.contenido}</p>
+                                <p className="texto-post mb-2 fw-bold">
+                                  {(post.esRepost || Object.prototype.hasOwnProperty.call(post, 'publicacionOriginal'))
+                                    ? 'Publicación compartida'
+                                    : (post.titulo || (post.tipo === 'familiar' ? 'Momento Familiar' : 'Recuerdo Histórico'))}
+                                </p>
+                                <p className="texto-post historico text-muted small mb-0">{crearResumenPublicacion(post, 220)}</p>
                               </div>
                               {obtenerUrlMultimediaPublicacion(post.multimedia) && (
                                 <div className="timeline-publicacion-media align-self-center align-self-sm-start">
@@ -3518,7 +3706,7 @@ export default function Perfil() {
         )}
 
         {/* PESTAÑA 3: FOTOS (GALERÍA REAL) */}
-        {tabActiva === 'photos' && (
+        {puedeVerPerfilCompleto && tabActiva === 'photos' && (
           <div className="col-12">
             <div className="galeria-contenedor">
               {fotosGaleria.length > 0 ? (
@@ -3589,7 +3777,7 @@ export default function Perfil() {
         )}
 
         {/* PESTAÑA 4: GUARDADOS (PRIVADA Y SOLO EN EL PERFIL PROPIO) */}
-        {tabActiva === 'saved' && esMiPerfil && (
+        {puedeVerPerfilCompleto && tabActiva === 'saved' && esMiPerfil && (
           <div className="col-12">
             <div className="guardados-perfil-contenedor">
               {cargandoGuardados && !guardadosInicializados ? (
@@ -3616,11 +3804,16 @@ export default function Perfil() {
                   <div className="galeria-grid guardados-grid">
                     {publicacionesGuardadas.map(post => {
                       const postId = post._id || post.id;
-                      const urlGuardado = obtenerUrlMultimediaPublicacion(post.multimedia);
-                      const esVideoGuardado = esVideoMultimediaPublicacion(post.multimedia);
-                      const cantidadMultimedia = obtenerCantidadMultimediaPublicacion(post.multimedia);
+                      const esRepostGuardado = Boolean(post.esRepost || Object.prototype.hasOwnProperty.call(post, 'publicacionOriginal'));
+                      const fuenteVisualGuardado = esRepostGuardado && post.publicacionOriginalDisponible !== false && post.publicacionOriginal
+                        ? post.publicacionOriginal
+                        : post;
+                      const multimediaGuardada = fuenteVisualGuardado.multimedia;
+                      const urlGuardado = obtenerUrlMultimediaPublicacion(multimediaGuardada);
+                      const esVideoGuardado = esVideoMultimediaPublicacion(multimediaGuardada);
+                      const cantidadMultimedia = obtenerCantidadMultimediaPublicacion(multimediaGuardada);
                       const esCarruselGuardado = cantidadMultimedia > 1;
-                      const esHistoricoGuardado = post.tipo === 'historico';
+                      const esHistoricoGuardado = fuenteVisualGuardado.tipo === 'historico';
                       const autorGuardado = post.autor || post.usuario || {};
                       const nombreAutorGuardado = obtenerNombreDeEntidad(autorGuardado, 'Familiar');
                       const totalComentariosGuardado = Object.prototype.hasOwnProperty.call(comentariosPorPub, postId)
@@ -3654,9 +3847,9 @@ export default function Perfil() {
                           ) : (
                             <span className={`guardado-item-texto ${esHistoricoGuardado ? 'historico' : 'familiar'}`}>
                               <span className="guardado-item-texto-icono">
-                                <i className={`bi ${esHistoricoGuardado ? 'bi-journal-richtext' : 'bi-people-fill'}`} aria-hidden="true"></i>
+                                <i className={`bi ${esRepostGuardado ? 'bi-arrow-repeat' : (esHistoricoGuardado ? 'bi-journal-richtext' : 'bi-people-fill')}`} aria-hidden="true"></i>
                               </span>
-                              <strong>{esHistoricoGuardado ? 'Recuerdo Histórico' : 'Momento Familiar'}</strong>
+                              <strong>{esRepostGuardado ? 'Publicación compartida' : (esHistoricoGuardado ? 'Recuerdo Histórico' : 'Momento Familiar')}</strong>
                               <span>{crearResumenPublicacion(post, 105)}</span>
                               <small>{nombreAutorGuardado}</small>
                             </span>

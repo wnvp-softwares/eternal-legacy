@@ -6,6 +6,18 @@ const Nodo = require('../../models/arboles/nodo.model');
 const Comentario = require('../../models/publicacion/comentario.model');
 
 const EventoFamiliar = require('../../models/arboles/eventoFamiliar.model');
+const {
+    construirFiltroVisibilidadPublicaciones: construirFiltroVisibilidadPublicacionesCentral,
+    puedeVerPerfilCompleto,
+    usuarioPuedeVerPublicacion
+} = require('../../services/privacidadPerfil.service');
+const {
+    crearNotificacion,
+    crearClaveEvento,
+    eliminarNotificacionPorClave,
+    eliminarNotificaciones,
+    sincronizarMencionesPublicacion
+} = require('../../services/notificacion.service');
 const cloudinary = require('../../configs/cloudinary.config');
 const {
     MAX_UPLOAD_SIZE_MB,
@@ -425,36 +437,9 @@ const obtenerIdsArbolesPermitidosUsuario = async (usuarioId) => {
     return arboles.map(arbol => arbol._id);
 };
 
-const construirFiltroVisibilidadPublicaciones = async (usuarioId) => {
-    const idsArbolesPermitidos = await obtenerIdsArbolesPermitidosUsuario(usuarioId);
-
-    return {
-        $or: [
-            { tipo: 'historico' },
-            { privacidad: 'publico' },
-            { autor: usuarioId },
-
-            // Publicaciones familiares nuevas.
-            {
-                tipo: 'familiar',
-                privacidad: 'familia',
-                arbolAudiencia: { $in: idsArbolesPermitidos }
-            },
-
-            // Compatibilidad con publicaciones familiares antiguas que estaban ligadas a evento.
-            {
-                tipo: 'familiar',
-                privacidad: { $exists: false },
-                'eventoRelacionado.arbol': { $in: idsArbolesPermitidos }
-            },
-            {
-                tipo: 'familiar',
-                arbolAudiencia: { $exists: false },
-                'eventoRelacionado.arbol': { $in: idsArbolesPermitidos }
-            }
-        ]
-    };
-};
+const construirFiltroVisibilidadPublicaciones = async (usuarioId) => (
+    construirFiltroVisibilidadPublicacionesCentral(usuarioId)
+);
 
 
 const crearContextoPreferenciasFeedVacio = () => ({
@@ -660,56 +645,64 @@ const validarEventoCompatibleConArbol = ({ eventoRelacionado, arbol }) => {
     }
 };
 
-const poblarPublicacion = async (publicacionId) => {
-    return Publicacion.findById(publicacionId)
-        .populate({
+const crearPopulatePublicacionOriginal = (filtroOriginal) => ({
+    path: 'publicacionOriginal',
+    match: filtroOriginal,
+    populate: [
+        {
             path: 'autor',
-            select: 'nombreUsuario nickname email imagenPerfil',
-            populate: {
-                path: 'imagenPerfil'
-            }
-        })
-        .populate('multimedia')
-        .populate('menciones.usuario', 'nombreUsuario nickname email imagenPerfil')
-        .populate('etiquetasMultimedia.usuario', 'nombreUsuario nickname email imagenPerfil')
-        .populate('personasRelacionadas.nodo', 'nombre usuario origen')
-        .populate('personasRelacionadas.usuario', 'nombreUsuario nickname email imagenPerfil')
-        .populate('eventoRelacionado.evento')
-        .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
-        .populate('arbolAudiencia', 'nombreFamilia nombre titulo')
-        .populate('etapaDestacada', 'propietario nombre color icono orden');
+            select: 'nombreUsuario nickname imagenPerfil',
+            populate: { path: 'imagenPerfil' }
+        },
+        { path: 'multimedia' },
+        { path: 'menciones.usuario', select: 'nombreUsuario nickname imagenPerfil' },
+        { path: 'etiquetasMultimedia.usuario', select: 'nombreUsuario nickname imagenPerfil' },
+        { path: 'personasRelacionadas.nodo', select: 'nombre usuario origen' },
+        { path: 'personasRelacionadas.usuario', select: 'nombreUsuario nickname imagenPerfil' },
+        { path: 'eventoRelacionado.evento' },
+        { path: 'eventoRelacionado.arbol', select: 'nombreFamilia nombre titulo' },
+        { path: 'arbolAudiencia', select: 'nombreFamilia nombre titulo' },
+        { path: 'etapaDestacada', select: 'propietario nombre color icono orden' }
+    ]
+});
+
+const aplicarPobladoPublicacion = (consulta, filtroOriginal) => consulta
+    .populate({
+        path: 'autor',
+        select: 'nombreUsuario nickname imagenPerfil',
+        populate: { path: 'imagenPerfil' }
+    })
+    .populate('multimedia')
+    .populate('menciones.usuario', 'nombreUsuario nickname imagenPerfil')
+    .populate('etiquetasMultimedia.usuario', 'nombreUsuario nickname imagenPerfil')
+    .populate('personasRelacionadas.nodo', 'nombre usuario origen')
+    .populate('personasRelacionadas.usuario', 'nombreUsuario nickname imagenPerfil')
+    .populate('eventoRelacionado.evento')
+    .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
+    .populate('arbolAudiencia', 'nombreFamilia nombre titulo')
+    .populate('etapaDestacada', 'propietario nombre color icono orden')
+    .populate(crearPopulatePublicacionOriginal(filtroOriginal));
+
+const poblarPublicacion = async (publicacionId, usuarioId) => {
+    const filtroOriginal = await construirFiltroVisibilidadPublicaciones(usuarioId);
+    return aplicarPobladoPublicacion(Publicacion.findById(publicacionId), filtroOriginal);
 };
 
-const poblarConsultaPublicaciones = (consulta) => {
-    return consulta
-        .populate({
-            path: 'autor',
-            select: 'nombreUsuario nickname email imagenPerfil',
-            populate: {
-                path: 'imagenPerfil'
-            }
-        })
-        .populate('multimedia')
-        .populate('menciones.usuario', 'nombreUsuario nickname email imagenPerfil')
-        .populate('etiquetasMultimedia.usuario', 'nombreUsuario nickname email imagenPerfil')
-        .populate('personasRelacionadas.nodo', 'nombre usuario origen')
-        .populate('personasRelacionadas.usuario', 'nombreUsuario nickname email imagenPerfil')
-        .populate('eventoRelacionado.evento')
-        .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
-        .populate('arbolAudiencia', 'nombreFamilia nombre titulo')
-        .populate('etapaDestacada', 'propietario nombre color icono orden');
+const poblarConsultaPublicaciones = async (consulta, usuarioId) => {
+    const filtroOriginal = await construirFiltroVisibilidadPublicaciones(usuarioId);
+    return aplicarPobladoPublicacion(consulta, filtroOriginal);
 };
 
 
-const serializarPublicacionParaUsuario = (publicacion, usuarioId, contextoPreferencias = null) => {
-    if (!publicacion) return null;
+const serializarEntidadPublicacion = (objetoEntrada, usuarioId, contextoPreferencias = null) => {
+    if (!objetoEntrada) return null;
 
-    const objeto = typeof publicacion.toObject === 'function'
-        ? publicacion.toObject()
-        : { ...publicacion };
+    const objeto = typeof objetoEntrada.toObject === 'function'
+        ? objetoEntrada.toObject()
+        : { ...objetoEntrada };
 
     const guardadaPor = Array.isArray(objeto.guardadaPor) ? objeto.guardadaPor : [];
-    const guardadaPorMi = guardadaPor.some(idUsuario => sonMismoId(idUsuario, usuarioId));
+    const guardadaPorMi = guardadaPor.some((idUsuario) => sonMismoId(idUsuario, usuarioId));
     const publicacionId = obtenerIdSeguro(objeto);
     const autorId = obtenerIdSeguro(objeto.autor);
     const pausaAutor = autorId
@@ -730,6 +723,23 @@ const serializarPublicacionParaUsuario = (publicacion, usuarioId, contextoPrefer
     };
 };
 
+const serializarPublicacionParaUsuario = (publicacion, usuarioId, contextoPreferencias = null) => {
+    const serializada = serializarEntidadPublicacion(publicacion, usuarioId, contextoPreferencias);
+    if (!serializada) return null;
+
+    const esRepost = Boolean(serializada.compartidoDesde || serializada.publicacionOriginal);
+    const original = serializada.publicacionOriginal
+        ? serializarEntidadPublicacion(serializada.publicacionOriginal, usuarioId, null)
+        : null;
+
+    return {
+        ...serializada,
+        esRepost,
+        publicacionOriginalDisponible: esRepost ? Boolean(original) : true,
+        publicacionOriginal: original
+    };
+};
+
 const serializarListaPublicaciones = (publicaciones = [], usuarioId, contextoPreferencias = null) => (
     publicaciones
         .map(publicacion => serializarPublicacionParaUsuario(publicacion, usuarioId, contextoPreferencias))
@@ -746,7 +756,8 @@ const obtenerPublicacionVisiblePorId = async ({ publicacionId, usuarioId }) => {
                 { _id: publicacionId },
                 filtroVisibilidad
             ]
-        })
+        }),
+        usuarioId
     );
 
     return publicacion;
@@ -933,10 +944,16 @@ const crearPublicacion = async (req, res) => {
         await nuevaPublicacion.save();
         publicacionGuardada = true;
 
+        await sincronizarMencionesPublicacion({
+            publicacion: nuevaPublicacion,
+            actorId: req.usuario.id,
+            mencionesAnteriores: []
+        });
+
         let publicacionCompleta = nuevaPublicacion;
 
         try {
-            publicacionCompleta = await poblarPublicacion(nuevaPublicacion._id) || nuevaPublicacion;
+            publicacionCompleta = await poblarPublicacion(nuevaPublicacion._id, req.usuario.id) || nuevaPublicacion;
         } catch (errorPopulate) {
             console.error('⚠️ La publicación se creó, pero no se pudo poblar completamente:', errorPopulate);
         }
@@ -972,7 +989,8 @@ const obtenerPublicaciones = async (req, res) => {
         const filtroMuro = construirFiltroMuroConPreferencias(filtroVisibilidad, contextoPreferencias);
 
         const publicaciones = await poblarConsultaPublicaciones(
-            Publicacion.find(filtroMuro).sort({ createdAt: -1 })
+            Publicacion.find(filtroMuro).sort({ createdAt: -1 }),
+            usuarioId
         );
 
         res.status(200).json(
@@ -1022,7 +1040,8 @@ const obtenerPublicacionesGuardadas = async (req, res) => {
                 Publicacion.find(filtroGuardadas)
                     .sort({ createdAt: -1 })
                     .skip(salto)
-                    .limit(limite)
+                    .limit(limite),
+                usuarioId
             )
         ]);
 
@@ -1106,7 +1125,8 @@ const obtenerPublicacionesPorUsuario = async (req, res) => {
                     filtroVisibilidad,
                     { autor: usuarioId }
                 ]
-            }).sort({ fijadaEnPerfilAt: -1, createdAt: -1 })
+            }).sort({ fijadaEnPerfilAt: -1, createdAt: -1 }),
+            usuarioSolicitanteId
         );
 
         return res.status(200).json(
@@ -1152,11 +1172,10 @@ const buscarTodo = async (req, res) => {
                 $or: [
                     { nickname: regexDirecto },
                     { nombreUsuario: regexDirecto },
-                    { nombreUsuario: regexNombre },
-                    { email: regexDirecto }
+                    { nombreUsuario: regexNombre }
                 ]
             })
-                .select('nombreUsuario nickname email imagenPerfil')
+                .select('nombreUsuario nickname imagenPerfil')
                 .populate('imagenPerfil')
                 .limit(30),
 
@@ -1177,7 +1196,8 @@ const buscarTodo = async (req, res) => {
                     ]
                 })
                     .sort({ createdAt: -1 })
-                    .limit(20)
+                    .limit(20),
+                usuarioId
             )
         ]);
 
@@ -1186,16 +1206,13 @@ const buscarTodo = async (req, res) => {
         const puntuarPersona = (persona) => {
             const nickname = normalizarHandleMencion(persona.nickname, { minusculas: true });
             const nombre = normalizarTextoBusqueda(persona.nombreUsuario);
-            const email = normalizarTextoBusqueda(persona.email);
-
             if (nickname && nickname === queryHandle) return 0;
             if (nickname && nickname.startsWith(queryHandle)) return 1;
             if (nickname && nickname.includes(queryHandle)) return 2;
             if (nombre === queryNombreNormalizado) return 3;
             if (nombre.startsWith(queryNombreNormalizado)) return 4;
             if (nombre.includes(queryNombreNormalizado)) return 5;
-            if (email === normalizarTextoBusqueda(querySinArroba)) return 6;
-            return 7;
+            return 6;
         };
 
         const personas = personasEncontradas
@@ -1206,8 +1223,14 @@ const buscarTodo = async (req, res) => {
             })
             .slice(0, 10);
 
+        const personasSeguras = personas.map((persona) => {
+            const objeto = typeof persona.toObject === 'function' ? persona.toObject() : { ...persona };
+            delete objeto.email;
+            return objeto;
+        });
+
         res.status(200).json({
-            personas,
+            personas: personasSeguras,
             publicaciones: serializarListaPublicaciones(publicaciones, usuarioId, contextoPreferencias)
         });
     } catch (error) {
@@ -1240,7 +1263,8 @@ const obtenerPublicacionesPorEvento = async (req, res) => {
                     filtroVisibilidad
                 ]
             })
-                .sort({ createdAt: -1 })
+                .sort({ createdAt: -1 }),
+            req.usuario.id
         );
 
         const totalMultimedia = publicaciones.reduce((acumulado, publicacion) => {
@@ -1309,10 +1333,12 @@ const obtenerMomentosFamiliaresPorNodo = async (req, res) => {
             );
         }
 
+        const filtroVisibilidad = await construirFiltroVisibilidadPublicaciones(usuarioId);
         const publicaciones = await poblarConsultaPublicaciones(
             Publicacion.find({
-                tipo: 'familiar',
                 $and: [
+                    filtroVisibilidad,
+                    { tipo: 'familiar' },
                     {
                         $or: [
                             { arbolAudiencia: arbol._id },
@@ -1321,7 +1347,8 @@ const obtenerMomentosFamiliaresPorNodo = async (req, res) => {
                     },
                     { $or: condicionesPersona }
                 ]
-            })
+            }),
+            usuarioId
         );
 
         const publicacionesConFotos = publicaciones
@@ -1404,6 +1431,124 @@ const obtenerPublicacionPorId = async (req, res) => {
     }
 };
 
+// CREAR UN REPOST INMEDIATO SIN ABRIR EL COMPOSITOR
+const compartirPublicacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacionVisible = await obtenerPublicacionVisiblePorId({
+            publicacionId: id,
+            usuarioId
+        });
+        if (!publicacionVisible) {
+            return res.status(404).json({
+                mensaje: 'Publicación no encontrada o sin permiso para compartirla.'
+            });
+        }
+
+        const compartidoDesde = await Publicacion.findById(id)
+            .select('_id autor publicacionOriginal compartido');
+        if (!compartidoDesde) {
+            return res.status(404).json({ mensaje: 'La publicación ya no existe.' });
+        }
+
+        const publicacionOriginalId = compartidoDesde.publicacionOriginal || compartidoDesde._id;
+        const originalVisible = await obtenerPublicacionVisiblePorId({
+            publicacionId: publicacionOriginalId,
+            usuarioId
+        });
+
+        if (!originalVisible) {
+            return res.status(403).json({
+                mensaje: 'El contenido original no está disponible para compartir.'
+            });
+        }
+
+        const existente = await Publicacion.findOne({
+            autor: usuarioId,
+            publicacionOriginal: publicacionOriginalId
+        });
+
+        if (existente) {
+            const existenteCompleta = await poblarPublicacion(existente._id, usuarioId) || existente;
+            return res.status(200).json({
+                mensaje: 'Ya habías compartido esta publicación.',
+                compartidaExistente: true,
+                publicacion: serializarPublicacionParaUsuario(existenteCompleta, usuarioId)
+            });
+        }
+
+        let repost;
+        let repostCreadoAhora = true;
+        try {
+            repost = await Publicacion.create({
+                autor: usuarioId,
+                tipo: 'historico',
+                privacidad: 'publico',
+                publicacionOriginal: publicacionOriginalId,
+                compartidoDesde: compartidoDesde._id,
+                contenido: '',
+                multimedia: [],
+                reacciones: [],
+                compartido: 0,
+                guardadaPor: []
+            });
+        } catch (error) {
+            if (error?.code !== 11000) throw error;
+            repostCreadoAhora = false;
+            repost = await Publicacion.findOne({
+                autor: usuarioId,
+                publicacionOriginal: publicacionOriginalId
+            });
+        }
+
+        if (!repost) {
+            return res.status(409).json({ mensaje: 'No se pudo crear el repost.' });
+        }
+
+        if (!repostCreadoAhora) {
+            const repostCompletoExistente = await poblarPublicacion(repost._id, usuarioId) || repost;
+            return res.status(200).json({
+                mensaje: 'Ya habías compartido esta publicación.',
+                compartidaExistente: true,
+                publicacion: serializarPublicacionParaUsuario(repostCompletoExistente, usuarioId)
+            });
+        }
+
+        await Publicacion.updateOne(
+            { _id: compartidoDesde._id },
+            { $inc: { compartido: 1 } }
+        );
+
+        await crearNotificacion({
+            destinatarioId: compartidoDesde.autor,
+            actorId: usuarioId,
+            tipo: 'compartido_publicacion',
+            publicacionId: repost._id,
+            enlaceReferencia: `/perfil/${usuarioId}?publicacion=${repost._id}`,
+            claveEvento: crearClaveEvento('compartido_publicacion', repost._id)
+        });
+
+        const repostCompleto = await poblarPublicacion(repost._id, usuarioId) || repost;
+        return res.status(201).json({
+            mensaje: 'Publicación compartida en tu perfil.',
+            compartidaExistente: false,
+            publicacion: serializarPublicacionParaUsuario(repostCompleto, usuarioId),
+            compartidoDesdeId: compartidoDesde._id
+        });
+    } catch (error) {
+        console.error('❌ Error al compartir publicación:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudo compartir la publicación.'
+        });
+    }
+};
+
 const tieneCampo = (objeto, campo) => Object.prototype.hasOwnProperty.call(objeto || {}, campo);
 
 // EDITAR PUBLICACIÓN Y SU MULTIMEDIA
@@ -1429,6 +1574,21 @@ const editarPublicacion = async (req, res) => {
         }
 
         asegurarAutorPublicacion(publicacion, usuarioId);
+
+        if (publicacion.publicacionOriginal) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({
+                mensaje: 'Los reposts no permiten editar contenido ni multimedia.'
+            });
+        }
+
+        const mencionesAnteriores = Array.isArray(publicacion.menciones)
+            ? publicacion.menciones.map((mencion) => ({
+                usuario: mencion.usuario,
+                nombre: mencion.nombre,
+                handle: mencion.handle
+            }))
+            : [];
 
         const tipoSeguro = publicacion.tipo === 'familiar' ? 'familiar' : 'historico';
         const etapaFueEnviada = tieneCampo(body, 'etapaDestacadaId');
@@ -1640,6 +1800,12 @@ const editarPublicacion = async (req, res) => {
         await publicacion.save();
         edicionGuardada = true;
 
+        await sincronizarMencionesPublicacion({
+            publicacion,
+            actorId: usuarioId,
+            mencionesAnteriores
+        });
+
         const idsConservadosSet = new Set(idsMultimediaConservada.map(String));
         const uploadsRetirados = uploadsOriginales.filter(upload => !idsConservadosSet.has(String(obtenerIdSeguro(upload))));
         try {
@@ -1648,7 +1814,7 @@ const editarPublicacion = async (req, res) => {
             console.error('⚠️ La publicación se actualizó, pero quedó multimedia pendiente de limpieza:', errorLimpieza);
         }
 
-        const publicacionCompleta = await poblarPublicacion(publicacion._id) || publicacion;
+        const publicacionCompleta = await poblarPublicacion(publicacion._id, usuarioId) || publicacion;
         return res.status(200).json({
             mensaje: 'Publicación actualizada correctamente.',
             publicacion: serializarPublicacionParaUsuario(publicacionCompleta, usuarioId)
@@ -1740,6 +1906,20 @@ const alternarGuardadoPublicacion = async (req, res) => {
                 ? { $pull: { guardadaPor: usuarioId } }
                 : { $addToSet: { guardadaPor: usuarioId } }
         );
+
+        const claveGuardado = crearClaveEvento('guardado_publicacion', id, usuarioId);
+        if (guardadaPorMi) {
+            await eliminarNotificacionPorClave(claveGuardado);
+        } else {
+            await crearNotificacion({
+                destinatarioId: obtenerIdSeguro(publicacion.autor),
+                actorId: usuarioId,
+                tipo: 'guardado_publicacion',
+                publicacionId: id,
+                enlaceReferencia: `/perfil/${obtenerIdSeguro(publicacion.autor)}?publicacion=${id}`,
+                claveEvento: claveGuardado
+            });
+        }
 
         return res.status(200).json({
             mensaje: guardadaPorMi ? 'Publicación eliminada de guardados.' : 'Publicación guardada.',
@@ -1933,6 +2113,20 @@ const eliminarPublicacion = async (req, res) => {
             throw error;
         }
 
+        if (publicacion.publicacionOriginal && publicacion.compartidoDesde) {
+            await Publicacion.updateOne(
+                { _id: publicacion.compartidoDesde, compartido: { $gt: 0 } },
+                { $inc: { compartido: -1 } }
+            );
+        }
+
+        await eliminarNotificaciones({
+            $or: [
+                { publicacion: publicacion._id },
+                { claveEvento: crearClaveEvento('compartido_publicacion', publicacion._id) }
+            ]
+        });
+
         try {
             await Comentario.deleteMany({ publicacionPadre: publicacion._id });
         } catch (errorComentarios) {
@@ -2015,6 +2209,20 @@ const reaccionarPublicacion = async (req, res) => {
             { returnDocument: 'after' }
         );
 
+        const claveReaccion = crearClaveEvento('reaccion_publicacion', id, usuarioId);
+        if (yaReacciono) {
+            await eliminarNotificacionPorClave(claveReaccion);
+        } else {
+            await crearNotificacion({
+                destinatarioId: publicacion.autor,
+                actorId: usuarioId,
+                tipo: 'reaccion_publicacion',
+                publicacionId: publicacion._id,
+                enlaceReferencia: `/perfil/${obtenerIdSeguro(publicacion.autor)}?publicacion=${publicacion._id}`,
+                claveEvento: claveReaccion
+            });
+        }
+
         res.status(200).json({
             mensaje: yaReacciono ? 'Reacción eliminada' : 'Reacción registrada',
             reacciones: publicacionActualizada.reacciones || []
@@ -2061,7 +2269,7 @@ const asignarEtapaPublicacion = async (req, res) => {
         }
         await publicacion.save();
 
-        const completa = await poblarPublicacion(publicacion._id) || publicacion;
+        const completa = await poblarPublicacion(publicacion._id, usuarioId) || publicacion;
         return res.status(200).json({
             mensaje: 'Etapa agregada correctamente.',
             publicacion: serializarPublicacionParaUsuario(completa, usuarioId)
@@ -2093,7 +2301,7 @@ const eliminarEtapaPublicacion = async (req, res) => {
         publicacion.fechaMomento = null;
         await publicacion.save();
 
-        const completa = await poblarPublicacion(publicacion._id) || publicacion;
+        const completa = await poblarPublicacion(publicacion._id, usuarioId) || publicacion;
         return res.status(200).json({
             mensaje: 'Etapa retirada. La publicación y sus archivos se conservaron.',
             publicacion: serializarPublicacionParaUsuario(completa, usuarioId)
@@ -2125,5 +2333,6 @@ module.exports = {
     obtenerMomentosFamiliaresPorNodo,
     asignarEtapaPublicacion,
     eliminarEtapaPublicacion,
-    reaccionarPublicacion
+    reaccionarPublicacion,
+    compartirPublicacion
 };

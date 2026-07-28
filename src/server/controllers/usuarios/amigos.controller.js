@@ -1,4 +1,5 @@
 const { Amigo } = require('../../models/index.model');
+const { crearNotificacion, crearClaveEvento } = require('../../services/notificacion.service');
 
 const enviarSolicitudAmistad = async (req, res) => {
     try {
@@ -73,23 +74,38 @@ const obtenerMisAmigos = async (req, res) => {
 const responderSolicitudAmistad = async (req, res) => {
     try {
         const { idInvitacion } = req.params;
-        const { respuesta } = req.body; // Recibe 'Aceptado' o 'Rechazado'
+        const { respuesta } = req.body;
 
         if (!['Aceptado', 'Rechazado'].includes(respuesta)) {
             return res.status(400).json({ mensaje: 'Respuesta no válida' });
         }
 
-        const solicitud = await Amigo.findByIdAndUpdate(
-            idInvitacion,
-            { estado: respuesta },
-            { new: true }
-        );
+        const solicitud = await Amigo.findOne({
+            _id: idInvitacion,
+            usuarioReceptor: req.usuario.id,
+            estado: 'Pendiente'
+        });
 
         if (!solicitud) return res.status(404).json({ mensaje: 'Solicitud no encontrada' });
 
-        res.status(200).json({ mensaje: `Solicitud ${respuesta}`, solicitud });
+        solicitud.estado = respuesta;
+        await solicitud.save();
+
+        if (respuesta === 'Aceptado') {
+            await crearNotificacion({
+                destinatarioId: solicitud.usuarioSolicitante,
+                actorId: req.usuario.id,
+                tipo: 'nuevo_amigo',
+                solicitudId: solicitud._id,
+                enlaceReferencia: `/perfil/${req.usuario.id}`,
+                claveEvento: crearClaveEvento('nuevo_amigo', solicitud._id, solicitud.usuarioSolicitante)
+            });
+        }
+
+        return res.status(200).json({ mensaje: `Solicitud ${respuesta}`, solicitud });
     } catch (error) {
-        res.status(500).json({ mensaje: 'Error al responder la solicitud' });
+        console.error('❌ Error al responder solicitud de amistad:', error);
+        return res.status(500).json({ mensaje: 'Error al responder la solicitud' });
     }
 };
 // Recuerden exportarla: module.exports = { ..., responderSolicitudAmistad };

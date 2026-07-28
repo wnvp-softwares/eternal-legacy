@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 
 const informacionPerfilSchema = new mongoose.Schema({
+    privacidadPerfil: {
+        type: String,
+        enum: ['publico', 'privado'],
+        default: 'publico',
+        index: true
+    },
+
     biografia: {
         type: String,
         default: ''

@@ -113,6 +113,21 @@ const publicacionSchema = new mongoose.Schema({
         default: null
     },
 
+
+    // Raíz de contenido mostrada dentro de un repost. Siempre apunta a la publicación original.
+    publicacionOriginal: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Publicacion',
+        default: null
+    },
+
+    // Publicación exacta cuyo botón Compartir originó este repost.
+    compartidoDesde: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Publicacion',
+        default: null
+    },
+
     nombreFamiliaAudienciaSnapshot: {
         type: String,
         trim: true,
@@ -191,6 +206,20 @@ const publicacionSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 publicacionSchema.pre('validate', function () {
+    if (this.publicacionOriginal) {
+        this.tipo = 'historico';
+        this.privacidad = 'publico';
+        this.arbolAudiencia = null;
+        this.nombreFamiliaAudienciaSnapshot = '';
+        this.contenido = '';
+        this.multimedia = [];
+        this.ubicacionTexto = '';
+        this.menciones = [];
+        this.etiquetasMultimedia = [];
+        this.personasRelacionadas = [];
+        this.eventoRelacionado = null;
+    }
+
     if (this.tipo === 'familiar') {
         this.privacidad = 'familia';
     }
@@ -209,6 +238,16 @@ publicacionSchema.pre('validate', function () {
 });
 
 publicacionSchema.index({ autor: 1, createdAt: -1 });
+publicacionSchema.index({ publicacionOriginal: 1, createdAt: -1 });
+publicacionSchema.index({ compartidoDesde: 1, createdAt: -1 });
+publicacionSchema.index(
+    { autor: 1, publicacionOriginal: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { publicacionOriginal: { $type: 'objectId' } },
+        name: 'repost_unico_por_autor_y_original'
+    }
+);
 publicacionSchema.index(
     { autor: 1 },
     {
