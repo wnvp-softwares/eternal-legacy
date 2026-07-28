@@ -401,11 +401,26 @@ export default function Mensajes() {
       document.removeEventListener('focusout', manejarCambioFoco);
       delete raiz.dataset.vistaMensajesActiva;
       delete raiz.dataset.tecladoMensajes;
+      delete raiz.dataset.conversacionMensajesAbierta;
       raiz.style.removeProperty('--mensajes-viewport-alto');
       raiz.style.removeProperty('--mensajes-viewport-offset-top');
       alturaViewportBaseRef.current = 0;
     };
   }, []);
+
+  useLayoutEffect(() => {
+    const raiz = document.documentElement;
+
+    if (claveChatSeleccionado) {
+      raiz.dataset.conversacionMensajesAbierta = 'true';
+    } else {
+      delete raiz.dataset.conversacionMensajesAbierta;
+    }
+
+    return () => {
+      delete raiz.dataset.conversacionMensajesAbierta;
+    };
+  }, [claveChatSeleccionado]);
 
   const cargarMensajesConversacion = useCallback(async (chat, { desplazarAlFinal = false } = {}) => {
     const chatId = obtenerIdChat(chat);

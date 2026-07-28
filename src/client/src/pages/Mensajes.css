@@ -799,8 +799,23 @@
         margin: 0;
     }
 
+    /* Una conversación abierta funciona como una vista enfocada, estilo Messenger/Instagram. */
+    html[data-conversacion-mensajes-abierta="true"] .navbar-superior {
+        display: none !important;
+    }
+
+    html[data-conversacion-mensajes-abierta="true"] .contenedor-mensajes {
+        top: var(--mensajes-viewport-offset-top, 0px);
+        height: calc(var(--mensajes-viewport-alto, 100dvh) - 80px);
+    }
+
     html[data-teclado-mensajes="abierto"] .contenedor-mensajes {
         height: calc(var(--mensajes-viewport-alto, 100dvh) - 70px);
+    }
+
+    html[data-conversacion-mensajes-abierta="true"][data-teclado-mensajes="abierto"] .contenedor-mensajes {
+        top: var(--mensajes-viewport-offset-top, 0px);
+        height: var(--mensajes-viewport-alto, 100dvh);
     }
 
     html[data-teclado-mensajes="abierto"] .area-escribir {
