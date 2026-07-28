@@ -4,6 +4,7 @@ const {
     InformacionPerfil,
     Amigo,
     Familia,
+    Seguidor,
     Arbol
 } = require('../models/index.model');
 
@@ -48,7 +49,7 @@ const obtenerPrivacidadPerfilUsuario = async (usuarioId) => {
 const obtenerIdsConexionesDirectas = async (usuarioId) => {
     if (!esObjectIdValido(usuarioId)) return [];
 
-    const [amistades, familiares] = await Promise.all([
+    const [amistades, familiares, seguimientosSalientes] = await Promise.all([
         Amigo.find({
             estado: 'Aceptado',
             $or: [
@@ -62,8 +63,20 @@ const obtenerIdsConexionesDirectas = async (usuarioId) => {
                 { usuarioPrincipal: usuarioId },
                 { familiar: usuarioId }
             ]
-        }).select('usuarioPrincipal familiar').lean()
+        }).select('usuarioPrincipal familiar').lean(),
+        Seguidor.find({ seguidor: usuarioId }).select('seguido').lean()
     ]);
+
+    const idsSeguidos = seguimientosSalientes
+        .map((seguimiento) => obtenerIdSeguro(seguimiento.seguido))
+        .filter(esObjectIdValido);
+
+    const seguimientosReciprocos = idsSeguidos.length > 0
+        ? await Seguidor.find({
+            seguidor: { $in: idsSeguidos },
+            seguido: usuarioId
+        }).select('seguidor').lean()
+        : [];
 
     const ids = new Set([String(usuarioId)]);
 
@@ -81,6 +94,11 @@ const obtenerIdsConexionesDirectas = async (usuarioId) => {
         if (otroId) ids.add(otroId);
     });
 
+    seguimientosReciprocos.forEach((seguimiento) => {
+        const otroId = obtenerIdSeguro(seguimiento.seguidor);
+        if (otroId) ids.add(otroId);
+    });
+
     return Array.from(ids);
 };
 
@@ -88,7 +106,7 @@ const existeConexionDirecta = async (usuarioA, usuarioB) => {
     if (!esObjectIdValido(usuarioA) || !esObjectIdValido(usuarioB)) return false;
     if (sonMismoId(usuarioA, usuarioB)) return true;
 
-    const [amistad, familia] = await Promise.all([
+    const [amistad, familia, sigueA, sigueB] = await Promise.all([
         Amigo.exists({
             estado: 'Aceptado',
             $or: [
@@ -102,10 +120,12 @@ const existeConexionDirecta = async (usuarioA, usuarioB) => {
                 { usuarioPrincipal: usuarioA, familiar: usuarioB },
                 { usuarioPrincipal: usuarioB, familiar: usuarioA }
             ]
-        })
+        }),
+        Seguidor.exists({ seguidor: usuarioA, seguido: usuarioB }),
+        Seguidor.exists({ seguidor: usuarioB, seguido: usuarioA })
     ]);
 
-    return Boolean(amistad || familia);
+    return Boolean(amistad || familia || (sigueA && sigueB));
 };
 
 const puedeVerPerfilCompleto = async ({ propietarioId, visitanteId }) => {
