@@ -728,14 +728,28 @@ const serializarPublicacionParaUsuario = (publicacion, usuarioId, contextoPrefer
     if (!serializada) return null;
 
     const esRepost = Boolean(serializada.compartidoDesde || serializada.publicacionOriginal);
+
+    if (!esRepost) {
+        // Los campos de referencia existen con valor null por definición del esquema.
+        // No deben hacer que una publicación normal sea interpretada como un repost.
+        delete serializada.publicacionOriginal;
+        delete serializada.compartidoDesde;
+        delete serializada.publicacionOriginalDisponible;
+
+        return {
+            ...serializada,
+            esRepost: false
+        };
+    }
+
     const original = serializada.publicacionOriginal
         ? serializarEntidadPublicacion(serializada.publicacionOriginal, usuarioId, null)
         : null;
 
     return {
         ...serializada,
-        esRepost,
-        publicacionOriginalDisponible: esRepost ? Boolean(original) : true,
+        esRepost: true,
+        publicacionOriginalDisponible: Boolean(original),
         publicacionOriginal: original
     };
 };

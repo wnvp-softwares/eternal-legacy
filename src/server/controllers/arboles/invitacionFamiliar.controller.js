@@ -11,6 +11,11 @@ const {
     crearClaveEvento,
     eliminarNotificacionPorClave
 } = require('../../services/notificacion.service');
+const {
+    ejecutarOperacionLayout,
+    normalizarGeneracionesPersistidas,
+    prepararGeneracionObjetivo
+} = require('../../services/layoutArbol.service');
 
 const retirarNotificacionInvitacion = async (invitacionId) => {
     if (!invitacionId) return;
@@ -288,27 +293,49 @@ const enviarInvitacionFamiliar = async (req, res) => {
         }
 
         const nombrePropuesto = datosNodoPropuesto.nombre || invitado.nombreUsuario;
+        const filaPropuesta = Number(datosNodoPropuesto.fila);
 
-        const nuevaInvitacion = await InvitacionFamiliar.create({
-            arbol: arbolId,
-            invitado: invitadoId,
-            invitadoPor: req.usuario.id,
-            estado: 'Pendiente',
-            datosNodoPropuesto: {
-                nombre: nombrePropuesto,
-                iniciales: datosNodoPropuesto.iniciales || obtenerIniciales(nombrePropuesto),
-                colorFondo: datosNodoPropuesto.colorFondo || '#e2e8f0',
-                colorTexto: datosNodoPropuesto.colorTexto || '#0f172a',
+        if (!Number.isInteger(filaPropuesta) || filaPropuesta < 0) {
+            return res.status(400).json({
+                mensaje: 'La fila propuesta debe ser un número entero mayor o igual a cero.'
+            });
+        }
+
+        const { nuevaInvitacion, arbolDesplazado } = await ejecutarOperacionLayout(async (session) => {
+            await normalizarGeneracionesPersistidas({ arbolId, session });
+
+            const resultadoGeneracion = await prepararGeneracionObjetivo({
+                arbolId,
                 generacion: datosNodoPropuesto.generacion,
-                fila: datosNodoPropuesto.fila,
-                tipo: datosNodoPropuesto.tipo || 'normal'
-            },
-            relacionPropuesta: {
-                nodoRelacionado: relacionPropuesta.nodoRelacionado || null,
-                tipoRelacion: relacionPropuesta.tipoRelacion || 'ninguna',
-                rolDelInvitado: relacionPropuesta.rolDelInvitado || 'ninguno'
-            },
-            mensaje
+                session
+            });
+
+            const documentos = await InvitacionFamiliar.create([{
+                arbol: arbolId,
+                invitado: invitadoId,
+                invitadoPor: req.usuario.id,
+                estado: 'Pendiente',
+                datosNodoPropuesto: {
+                    nombre: nombrePropuesto,
+                    iniciales: datosNodoPropuesto.iniciales || obtenerIniciales(nombrePropuesto),
+                    colorFondo: datosNodoPropuesto.colorFondo || '#e2e8f0',
+                    colorTexto: datosNodoPropuesto.colorTexto || '#0f172a',
+                    generacion: resultadoGeneracion.generacion,
+                    fila: filaPropuesta,
+                    tipo: datosNodoPropuesto.tipo || 'normal'
+                },
+                relacionPropuesta: {
+                    nodoRelacionado: relacionPropuesta.nodoRelacionado || null,
+                    tipoRelacion: relacionPropuesta.tipoRelacion || 'ninguna',
+                    rolDelInvitado: relacionPropuesta.rolDelInvitado || 'ninguno'
+                },
+                mensaje
+            }], session ? { session } : {});
+
+            return {
+                nuevaInvitacion: documentos[0],
+                arbolDesplazado: resultadoGeneracion.desplazamiento > 0
+            };
         });
 
         await crearNotificacion({
@@ -323,7 +350,9 @@ const enviarInvitacionFamiliar = async (req, res) => {
         });
 
         res.status(201).json({
-            mensaje: 'Invitación familiar enviada correctamente',
+            mensaje: arbolDesplazado
+                ? 'Invitación enviada y generaciones anteriores recorridas correctamente.'
+                : 'Invitación familiar enviada correctamente',
             invitacion: nuevaInvitacion
         });
     } catch (error) {

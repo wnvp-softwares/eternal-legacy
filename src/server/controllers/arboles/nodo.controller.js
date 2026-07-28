@@ -1,5 +1,11 @@
 const { Arbol, Nodo, Hilo, InvitacionFamiliar } = require('../../models/index.model');
 const { construirRutaPublicaUpload } = require('../../configs/uploads.config');
+const {
+    ejecutarOperacionLayout,
+    normalizarGeneracionesPersistidas: normalizarGeneracionesPersistidasCentral,
+    prepararGeneracionObjetivo,
+    moverNodoAtomico
+} = require('../../services/layoutArbol.service');
 
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
@@ -153,55 +159,20 @@ const validarFila = (fila) => {
     return { valor: filaNormalizada };
 };
 
-const desplazarGeneracionesArbol = async (arbolId, desplazamiento) => {
-    const cantidad = Number(desplazamiento);
+const normalizarGeneracionesPersistidas = async (arbolId) => (
+    normalizarGeneracionesPersistidasCentral({ arbolId })
+);
 
-    if (!Number.isInteger(cantidad) || cantidad <= 0) return 0;
-
-    await Nodo.updateMany(
-        { arbol: arbolId },
-        { $inc: { generacion: cantidad } }
-    );
-
-    return cantidad;
-};
-
-const normalizarGeneracionesPersistidas = async (arbolId) => {
-    const primerNodo = await Nodo.findOne({ arbol: arbolId })
-        .sort({ generacion: 1 })
-        .select('generacion')
-        .lean();
-
-    const menorGeneracion = Number(primerNodo?.generacion);
-
-    if (!Number.isFinite(menorGeneracion) || menorGeneracion >= 0) {
-        return 0;
-    }
-
-    return desplazarGeneracionesArbol(arbolId, Math.abs(Math.trunc(menorGeneracion)));
-};
-
-const prepararGeneracionParaGuardar = async ({ arbolId, generacion }) => {
-    const generacionNormalizada = convertirEntero(generacion);
-
-    if (generacionNormalizada === null) {
+const prepararGeneracionParaGuardar = async ({ arbolId, generacion, session = null }) => {
+    try {
+        const resultado = await prepararGeneracionObjetivo({ arbolId, generacion, session });
         return {
-            error: 'La generación debe ser un número entero.'
+            valor: resultado.generacion,
+            arbolDesplazado: resultado.desplazamiento > 0
         };
+    } catch (error) {
+        return { error: error.message || 'La generación no es válida.' };
     }
-
-    if (generacionNormalizada >= 0) {
-        return { valor: generacionNormalizada };
-    }
-
-    // Compatibilidad defensiva: si un cliente antiguo envía -1 para nuevos ancestros,
-    // recorremos el árbol completo y guardamos al nuevo nodo en la generación cero.
-    await desplazarGeneracionesArbol(arbolId, Math.abs(generacionNormalizada));
-
-    return {
-        valor: 0,
-        arbolDesplazado: true
-    };
 };
 
 const subirFotoNodo = async (req, res) => {
@@ -451,17 +422,6 @@ const crearPerfilSinCuenta = async (req, res) => {
             });
         }
 
-        await normalizarGeneracionesPersistidas(arbolId);
-
-        const resultadoGeneracion = await prepararGeneracionParaGuardar({
-            arbolId,
-            generacion
-        });
-
-        if (resultadoGeneracion.error) {
-            return res.status(400).json({ mensaje: resultadoGeneracion.error });
-        }
-
         const resultadoFila = validarFila(fila);
 
         if (resultadoFila.error) {
@@ -470,32 +430,49 @@ const crearPerfilSinCuenta = async (req, res) => {
 
         const fotosFormateadas = normalizarFotosNodo(fotos);
 
-        const nuevoNodo = await Nodo.create({
-            arbol: arbolId,
-            usuario: null,
-            creadoPor: req.usuario.id,
-            nombre,
-            iniciales: iniciales || obtenerIniciales(nombre),
-            colorFondo,
-            colorTexto,
-            fechaNacimiento,
-            fechaFallecimiento,
-            fechaCorta,
-            estaFallecido,
-            edad,
-            tipo,
-            estado,
-            origen: 'perfil_sin_cuenta',
-            generacion: resultadoGeneracion.valor,
-            fila: resultadoFila.valor,
-            fotos: fotosFormateadas,
-            biografia,
-            perfilPrivado,
-            visible: true
+        const { nuevoNodo, arbolDesplazado } = await ejecutarOperacionLayout(async (session) => {
+            await normalizarGeneracionesPersistidasCentral({ arbolId, session });
+
+            const resultadoGeneracion = await prepararGeneracionObjetivo({
+                arbolId,
+                generacion,
+                session
+            });
+
+            const documentos = await Nodo.create([{
+                arbol: arbolId,
+                usuario: null,
+                creadoPor: req.usuario.id,
+                nombre,
+                iniciales: iniciales || obtenerIniciales(nombre),
+                colorFondo,
+                colorTexto,
+                fechaNacimiento,
+                fechaFallecimiento,
+                fechaCorta,
+                estaFallecido,
+                edad,
+                tipo,
+                estado,
+                origen: 'perfil_sin_cuenta',
+                generacion: resultadoGeneracion.generacion,
+                fila: resultadoFila.valor,
+                fotos: fotosFormateadas,
+                biografia,
+                perfilPrivado,
+                visible: true
+            }], session ? { session } : {});
+
+            return {
+                nuevoNodo: documentos[0],
+                arbolDesplazado: resultadoGeneracion.desplazamiento > 0
+            };
         });
 
         res.status(201).json({
-            mensaje: 'Perfil sin cuenta agregado al árbol correctamente',
+            mensaje: arbolDesplazado
+                ? 'Perfil agregado y generaciones anteriores recorridas correctamente.'
+                : 'Perfil sin cuenta agregado al árbol correctamente',
             nodo: nuevoNodo
         });
     } catch (error) {
@@ -613,6 +590,61 @@ const actualizarNodo = async (req, res) => {
     }
 };
 
+const moverNodo = async (req, res) => {
+    try {
+        const { arbolId, nodoId } = req.params;
+        const {
+            generacionDestino,
+            filaDestino = null,
+            parejaDestinoId = null
+        } = req.body;
+
+        if (generacionDestino === undefined && !parejaDestinoId) {
+            return res.status(400).json({
+                mensaje: 'Selecciona una generación o una persona para completar el movimiento.'
+            });
+        }
+
+        const arbol = await Arbol.findOne({
+            _id: arbolId,
+            activo: true
+        });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado' });
+        }
+
+        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para reorganizar este árbol.'
+            });
+        }
+
+        const resultado = await moverNodoAtomico({
+            arbolId,
+            nodoId,
+            generacionDestino,
+            filaDestino,
+            parejaDestinoId,
+            creadoPor: req.usuario.id
+        });
+
+        return res.status(200).json({
+            mensaje: resultado.movidoComoPareja
+                ? 'Familiar movido y relación de pareja actualizada correctamente.'
+                : 'Familiar movido correctamente.',
+            nodo: resultado.nodo,
+            union: resultado.union,
+            relacionesEliminadas: resultado.relacionesEliminadas
+        });
+    } catch (error) {
+        console.error('❌ Error al mover nodo:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudo mover el familiar.'
+        });
+    }
+};
+
 const eliminarNodo = async (req, res) => {
     try {
         const { arbolId, nodoId } = req.params;
@@ -714,5 +746,6 @@ module.exports = {
     obtenerDetalleNodo,
     crearPerfilSinCuenta,
     actualizarNodo,
+    moverNodo,
     eliminarNodo
 };

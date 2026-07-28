@@ -4024,7 +4024,7 @@ export default function Inicio() {
                   </div>
                 )}
 
-                {(pub.esRepost || Object.prototype.hasOwnProperty.call(pub, 'publicacionOriginal')) && (
+                {Boolean(pub.esRepost === true || pub.publicacionOriginal || pub.compartidoDesde) && (
                   <PublicacionCompartida
                     original={pub.publicacionOriginal}
                     disponible={pub.publicacionOriginalDisponible !== false}

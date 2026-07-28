@@ -519,8 +519,14 @@ const obtenerTextoPublicacion = (publicacion = {}) => normalizarTexto(
   publicacion.contenido || publicacion.texto || publicacion.titulo || ''
 );
 
+const esPublicacionRepost = (publicacion = {}) => Boolean(
+  publicacion?.esRepost === true ||
+  publicacion?.publicacionOriginal ||
+  publicacion?.compartidoDesde
+);
+
 const crearResumenPublicacion = (publicacion = {}, limite = 135) => {
-  const esRepost = Boolean(publicacion?.esRepost || Object.prototype.hasOwnProperty.call(publicacion || {}, 'publicacionOriginal'));
+  const esRepost = esPublicacionRepost(publicacion);
   const originalDisponible = publicacion?.publicacionOriginalDisponible !== false;
   const fuente = esRepost && originalDisponible && publicacion?.publicacionOriginal
     ? publicacion.publicacionOriginal
@@ -829,8 +835,9 @@ export default function Perfil() {
     try {
       const entradas = await Promise.all(
         obtenerPublicacionesConOriginal(listaPublicaciones).map(async (post) => {
+          const postId = post._id || post.id;
+
           try {
-            const postId = post._id || post.id;
             const res = await fetch(`${API_BASE_URL}/comentarios/publicacion/${postId}`, {
               method: 'GET',
               headers: {
@@ -2615,10 +2622,7 @@ export default function Perfil() {
     : -1;
   const puedeIrPublicacionAnterior = indiceVisor > 0;
   const puedeIrPublicacionSiguiente = indiceVisor >= 0 && indiceVisor < coleccionVisorPublicacion.length - 1;
-  const esRepostVisor = Boolean(
-    publicacionVisor?.esRepost ||
-    (publicacionVisor && Object.prototype.hasOwnProperty.call(publicacionVisor, 'publicacionOriginal'))
-  );
+  const esRepostVisor = esPublicacionRepost(publicacionVisor);
   const originalVisor = publicacionVisor?.publicacionOriginal || null;
   const originalVisorId = originalVisor?._id || originalVisor?.id || null;
   const originalVisorDisponible = publicacionVisor?.publicacionOriginalDisponible !== false;
@@ -3558,7 +3562,7 @@ export default function Perfil() {
                         </div>
                       )}
 
-                      {(post.esRepost || Object.prototype.hasOwnProperty.call(post, 'publicacionOriginal')) && (
+                      {esPublicacionRepost(post) && (
                         <div className="perfil-publicacion-area-compartida">
                           <PublicacionCompartida
                             original={post.publicacionOriginal}
@@ -3695,7 +3699,7 @@ export default function Perfil() {
                             <div className="d-flex flex-column flex-sm-row align-items-sm-start justify-content-between gap-3">
                               <div className="flex-grow-1">
                                 <p className="texto-post mb-2 fw-bold">
-                                  {(post.esRepost || Object.prototype.hasOwnProperty.call(post, 'publicacionOriginal'))
+                                  {esPublicacionRepost(post)
                                     ? 'Publicación compartida'
                                     : (post.titulo || (post.tipo === 'familiar' ? 'Momento Familiar' : 'Recuerdo Histórico'))}
                                 </p>
@@ -3827,7 +3831,7 @@ export default function Perfil() {
                   <div className="galeria-grid guardados-grid">
                     {publicacionesGuardadas.map(post => {
                       const postId = post._id || post.id;
-                      const esRepostGuardado = Boolean(post.esRepost || Object.prototype.hasOwnProperty.call(post, 'publicacionOriginal'));
+                      const esRepostGuardado = esPublicacionRepost(post);
                       const fuenteVisualGuardado = esRepostGuardado && post.publicacionOriginalDisponible !== false && post.publicacionOriginal
                         ? post.publicacionOriginal
                         : post;

@@ -48,7 +48,7 @@ const resolverUrlImagen = (url) => {
   return null;
 };
 
-const ESPACIADO_Y = 175;
+const ESPACIADO_Y = 122;
 // Desplazamiento vertical aproximado desde el centro de una tarjeta de pareja
 // hasta el centro visual de cada persona dentro de esa misma tarjeta.
 const DESPLAZAMIENTO_PERSONA_PAREJA_Y = 31;
@@ -881,6 +881,9 @@ const obtenerYPersonaEnCard = (card, nodoId) => {
 // ==========================================
 // COMPONENTES DE LA ESTRUCTURA DEL ÁRBOL
 // ==========================================
+const DURACION_PULSACION_NODO_MS = 520;
+const DISTANCIA_CANCELAR_PULSACION = 8;
+
 const FilaPersona = ({
   nombre,
   fechaCorta,
@@ -890,80 +893,115 @@ const FilaPersona = ({
   colorTexto,
   fotoPerfil,
   estaFallecido,
-  esModoEdicion,
   tieneDescendencia,
   alHacerClic,
-  draggableMover = false,
   esNodoEnMovimiento = false,
   esDestinoMover = false,
-  alIniciarArrastre,
-  alSoltarSobre
-}) => (
-  <div
-    className={`fila-persona ${esNodoEnMovimiento ? 'nodo-en-movimiento' : ''} ${esDestinoMover ? 'destino-mover' : ''}`}
-    onClick={alHacerClic}
-    draggable={draggableMover}
-    onDragStart={(e) => {
-      if (draggableMover && alIniciarArrastre) {
-        alIniciarArrastre(e);
-      }
-    }}
-    onDragOver={(e) => {
-      if (esDestinoMover && alSoltarSobre) {
-        e.preventDefault();
-      }
-    }}
-    onDrop={(e) => {
-      if (esDestinoMover && alSoltarSobre) {
-        e.preventDefault();
-        e.stopPropagation();
-        alSoltarSobre();
-      }
-    }}
-  >
-    <div className="foto-contenedor">
-      {fotoPerfil && (
-        <img
-          src={fotoPerfil}
-          alt={nombre}
-          crossOrigin="anonymous"
-          className="avatar-foto-perfil-arbol"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none';
-            const fallback = e.currentTarget.nextElementSibling;
-            if (fallback) fallback.style.display = 'flex';
-          }}
-        />
-      )}
+  puedeMantenerPresionado = false,
+  alMantenerPresionado
+}) => {
+  const temporizadorPulsacionRef = useRef(null);
+  const puntoInicialRef = useRef(null);
+  const suprimirClicRef = useRef(false);
 
-      <div
-        className="avatar-iniciales"
-        style={{
-          backgroundColor: colorFondo,
-          color: colorTexto || 'inherit',
-          display: fotoPerfil ? 'none' : 'flex'
-        }}
-      >
-        {iniciales}
+  const cancelarPulsacion = () => {
+    if (temporizadorPulsacionRef.current) {
+      clearTimeout(temporizadorPulsacionRef.current);
+      temporizadorPulsacionRef.current = null;
+    }
+    puntoInicialRef.current = null;
+  };
+
+  const iniciarPulsacion = (evento) => {
+    if (!puedeMantenerPresionado || typeof alMantenerPresionado !== 'function') return;
+    if (evento.pointerType === 'mouse' && evento.button !== 0) return;
+
+    cancelarPulsacion();
+    puntoInicialRef.current = { x: evento.clientX, y: evento.clientY };
+    temporizadorPulsacionRef.current = setTimeout(() => {
+      suprimirClicRef.current = true;
+      temporizadorPulsacionRef.current = null;
+      alMantenerPresionado();
+
+      if (navigator.vibrate) navigator.vibrate(25);
+    }, DURACION_PULSACION_NODO_MS);
+  };
+
+  const revisarMovimientoPuntero = (evento) => {
+    const inicio = puntoInicialRef.current;
+    if (!inicio || !temporizadorPulsacionRef.current) return;
+
+    const distancia = Math.hypot(evento.clientX - inicio.x, evento.clientY - inicio.y);
+    if (distancia > DISTANCIA_CANCELAR_PULSACION) cancelarPulsacion();
+  };
+
+  useEffect(() => cancelarPulsacion, []);
+
+  return (
+    <div
+      className={`fila-persona ${esNodoEnMovimiento ? 'nodo-en-movimiento' : ''} ${esDestinoMover ? 'destino-mover' : ''} ${puedeMantenerPresionado ? 'permite-pulsacion-larga' : ''}`}
+      onClick={(evento) => {
+        if (suprimirClicRef.current) {
+          evento.preventDefault();
+          evento.stopPropagation();
+          suprimirClicRef.current = false;
+          return;
+        }
+        alHacerClic?.(evento);
+      }}
+      onPointerDown={iniciarPulsacion}
+      onPointerMove={revisarMovimientoPuntero}
+      onPointerUp={cancelarPulsacion}
+      onPointerCancel={cancelarPulsacion}
+      onPointerLeave={cancelarPulsacion}
+      onContextMenu={(evento) => {
+        if (puedeMantenerPresionado) evento.preventDefault();
+      }}
+    >
+      <div className="foto-contenedor">
+        {fotoPerfil && (
+          <img
+            src={fotoPerfil}
+            alt={nombre}
+            crossOrigin="anonymous"
+            className="avatar-foto-perfil-arbol"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              const fallback = e.currentTarget.nextElementSibling;
+              if (fallback) fallback.style.display = 'flex';
+            }}
+          />
+        )}
+
+        <div
+          className="avatar-iniciales"
+          style={{
+            backgroundColor: colorFondo,
+            color: colorTexto || 'inherit',
+            display: fotoPerfil ? 'none' : 'flex'
+          }}
+        >
+          {iniciales}
+        </div>
+
+        {tipo === 'creador' && <div className="etiqueta-rol creador"><i className="bi bi-star-fill"></i></div>}
+        {tipo === 'admin' && <div className="etiqueta-rol admin"><i className="bi bi-shield-fill"></i></div>}
       </div>
 
-      {tipo === 'creador' && <div className="etiqueta-rol creador"><i className="bi bi-star-fill"></i></div>}
-      {tipo === 'admin' && <div className="etiqueta-rol admin"><i className="bi bi-shield-fill"></i></div>}
-    </div>
+      <div className="info-nodo">
+        <h6 className="nombre-nodo">{nombre}</h6>
+        <span className="fecha-nodo">
+          {fechaCorta}
+          {estaFallecido && (
+            <span className="icono-fallecido" title="Fallecido">&dagger;</span>
+          )}
+        </span>
+      </div>
 
-    <div className="info-nodo">
-      <h6 className="nombre-nodo">{nombre}</h6>
-      <span className="fecha-nodo">
-        {fechaCorta}
-        {estaFallecido && (
-          <span className="icono-fallecido" title="Fallecido">&dagger;</span>
-        )}
-      </span>
+      {tieneDescendencia && <i className="bi bi-caret-right boton-expandir-flotante" aria-hidden="true"></i>}
     </div>
-
-    {esModoEdicion && tieneDescendencia && <i className="bi bi-caret-right boton-expandir-flotante"></i>}
-  </div>
-);
+  );
+};
 
 const Celda = ({ fila, children }) => (
   <div style={{
@@ -1011,157 +1049,97 @@ const TarjetaPareja = ({
   pareja2,
   tipoUnion,
   unionId,
-  esModoEdicion,
   puedeEditarUnion,
+  puedeEliminarUnion,
+  puedeRelacionar,
+  puedeMover,
   alCambiarTipoUnion,
   alSeleccionar,
   modoRelacionar,
   esDestinoValido,
   onOrigenClick,
   onDestinoClick,
-  modoEliminar,
-  alEliminar,
   alEliminarUnion,
   modoMover,
   nodoEnMovimientoId,
   alSeleccionarMover,
-  alMoverComoPareja,
-  alIniciarArrastreMovimiento
+  alMoverComoPareja
 }) => {
   const [menuUnionAbierto, establecerMenuUnionAbierto] = useState(false);
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
 
-  const manejarClicTarjeta = (e) => {
-    if (esDestinoValido && !modoEliminar) {
-      e.stopPropagation();
+  const manejarClicTarjeta = (evento) => {
+    if (esDestinoValido) {
+      evento.stopPropagation();
       onDestinoClick();
     }
   };
 
-  const mostrarUnion = pareja2 && tipoUnion && !modoRelacionar;
+  const mostrarUnion = pareja2 && tipoUnion;
   const configUnion = obtenerConfigUnion(tipoUnion);
+
+  const renderPersona = (persona) => (
+    <FilaPersona
+      {...persona}
+      esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(persona.id)}
+      esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
+      puedeMantenerPresionado={puedeMover && !modoMover && !modoRelacionar}
+      alMantenerPresionado={() => alSeleccionarMover(persona)}
+      alHacerClic={(evento) => {
+        if (modoRelacionar && esDestinoValido) {
+          evento.stopPropagation();
+          onDestinoClick(persona);
+          return;
+        }
+
+        if (modoMover) {
+          evento.stopPropagation();
+          if (String(nodoEnMovimientoId) !== String(persona.id)) alMoverComoPareja(persona);
+          return;
+        }
+
+        if (!esDestinoValido) alSeleccionar(persona);
+      }}
+    />
+  );
 
   return (
     <div className={`tarjeta-nodo-unificada ${claseDestino}`} onClick={manejarClicTarjeta}>
-      <FilaPersona
-        {...pareja1}
-        esModoEdicion={esModoEdicion}
-        draggableMover={esModoEdicion && !modoEliminar}
-        esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(pareja1.id)}
-        esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(pareja1.id)}
-        alIniciarArrastre={(e) => alIniciarArrastreMovimiento(pareja1, e)}
-        alSoltarSobre={() => alMoverComoPareja(pareja1)}
-        alHacerClic={(e) => {
-          if (modoRelacionar && esDestinoValido && !modoEliminar) {
-            e.stopPropagation();
-            onDestinoClick(pareja1);
-            return;
-          }
-
-          if (modoMover) {
-            e.stopPropagation();
-
-            if (!nodoEnMovimientoId) {
-              alSeleccionarMover(pareja1);
-              return;
-            }
-
-            if (String(nodoEnMovimientoId) !== String(pareja1.id)) {
-              alMoverComoPareja(pareja1);
-            }
-
-            return;
-          }
-
-          if (modoEliminar) {
-            e.stopPropagation();
-            alEliminar(pareja1.id, pareja1.nombre);
-            return;
-          }
-          if (!esDestinoValido) alSeleccionar(pareja1);
-        }}
-      />
-
-      {pareja2 && (
-        <FilaPersona
-          {...pareja2}
-          esModoEdicion={esModoEdicion}
-          draggableMover={esModoEdicion && !modoEliminar}
-          esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(pareja2.id)}
-          esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(pareja2.id)}
-          alIniciarArrastre={(e) => alIniciarArrastreMovimiento(pareja2, e)}
-          alSoltarSobre={() => alMoverComoPareja(pareja2)}
-          alHacerClic={(e) => {
-            if (modoRelacionar && esDestinoValido && !modoEliminar) {
-              e.stopPropagation();
-              onDestinoClick(pareja2);
-              return;
-            }
-
-            if (modoMover) {
-              e.stopPropagation();
-
-              if (!nodoEnMovimientoId) {
-                alSeleccionarMover(pareja2);
-                return;
-              }
-
-              if (String(nodoEnMovimientoId) !== String(pareja2.id)) {
-                alMoverComoPareja(pareja2);
-              }
-
-              return;
-            }
-
-            if (modoEliminar) {
-              e.stopPropagation();
-              alEliminar(pareja2.id, pareja2.nombre);
-              return;
-            }
-            if (!esDestinoValido) alSeleccionar(pareja2);
-          }}
-        />
-      )}
+      {renderPersona(pareja1)}
+      {pareja2 && renderPersona(pareja2)}
 
       {mostrarUnion && (
         <div
           className={`control-union-relacion ${puedeEditarUnion ? 'editable' : ''}`}
           onMouseLeave={() => establecerMenuUnionAbierto(false)}
-          onClick={(e) => {
-            if (modoEliminar && unionId) {
-              e.stopPropagation();
-              alEliminarUnion(unionId);
-              return;
-            }
-
-            if (puedeEditarUnion && !modoEliminar) {
-              e.stopPropagation();
-              establecerMenuUnionAbierto(prev => !prev);
-            }
+          onClick={(evento) => {
+            if (!puedeEditarUnion) return;
+            evento.stopPropagation();
+            establecerMenuUnionAbierto(prev => !prev);
           }}
           role={puedeEditarUnion ? 'button' : undefined}
           tabIndex={puedeEditarUnion ? 0 : undefined}
-          title={puedeEditarUnion ? `Cambiar estado de relación: ${configUnion.etiqueta}` : configUnion.etiqueta}
+          title={puedeEditarUnion ? `Administrar relación: ${configUnion.etiqueta}` : configUnion.etiqueta}
         >
           <div className="icono-union-actual" title={configUnion.etiqueta}>
             <IconoUnion tipoUnion={tipoUnion} />
           </div>
 
-          {puedeEditarUnion && !modoEliminar && (
+          {puedeEditarUnion && (
             <button
               type="button"
               className="boton-editar-union"
-              title="Cambiar estado de relación"
-              onClick={(e) => {
-                e.stopPropagation();
+              title="Administrar relación"
+              onClick={(evento) => {
+                evento.stopPropagation();
                 establecerMenuUnionAbierto(prev => !prev);
               }}
             >
-              <i className="bi bi-plus-lg"></i>
+              <i className="bi bi-chevron-down"></i>
             </button>
           )}
 
-          {puedeEditarUnion && menuUnionAbierto && !modoEliminar && (
+          {puedeEditarUnion && menuUnionAbierto && (
             <div className="menu-tipo-union">
               <div className="menu-tipo-union-titulo">Estado de relación</div>
 
@@ -1170,8 +1148,8 @@ const TarjetaPareja = ({
                   key={opcion.valor}
                   type="button"
                   className={`opcion-tipo-union ${tipoUnion === opcion.valor ? 'activo' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={(evento) => {
+                    evento.stopPropagation();
                     establecerMenuUnionAbierto(false);
                     alCambiarTipoUnion(opcion.valor);
                   }}
@@ -1182,14 +1160,43 @@ const TarjetaPareja = ({
                   <span>{opcion.etiqueta}</span>
                 </button>
               ))}
+
+              {puedeEliminarUnion && unionId && (
+                <button
+                  type="button"
+                  className="opcion-tipo-union opcion-eliminar-union"
+                  onClick={(evento) => {
+                    evento.stopPropagation();
+                    establecerMenuUnionAbierto(false);
+                    alEliminarUnion(unionId);
+                  }}
+                >
+                  <span className="opcion-tipo-union-icono"><i className="bi bi-link-45deg"></i></span>
+                  <span>Eliminar relación</span>
+                </button>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {modoRelacionar && !esDestinoValido && !modoEliminar && (
-        <div className="punto-origen-relacion" onClick={(e) => { e.stopPropagation(); onOrigenClick(); }} title="Crear vínculo desde aquí">
-          <i className="bi bi-caret-right-fill"></i>
+      {puedeRelacionar && !esDestinoValido && (
+        <div className="puntos-relacion-pareja" aria-label="Crear una relación desde una persona de esta pareja">
+          {[pareja1, pareja2].filter(Boolean).map((persona, indice) => (
+            <button
+              key={`relacion-${persona.id}`}
+              type="button"
+              className={`punto-origen-relacion punto-pareja-${indice + 1} ${modoRelacionar ? 'activo' : ''}`}
+              onClick={(evento) => {
+                evento.stopPropagation();
+                onOrigenClick(persona);
+              }}
+              title={`Crear una relación desde ${persona.nombre}`}
+              aria-label={`Crear relación desde ${persona.nombre}`}
+            >
+              <i className="bi bi-caret-right-fill"></i>
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -1198,89 +1205,80 @@ const TarjetaPareja = ({
 
 const TarjetaIndividual = ({
   persona,
-  esModoEdicion,
   alSeleccionar,
-  modoColocacion,
-  alColocarPareja,
   modoRelacionar,
   esDestinoValido,
+  puedeRelacionar,
+  puedeMover,
   onOrigenClick,
   onDestinoClick,
-  modoEliminar,
-  alEliminar,
   modoMover,
   nodoEnMovimientoId,
   alSeleccionarMover,
-  alMoverComoPareja,
-  alIniciarArrastreMovimiento
+  alMoverComoPareja
 }) => {
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
   const clasePendiente = persona.estado === 'Pendiente' ? 'nodo-pendiente' : '';
 
-  const manejarClicTarjeta = (e) => {
-    if (esDestinoValido && !modoEliminar) {
-      e.stopPropagation();
-      onDestinoClick();
-    }
-  };
-
   return (
-    <div className={`tarjeta-nodo-unificada ${clasePendiente} ${claseDestino}`} onClick={manejarClicTarjeta}>
+    <div
+      className={`tarjeta-nodo-unificada ${clasePendiente} ${claseDestino}`}
+      onClick={(evento) => {
+        if (esDestinoValido) {
+          evento.stopPropagation();
+          onDestinoClick(persona);
+        }
+      }}
+    >
       <FilaPersona
         {...persona}
-        esModoEdicion={esModoEdicion}
-        draggableMover={esModoEdicion && !modoEliminar}
         esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(persona.id)}
         esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
-        alIniciarArrastre={(e) => alIniciarArrastreMovimiento(persona, e)}
-        alSoltarSobre={() => alMoverComoPareja(persona)}
-        alHacerClic={(e) => {
-          if (modoRelacionar && esDestinoValido && !modoEliminar) {
-            e.stopPropagation();
+        puedeMantenerPresionado={puedeMover && !modoMover && !modoRelacionar}
+        alMantenerPresionado={() => alSeleccionarMover(persona)}
+        alHacerClic={(evento) => {
+          if (modoRelacionar && esDestinoValido) {
+            evento.stopPropagation();
             onDestinoClick(persona);
             return;
           }
 
           if (modoMover) {
-            e.stopPropagation();
-
-            if (!nodoEnMovimientoId) {
-              alSeleccionarMover(persona);
-              return;
-            }
-
-            if (String(nodoEnMovimientoId) !== String(persona.id)) {
-              alMoverComoPareja(persona);
-            }
-
+            evento.stopPropagation();
+            if (String(nodoEnMovimientoId) !== String(persona.id)) alMoverComoPareja(persona);
             return;
           }
 
-          if (modoEliminar) {
-            e.stopPropagation();
-            alEliminar(persona.id, persona.nombre);
-            return;
-          }
           if (!esDestinoValido) alSeleccionar(persona);
         }}
       />
 
-      {modoColocacion && (
-        <div className="placeholder-pareja" onClick={(e) => { e.stopPropagation(); alColocarPareja(persona); }} title="Añadir como pareja">
-          <i className="bi bi-plus-lg"></i>
-        </div>
-      )}
-
-      {modoRelacionar && !esDestinoValido && !modoColocacion && !modoEliminar && (
-        <div className="punto-origen-relacion" onClick={(e) => { e.stopPropagation(); onOrigenClick(); }} title="Crear vínculo desde aquí">
+      {puedeRelacionar && !esDestinoValido && (
+        <button
+          type="button"
+          className={`punto-origen-relacion ${modoRelacionar ? 'activo' : ''}`}
+          onClick={(evento) => {
+            evento.stopPropagation();
+            onOrigenClick();
+          }}
+          title="Crear una relación desde este nodo"
+          aria-label="Crear relación"
+        >
           <i className="bi bi-caret-right-fill"></i>
-        </div>
+        </button>
       )}
     </div>
   );
 };
 
-const ConectorDinamico = ({ yIn, salidas, modoEliminar, alEliminarLinea }) => {
+const ConectorDinamico = ({
+  yIn,
+  salidas,
+  puedeEditar = false,
+  nodoOrigenId = null,
+  alRelacionarDesdeLinea,
+  alEliminarLinea
+}) => {
   const salidasActivas = salidas || [];
   if (salidasActivas.length === 0 || yIn === undefined || yIn === null) return null;
 
@@ -1293,21 +1291,44 @@ const ConectorDinamico = ({ yIn, salidas, modoEliminar, alEliminarLinea }) => {
       <div className="punto-inicio" style={{ top: `${yIn}px` }}></div>
       <div className="linea-horizontal" style={{ top: `${yIn}px`, width: '50%', left: 0 }}></div>
       <div className="linea-vertical" style={{ top: `${minY}px`, height: `${maxY - minY}px`, left: '50%' }}></div>
+
+      {puedeEditar && nodoOrigenId && (
+        <button
+          type="button"
+          className="accion-conector accion-conector-agregar"
+          style={{ top: `${Number(yIn) - 14}px` }}
+          onClick={(evento) => {
+            evento.stopPropagation();
+            alRelacionarDesdeLinea?.(nodoOrigenId);
+          }}
+          title="Crear otra relación desde esta rama"
+          aria-label="Crear relación desde esta rama"
+        >
+          <i className="bi bi-plus-lg"></i>
+        </button>
+      )}
+
       {salidasActivas.map((salida) => {
         const y = Number(salida.y);
         return (
           <React.Fragment key={salida.hiloId || `${yIn}-${y}`}>
-            <div
-              className={`linea-horizontal ${modoEliminar ? 'linea-rama' : ''}`}
-              style={{ top: `${y}px`, width: '50%', left: '50%' }}
-              onClick={(e) => {
-                if (modoEliminar && salida.hiloId) {
-                  e.stopPropagation();
-                  alEliminarLinea(salida.hiloId);
-                }
-              }}
-            ></div>
-            <div className={`flecha-fin ${modoEliminar ? 'rama-hover' : ''}`} style={{ top: `${y}px` }}></div>
+            <div className="linea-horizontal" style={{ top: `${y}px`, width: '50%', left: '50%' }}></div>
+            <div className="flecha-fin" style={{ top: `${y}px` }}></div>
+            {puedeEditar && salida.hiloId && (
+              <button
+                type="button"
+                className="accion-conector accion-conector-eliminar"
+                style={{ top: `${y - 12}px` }}
+                onClick={(evento) => {
+                  evento.stopPropagation();
+                  alEliminarLinea?.(salida.hiloId);
+                }}
+                title="Eliminar esta relación"
+                aria-label="Eliminar esta relación"
+              >
+                <i className="bi bi-x-lg"></i>
+              </button>
+            )}
           </React.Fragment>
         );
       })}
@@ -1379,6 +1400,13 @@ export default function ArbolGenealogico() {
   const [procesandoFotosPerfilSinCuenta, establecerProcesandoFotosPerfilSinCuenta] = useState(false);
   const [modoFormularioPerfilSinCuenta, establecerModoFormularioPerfilSinCuenta] = useState('crear');
   const [nodoEditandoPerfilSinCuenta, establecerNodoEditandoPerfilSinCuenta] = useState(null);
+  const [generacionObjetivoAgregar, establecerGeneracionObjetivoAgregar] = useState(null);
+  const [procesandoAccionEstructural, establecerProcesandoAccionEstructural] = useState(false);
+  const [relacionPendiente, establecerRelacionPendiente] = useState(null);
+  const [nodoDestinoFotoPendiente, establecerNodoDestinoFotoPendiente] = useState(null);
+  const [ayudaEdicionRapidaVisible, establecerAyudaEdicionRapidaVisible] = useState(() => (
+    localStorage.getItem('legacy_ayuda_edicion_rapida_arbol') !== 'vista'
+  ));
 
   // Momentos Familiares fotográficos del nodo seleccionado.
   const [momentosFamiliaresNodo, establecerMomentosFamiliaresNodo] = useState([]);
@@ -2706,6 +2734,7 @@ export default function ArbolGenealogico() {
     setArchivoFotoPendiente(null);
     setPreviewFotoPendiente('');
     setDestinoFotoPendiente('galeria');
+    establecerNodoDestinoFotoPendiente(null);
     setErrorFotoMetadata('');
     setTempFotoData({
       fechaSubida: new Date().toISOString(),
@@ -2722,7 +2751,7 @@ export default function ArbolGenealogico() {
     limpiarFotoPendiente();
   };
 
-  const handleSeleccionarImagenIndividual = (evento, destino = 'galeria') => {
+  const handleSeleccionarImagenIndividual = (evento, destino = 'galeria', nodoDestinoId = null) => {
     const archivos = Array.from(evento.target.files || []);
     evento.target.value = '';
 
@@ -2740,7 +2769,17 @@ export default function ArbolGenealogico() {
       return;
     }
 
-    if (destino === 'galeria' && formularioPerfilSinCuenta.fotosGaleria.length >= 8) {
+    const nodoObjetivo = nodoDestinoId
+      ? nodos.find(nodo => String(nodo.id) === String(nodoDestinoId))
+      : null;
+    const totalGaleriaNodo = Array.isArray(nodoObjetivo?.fotos)
+      ? nodoObjetivo.fotos.filter(foto => foto?.esFotoPerfil !== true).length
+      : 0;
+
+    if (
+      destino === 'galeria' &&
+      (nodoDestinoId ? totalGaleriaNodo >= 8 : formularioPerfilSinCuenta.fotosGaleria.length >= 8)
+    ) {
       window.alert('La galería ya alcanzó el máximo de 8 fotografías.');
       return;
     }
@@ -2750,6 +2789,7 @@ export default function ArbolGenealogico() {
     setArchivoFotoPendiente(archivo);
     setPreviewFotoPendiente(preview);
     setDestinoFotoPendiente(destino);
+    establecerNodoDestinoFotoPendiente(nodoDestinoId || null);
     setErrorFotoMetadata('');
     setTempFotoData({
       fechaSubida: new Date().toISOString(),
@@ -2825,19 +2865,53 @@ export default function ArbolGenealogico() {
         esFotoPerfil: destinoFotoPendiente === 'perfil'
       };
 
-      establecerFormularioPerfilSinCuenta(prev => {
-        if (destinoFotoPendiente === 'perfil') {
-          return {
-            ...prev,
-            fotoPerfil: fotoNueva
-          };
+      if (nodoDestinoFotoPendiente) {
+        const nodoObjetivo = nodos.find(
+          nodo => String(nodo.id) === String(nodoDestinoFotoPendiente)
+        );
+
+        if (!nodoObjetivo) {
+          throw new Error('El familiar seleccionado ya no está disponible.');
         }
 
-        return {
-          ...prev,
-          fotosGaleria: [...prev.fotosGaleria, fotoNueva].slice(0, 8)
-        };
-      });
+        const fotosActuales = Array.isArray(nodoObjetivo.fotos)
+          ? nodoObjetivo.fotos.map(normalizarFotoNodo).filter(Boolean)
+          : [];
+        const fotosSinPerfil = fotosActuales.map(foto => ({
+          ...foto,
+          esFotoPerfil: destinoFotoPendiente === 'perfil' ? false : foto.esFotoPerfil === true
+        }));
+        const fotosActualizadas = destinoFotoPendiente === 'perfil'
+          ? [fotoNueva, ...fotosSinPerfil.filter(foto => foto.url !== fotoNueva.url)]
+          : [...fotosSinPerfil, fotoNueva];
+
+        await apiFetch(`/api/nodos/arbol/${arbol._id}/${nodoDestinoFotoPendiente}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ fotos: fotosActualizadas })
+        });
+
+        establecerNodoSeleccionado(prev => (
+          prev && String(prev.id) === String(nodoDestinoFotoPendiente)
+            ? { ...prev, fotos: fotosActualizadas, fotoPerfil: obtenerSrcFoto(fotosActualizadas.find(foto => foto.esFotoPerfil)) }
+            : prev
+        ));
+        establecerMensajeSistema('Fotografía añadida correctamente.');
+        await cargarNodosEHilos(arbol._id);
+      } else {
+        establecerFormularioPerfilSinCuenta(prev => {
+          if (destinoFotoPendiente === 'perfil') {
+            return {
+              ...prev,
+              fotoPerfil: fotoNueva
+            };
+          }
+
+          return {
+            ...prev,
+            fotosGaleria: [...prev.fotosGaleria, fotoNueva].slice(0, 8)
+          };
+        });
+      }
 
       setModalFotoMetadata(false);
       limpiarFotoPendiente();
@@ -2891,13 +2965,21 @@ export default function ArbolGenealogico() {
     establecerMostrarEventos(false);
   };
 
-  const abrirPanelAnadirFamiliar = () => {
+  const abrirPanelAnadirFamiliar = (generacionObjetivo = null) => {
+    if (!esUsuarioAdmin) {
+      window.alert('Solo el creador o un administrador pueden agregar familiares al árbol.');
+      return;
+    }
+
+    establecerGeneracionObjetivoAgregar(
+      Number.isInteger(Number(generacionObjetivo)) ? Number(generacionObjetivo) : null
+    );
     establecerMostrarInvitar(true);
     establecerMostrandoFormularioPerfilSinCuenta(false);
     establecerMostrarFiltros(false);
     establecerNodoSeleccionado(null);
     establecerModoRelacionar(false);
-    establecerModoEliminar(false);
+    establecerOrigenRelacion(null);
     establecerModoMover(false);
     establecerNodoEnMovimiento(null);
     establecerMostrarEventos(false);
@@ -2969,6 +3051,10 @@ export default function ArbolGenealogico() {
     establecerProcesandoFotosPerfilSinCuenta(false);
     establecerModoFormularioPerfilSinCuenta('crear');
     establecerNodoEditandoPerfilSinCuenta(null);
+    establecerGeneracionObjetivoAgregar(null);
+    establecerProcesandoAccionEstructural(false);
+    establecerRelacionPendiente(null);
+    establecerNodoDestinoFotoPendiente(null);
     establecerModoColocacion(false);
     establecerPersonaEnColocacion(null);
     establecerModoRelacionar(false);
@@ -4424,8 +4510,10 @@ La persona seguirá dentro del árbol como miembro normal.`
   };
 
   const cerrarPanelInvitar = () => {
+    if (procesandoAccionEstructural) return;
     establecerMostrarInvitar(false);
     establecerMostrandoFormularioPerfilSinCuenta(false);
+    establecerGeneracionObjetivoAgregar(null);
     restablecerFormularioPerfilSinCuenta();
   };
 
@@ -4506,8 +4594,8 @@ La persona seguirá dentro del árbol como miembro normal.`
     };
   };
 
-  const aplicarEdicionPerfilSinCuenta = (datosPerfil) => {
-    if (!nodoEditandoPerfilSinCuenta || !arbol?._id) return;
+  const aplicarEdicionPerfilSinCuenta = async (datosPerfil) => {
+    if (!nodoEditandoPerfilSinCuenta || !arbol?._id || procesandoAccionEstructural) return;
 
     const nodoId = nodoEditandoPerfilSinCuenta.id;
     const datosActualizados = {
@@ -4521,34 +4609,114 @@ La persona seguirá dentro del árbol como miembro normal.`
       estaFallecido: datosPerfil.estaFallecido,
       edad: datosPerfil.edad,
       fotos: datosPerfil.fotos,
-      fotoPerfil: datosPerfil.fotoPerfil,
       biografia: datosPerfil.biografia,
-      estado: datosPerfil.estado,
-      origen: 'perfil_sin_cuenta'
+      estado: datosPerfil.estado
     };
 
-    actualizarNodoVisual(nodoId, datosActualizados);
-    registrarCambioNodoPendiente(nodoId, datosActualizados);
+    try {
+      establecerProcesandoAccionEstructural(true);
+      await apiFetch(`/api/nodos/arbol/${arbol._id}/${nodoId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(datosActualizados)
+      });
 
-    establecerMensajeSistema('Perfil actualizado. Presiona Guardar cambios para aplicarlo.');
-    establecerMostrandoFormularioPerfilSinCuenta(false);
-    establecerMostrarInvitar(false);
-    restablecerFormularioPerfilSinCuenta();
+      establecerMensajeSistema('Perfil familiar actualizado correctamente.');
+      establecerMostrandoFormularioPerfilSinCuenta(false);
+      establecerMostrarInvitar(false);
+      restablecerFormularioPerfilSinCuenta();
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al actualizar perfil sin cuenta:', error);
+      window.alert(error.message || 'No se pudo actualizar el perfil familiar.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
   };
 
-  const prepararPerfilSinCuenta = () => {
-    const datosPerfil = construirDatosPerfilSinCuentaDesdeFormulario();
+  const agregarPerfilSinCuentaDirecto = async (datosPerfil) => {
+    if (!arbol?._id || procesandoAccionEstructural) return;
 
-    if (!datosPerfil) return;
-
-    if (modoFormularioPerfilSinCuenta === 'editar') {
-      aplicarEdicionPerfilSinCuenta(datosPerfil);
+    if (!Number.isInteger(Number(generacionObjetivoAgregar))) {
+      window.alert('Selecciona el botón + de la generación donde deseas agregar al familiar.');
       return;
     }
 
-    iniciarColocacion(datosPerfil);
-    establecerMostrandoFormularioPerfilSinCuenta(false);
-    restablecerFormularioPerfilSinCuenta();
+    const generacion = Number(generacionObjetivoAgregar);
+    const fila = obtenerSiguienteFila(generacion);
+
+    try {
+      establecerProcesandoAccionEstructural(true);
+      await crearNodoSinCuenta({
+        persona: datosPerfil,
+        generacion,
+        fila
+      });
+
+      establecerMensajeSistema(
+        generacion < 0
+          ? 'Familiar agregado como nuevo antepasado. Las generaciones se recorrieron automáticamente.'
+          : 'Familiar agregado correctamente.'
+      );
+      establecerMostrandoFormularioPerfilSinCuenta(false);
+      establecerMostrarInvitar(false);
+      establecerGeneracionObjetivoAgregar(null);
+      restablecerFormularioPerfilSinCuenta();
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al agregar perfil sin cuenta:', error);
+      window.alert(error.message || 'No se pudo agregar el familiar.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
+  };
+
+  const prepararPerfilSinCuenta = async () => {
+    const datosPerfil = construirDatosPerfilSinCuentaDesdeFormulario();
+    if (!datosPerfil) return;
+
+    if (modoFormularioPerfilSinCuenta === 'editar') {
+      await aplicarEdicionPerfilSinCuenta(datosPerfil);
+      return;
+    }
+
+    await agregarPerfilSinCuentaDirecto(datosPerfil);
+  };
+
+  const confirmarInvitacionDirecta = async (amigo) => {
+    if (!amigo || !arbol?._id || procesandoAccionEstructural) return;
+
+    if (!Number.isInteger(Number(generacionObjetivoAgregar))) {
+      window.alert('Selecciona el botón + de la generación donde deseas agregar a esta persona.');
+      return;
+    }
+
+    const generacion = Number(generacionObjetivoAgregar);
+    const fila = obtenerSiguienteFila(generacion);
+    const confirmado = window.confirm(
+      `¿Deseas enviar a ${amigo.nombre} una solicitud para agregarlo a ${generacion < 0 ? 'una nueva generación de antepasados' : `la Generación ${romano(generacion)}`}?`
+    );
+
+    if (!confirmado) return;
+
+    try {
+      establecerProcesandoAccionEstructural(true);
+      await enviarInvitacion({
+        persona: { ...amigo, origen: 'usuario_real' },
+        generacion,
+        fila
+      });
+
+      establecerMensajeSistema('Solicitud enviada correctamente.');
+      establecerMostrarInvitar(false);
+      establecerGeneracionObjetivoAgregar(null);
+      await cargarAmigosDisponibles(arbol._id);
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al enviar invitación familiar:', error);
+      window.alert(error.message || 'No se pudo enviar la solicitud.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
   };
 
   const iniciarColocacion = (datosFamiliar) => {
@@ -5060,52 +5228,120 @@ La persona seguirá dentro del árbol como miembro normal.`
     return tempHiloId;
   };
 
-  const manejarClicOrigen = (card, personaOrigen = null) => {
-    const persona = personaOrigen || mapaNodos.get(String(card.nodoPrincipalId));
+  const iniciarRelacionDesdeNodo = (nodoId) => {
+    const persona = mapaNodos.get(String(nodoId));
+    if (!persona || !esUsuarioAdmin) return;
 
     establecerOrigenRelacion({
-      nodoId: persona?.id || card.nodoPrincipalId,
-      generacion: persona?.generacion ?? card.generacion,
-      fila: persona?.fila ?? card.fila
+      nodoId: persona.id,
+      generacion: Number(persona.generacion),
+      fila: Number(persona.fila),
+      nombre: persona.nombre
     });
+    establecerModoRelacionar(true);
+    establecerRelacionPendiente(null);
+    establecerNodoSeleccionado(null);
+    establecerMostrarInvitar(false);
+    establecerMostrarFiltros(false);
+    establecerMostrarEventos(false);
+    establecerModoMover(false);
+    establecerNodoEnMovimiento(null);
+    establecerMensajeSistema(`Selecciona la persona que deseas relacionar con ${persona.nombre}.`);
+  };
+
+  const manejarClicOrigen = (card, personaOrigen = null) => {
+    const persona = personaOrigen || mapaNodos.get(String(card.nodoPrincipalId));
+    if (!persona?.id) return;
+    iniciarRelacionDesdeNodo(persona.id);
   };
 
   const manejarClicDestino = async (card, nodoDestinoIdSeleccionado = null) => {
     if (!origenRelacion || !card || !arbol?._id) return;
 
     const destinoId = nodoDestinoIdSeleccionado || card.nodoPrincipalId;
+    const nodoOrigen = mapaNodos.get(String(origenRelacion.nodoId));
     const nodoDestino = mapaNodos.get(String(destinoId));
 
-    if (!destinoId) return;
+    if (!nodoOrigen || !nodoDestino || String(nodoOrigen.id) === String(nodoDestino.id)) return;
 
-    const generacionDestino = Number(nodoDestino?.generacion ?? card.generacion);
+    const mismaGeneracion = Number(nodoOrigen.generacion) === Number(nodoDestino.generacion);
+    const opciones = mismaGeneracion
+      ? ['pareja', 'matrimonio', 'divorcio']
+      : ['padre_hijo'];
 
-    if (Number(origenRelacion.generacion) >= generacionDestino) {
-      window.alert(
-        'Para crear una relación padre/hijo, el familiar destino debe estar en una generación posterior. Ejemplo: Marco en Generación I → Draculona en Generación II.'
+    establecerRelacionPendiente({
+      nodoOrigen,
+      nodoDestino,
+      opciones
+    });
+  };
+
+  const cerrarRelacionPendiente = () => {
+    establecerRelacionPendiente(null);
+  };
+
+  const confirmarRelacionPendiente = async (tipoRelacion) => {
+    if (!relacionPendiente || !arbol?._id || procesandoAccionEstructural) return;
+
+    const { nodoOrigen, nodoDestino } = relacionPendiente;
+    let nodoOrigenId = nodoOrigen.id;
+    let nodoDestinoId = nodoDestino.id;
+    let descripcionRelacion = '';
+
+    if (tipoRelacion === 'padre_hijo') {
+      if (Number(nodoOrigen.generacion) > Number(nodoDestino.generacion)) {
+        nodoOrigenId = nodoDestino.id;
+        nodoDestinoId = nodoOrigen.id;
+      }
+
+      const padre = mapaNodos.get(String(nodoOrigenId));
+      const hijo = mapaNodos.get(String(nodoDestinoId));
+      descripcionRelacion = `${padre?.nombre || 'La persona de la generación anterior'} será padre/madre de ${hijo?.nombre || 'la persona de la generación posterior'}`;
+    } else {
+      const unionOrigen = obtenerUnionDeNodo(nodoOrigen.id);
+      const unionDestino = obtenerUnionDeNodo(nodoDestino.id);
+      const yaEstanUnidos = Boolean(
+        unionOrigen &&
+        (
+          String(unionOrigen.nodoOrigenId) === String(nodoDestino.id) ||
+          String(unionOrigen.nodoDestinoId) === String(nodoDestino.id)
+        )
       );
 
-      establecerModoRelacionar(false);
-      establecerOrigenRelacion(null);
-      return;
+      if (!yaEstanUnidos && (unionOrigen || unionDestino)) {
+        window.alert('Una de las personas ya tiene una relación de pareja activa. Elimínala antes de crear una nueva.');
+        return;
+      }
+
+      descripcionRelacion = `${nodoOrigen.nombre} y ${nodoDestino.nombre} quedarán registrados como ${obtenerConfigUnion(tipoRelacion).etiqueta.toLowerCase()}`;
     }
 
-    const tempHiloId = prepararRelacionTemporal({
-      nodoOrigenId: origenRelacion.nodoId,
-      nodoDestinoId: destinoId,
-      tipoRelacion: 'padre_hijo',
-      mensajeDuplicado: 'Esta relación padre/hijo ya existe en el árbol.'
-    });
+    const confirmado = window.confirm(`¿Confirmas esta relación?\n\n${descripcionRelacion}.`);
+    if (!confirmado) return;
 
-    if (!tempHiloId) {
+    try {
+      establecerProcesandoAccionEstructural(true);
+      await apiFetch('/api/hilos/crear', {
+        method: 'POST',
+        body: JSON.stringify({
+          arbolId: arbol._id,
+          nodoOrigenId,
+          nodoDestinoId,
+          tipoRelacion
+        })
+      });
+
+      establecerMensajeSistema('Relación guardada correctamente.');
+      establecerRelacionPendiente(null);
       establecerModoRelacionar(false);
       establecerOrigenRelacion(null);
-      return;
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al crear relación:', error);
+      window.alert(error.message || 'No se pudo crear la relación.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
     }
-
-    establecerMensajeSistema('Relación preparada. Presiona Guardar cambios para aplicarla.');
-    establecerModoRelacionar(false);
-    establecerOrigenRelacion(null);
   };
 
   const iniciarModoEliminar = () => {
@@ -5359,278 +5595,161 @@ La persona seguirá dentro del árbol como miembro normal.`
   };
 
   const iniciarModoMover = () => {
+    if (!esUsuarioAdmin) return;
     establecerModoMover(true);
     establecerNodoEnMovimiento(null);
-    establecerModoColocacion(false);
-    establecerPersonaEnColocacion(null);
     establecerModoRelacionar(false);
     establecerOrigenRelacion(null);
-    establecerModoEliminar(false);
+    establecerRelacionPendiente(null);
     establecerMostrarInvitar(false);
     establecerMostrarFiltros(false);
     establecerMostrarEventos(false);
     establecerNodoSeleccionado(null);
-    establecerMensajeSistema('Modo mover activo. Selecciona la persona que quieres reubicar.');
+    establecerMensajeSistema('Mantén presionado un familiar para moverlo.');
   };
 
   const cancelarModoMover = () => {
     establecerModoMover(false);
     establecerNodoEnMovimiento(null);
+    establecerMensajeSistema('');
   };
 
   const seleccionarNodoParaMover = (persona) => {
-    if (!persona?.id) return;
+    if (!persona?.id || !esUsuarioAdmin) return;
 
+    establecerModoMover(true);
     establecerNodoEnMovimiento(persona);
     establecerNodoSeleccionado(null);
+    establecerModoRelacionar(false);
+    establecerOrigenRelacion(null);
+    establecerRelacionPendiente(null);
+    establecerMostrarInvitar(false);
+    establecerMostrarFiltros(false);
+    establecerMostrarEventos(false);
     establecerMensajeSistema(`Selecciona una generación o toca otra persona para mover a ${persona.nombre} como pareja.`);
   };
 
-  const moverNodoAGeneracion = (generacionDestino) => {
-    if (!nodoEnMovimiento || !arbol?._id) return;
+  const moverNodoAGeneracion = async (generacionDestino) => {
+    if (!nodoEnMovimiento || !arbol?._id || procesandoAccionEstructural) return;
 
     const unionActual = obtenerUnionDeNodo(nodoEnMovimiento.id);
-    let hilosTrabajo = [...hilos];
-
-    if (unionActual) {
-      const parejaActual = obtenerParejaDeNodo(nodoEnMovimiento.id);
-      const confirmado = window.confirm(
-        `${nodoEnMovimiento.nombre} está en una relación${parejaActual?.nombre ? ` con ${parejaActual.nombre}` : ''}. Para moverlo como individual se quitará esa relación. ¿Deseas continuar?`
-      );
-
-      if (!confirmado) return;
-
-      hilosTrabajo = hilosTrabajo.filter(hilo => String(hilo.id) !== String(unionActual.id));
-      registrarEliminacionHiloPendiente(unionActual.id);
-    }
-
-    const filaDestino = obtenerSiguienteFilaDesdeLista(nodos, generacionDestino, nodoEnMovimiento.id);
-
-    const nodosTrabajo = nodos.map(nodo => {
-      if (String(nodo.id) !== String(nodoEnMovimiento.id)) return nodo;
-
-      return {
-        ...nodo,
-        generacion: Number(generacionDestino),
-        fila: filaDestino
-      };
-    });
-
-    registrarCambioNodoPendiente(nodoEnMovimiento.id, {
-      generacion: Number(generacionDestino),
-      fila: filaDestino
-    });
-
-    const resultadoAjustes = aplicarAjustesEstructurales({
-      nodosBase: nodosTrabajo,
-      hilosBase: hilosTrabajo
-    });
-
-    const detalles = [];
-
-    if (resultadoAjustes.hilosEliminados.length > 0) {
-      detalles.push('Se quitaron relaciones padre/hijo que ya no tenían sentido por la generación.');
-    }
-
-    if (resultadoAjustes.huboNormalizacion) {
-      detalles.push('Las generaciones se recorrieron automáticamente para iniciar desde Generación I.');
-    }
-
-    establecerMensajeSistema(
-      `${nodoEnMovimiento.nombre} fue reubicado. ${detalles.join(' ')} Presiona Guardar cambios para aplicarlo.`
-    );
-    establecerNodoEnMovimiento(null);
-  };
-
-  const moverNodoComoPareja = (personaDestino) => {
-    if (!nodoEnMovimiento || !personaDestino || !arbol?._id) return;
-
-    if (String(nodoEnMovimiento.id) === String(personaDestino.id)) {
-      return;
-    }
-
-    const unionDestino = obtenerUnionDeNodo(personaDestino.id);
-
-    if (unionDestino && String(unionDestino.nodoOrigenId) !== String(nodoEnMovimiento.id) && String(unionDestino.nodoDestinoId) !== String(nodoEnMovimiento.id)) {
-      window.alert(`${personaDestino.nombre} ya tiene una relación de pareja. Primero elimina esa relación o elige otra persona.`);
-      return;
-    }
-
-    const unionActual = obtenerUnionDeNodo(nodoEnMovimiento.id);
-    const yaEstanUnidos =
-      unionActual &&
-      (
-        String(unionActual.nodoOrigenId) === String(personaDestino.id) ||
-        String(unionActual.nodoDestinoId) === String(personaDestino.id)
-      );
+    const parejaActual = unionActual ? obtenerParejaDeNodo(nodoEnMovimiento.id) : null;
+    const textoUnion = unionActual
+      ? `\n\nSu relación con ${parejaActual?.nombre || 'su pareja actual'} se eliminará.`
+      : '';
+    const etiquetaGeneracion = Number(generacionDestino) < 0
+      ? 'una nueva generación de antepasados'
+      : `la Generación ${romano(Number(generacionDestino))}`;
 
     const confirmado = window.confirm(
-      yaEstanUnidos
-        ? `¿Deseas mover a ${nodoEnMovimiento.nombre} junto a ${personaDestino.nombre}?`
-        : `¿Deseas mover a ${nodoEnMovimiento.nombre} como pareja de ${personaDestino.nombre}?`
+      `¿Deseas mover a ${nodoEnMovimiento.nombre} a ${etiquetaGeneracion}?${textoUnion}`
     );
-
     if (!confirmado) return;
 
-    let hilosTrabajo = [...hilos];
-
-    if (unionActual && !yaEstanUnidos) {
-      hilosTrabajo = hilosTrabajo.filter(hilo => String(hilo.id) !== String(unionActual.id));
-      registrarEliminacionHiloPendiente(unionActual.id);
-    }
-
-    const nodosTrabajo = nodos.map(nodo => {
-      if (String(nodo.id) !== String(nodoEnMovimiento.id)) return nodo;
-
-      return {
-        ...nodo,
-        generacion: Number(personaDestino.generacion),
-        fila: Number(personaDestino.fila)
-      };
-    });
-
-    registrarCambioNodoPendiente(nodoEnMovimiento.id, {
-      generacion: Number(personaDestino.generacion),
-      fila: Number(personaDestino.fila)
-    });
-
-    if (!yaEstanUnidos) {
-      if (
-        existeRelacionActiva(personaDestino.id, nodoEnMovimiento.id, 'pareja') ||
-        existeRelacionPendiente(personaDestino.id, nodoEnMovimiento.id, 'pareja')
-      ) {
-        window.alert('Esta relación de pareja ya existe en el árbol.');
-        establecerNodoEnMovimiento(null);
-        establecerModoMover(false);
-        return;
-      }
-
-      const tempHiloId = generarIdTemporal('hilo');
-
-      const hiloTemporal = {
-        id: tempHiloId,
-        _id: tempHiloId,
-        arbol: arbol._id,
-        nodoOrigen: personaDestino.id,
-        nodoDestino: nodoEnMovimiento.id,
-        nodoOrigenId: personaDestino.id,
-        nodoDestinoId: nodoEnMovimiento.id,
-        tipoRelacion: 'pareja',
-        estado: 'Activa'
-      };
-
-      hilosTrabajo = [...hilosTrabajo, hiloTemporal];
-
-      registrarCambioPendiente({
-        tipo: 'crearHilo',
-        tempId: tempHiloId,
-        payload: {
-          arbolId: arbol._id,
-          nodoOrigenId: personaDestino.id,
-          nodoDestinoId: nodoEnMovimiento.id,
-          tipoRelacion: 'pareja'
-        }
+    try {
+      establecerProcesandoAccionEstructural(true);
+      const data = await apiFetch(`/api/nodos/arbol/${arbol._id}/${nodoEnMovimiento.id}/mover`, {
+        method: 'PATCH',
+        body: JSON.stringify({ generacionDestino: Number(generacionDestino) })
       });
-    }
 
-    const resultadoAjustes = aplicarAjustesEstructurales({
-      nodosBase: nodosTrabajo,
-      hilosBase: hilosTrabajo
-    });
-
-    const detalles = [];
-
-    if (resultadoAjustes.hilosEliminados.length > 0) {
-      detalles.push('Se quitaron relaciones padre/hijo que ya no tenían sentido por la generación.');
-    }
-
-    if (resultadoAjustes.huboNormalizacion) {
-      detalles.push('Las generaciones se recorrieron automáticamente para iniciar desde Generación I.');
-    }
-
-    establecerMensajeSistema(
-      `${nodoEnMovimiento.nombre} fue movido como pareja de ${personaDestino.nombre}. ${detalles.join(' ')} Presiona Guardar cambios para aplicarlo.`
-    );
-    establecerNodoEnMovimiento(null);
-    establecerModoMover(false);
-  };
-
-  const iniciarArrastreMovimiento = (persona, evento) => {
-    if (!esModoEdicion || !esUsuarioAdmin || !persona?.id) return;
-
-    seleccionarNodoParaMover(persona);
-
-    if (evento?.dataTransfer) {
-      evento.dataTransfer.effectAllowed = 'move';
-      evento.dataTransfer.setData('text/plain', String(persona.id));
+      establecerMensajeSistema(data.mensaje || `${nodoEnMovimiento.nombre} fue movido correctamente.`);
+      establecerModoMover(false);
+      establecerNodoEnMovimiento(null);
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al mover familiar:', error);
+      window.alert(error.message || 'No se pudo mover el familiar.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
     }
   };
 
-  const manejarEliminacion = (idPersona, nombrePersona) => {
+  const moverNodoComoPareja = async (personaDestino) => {
+    if (!nodoEnMovimiento || !personaDestino || !arbol?._id || procesandoAccionEstructural) return;
+    if (String(nodoEnMovimiento.id) === String(personaDestino.id)) return;
+
     const confirmado = window.confirm(
-      `¿Deseas quitar a ${nombrePersona} del árbol? El cambio se aplicará cuando presiones "Guardar cambios".`
+      `¿Deseas mover a ${nodoEnMovimiento.nombre} como pareja de ${personaDestino.nombre}?\n\nLa relación se guardará inmediatamente.`
     );
+    if (!confirmado) return;
 
-    if (!confirmado || !arbol?._id) return;
+    try {
+      establecerProcesandoAccionEstructural(true);
+      const data = await apiFetch(`/api/nodos/arbol/${arbol._id}/${nodoEnMovimiento.id}/mover`, {
+        method: 'PATCH',
+        body: JSON.stringify({ parejaDestinoId: personaDestino.id })
+      });
 
-    establecerNodos(prev => prev.filter(nodo => String(nodo.id) !== String(idPersona)));
-
-    establecerHilos(prev => prev.filter(hilo =>
-      String(hilo.nodoOrigenId) !== String(idPersona) &&
-      String(hilo.nodoDestinoId) !== String(idPersona)
-    ));
-
-    registrarCambioPendiente({
-      tipo: 'eliminarNodo',
-      payload: {
-        arbolId: arbol._id,
-        nodoId: idPersona,
-        nombre: nombrePersona
-      }
-    });
-
-    establecerNodoSeleccionado(null);
-    establecerMensajeSistema('Familiar marcado para eliminar. Presiona Guardar cambios para aplicarlo.');
+      establecerMensajeSistema(data.mensaje || 'Relación de pareja actualizada correctamente.');
+      establecerModoMover(false);
+      establecerNodoEnMovimiento(null);
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al mover como pareja:', error);
+      window.alert(error.message || 'No se pudo mover a la persona como pareja.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
   };
 
-  const manejarEliminacionUnion = (hiloId) => {
+  const manejarEliminacion = async (idPersona, nombrePersona) => {
     const confirmado = window.confirm(
-      '¿Deseas eliminar esta relación de matrimonio/pareja? El cambio se aplicará cuando presiones "Guardar cambios".'
+      `¿Deseas quitar a ${nombrePersona} del árbol?\n\nSus relaciones dentro de este árbol también se eliminarán.`
     );
 
-    if (!confirmado || !arbol?._id) return;
+    if (!confirmado || !arbol?._id || procesandoAccionEstructural) return;
 
-    establecerHilos(prev => prev.filter(hilo => String(hilo.id) !== String(hiloId)));
-
-    registrarCambioPendiente({
-      tipo: 'eliminarHilo',
-      payload: {
-        arbolId: arbol._id,
-        hiloId
-      }
-    });
-
-    establecerMensajeSistema('Relación marcada para eliminar. Presiona Guardar cambios para aplicarlo.');
+    try {
+      establecerProcesandoAccionEstructural(true);
+      const data = await apiFetch(`/api/nodos/arbol/${arbol._id}/${idPersona}`, {
+        method: 'DELETE'
+      });
+      establecerNodoSeleccionado(null);
+      establecerMensajeSistema(data.mensaje || 'Familiar eliminado del árbol.');
+      await cargarNodosEHilos(arbol._id);
+      await cargarAmigosDisponibles(arbol._id);
+    } catch (error) {
+      console.error('Error al eliminar familiar:', error);
+      window.alert(error.message || 'No se pudo eliminar el familiar.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
   };
 
-  const manejarEliminacionLinea = (hiloId) => {
-    const confirmado = window.confirm(
-      '¿Deseas eliminar esta línea de descendencia? El cambio se aplicará cuando presiones "Guardar cambios".'
+  const eliminarRelacionDirecta = async (hiloId, mensajeConfirmacion) => {
+    if (!hiloId || !arbol?._id || procesandoAccionEstructural) return;
+
+    const confirmado = window.confirm(mensajeConfirmacion);
+    if (!confirmado) return;
+
+    try {
+      establecerProcesandoAccionEstructural(true);
+      const data = await apiFetch(`/api/hilos/arbol/${arbol._id}/${hiloId}`, {
+        method: 'DELETE'
+      });
+      establecerMensajeSistema(data.mensaje || 'Relación eliminada correctamente.');
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al eliminar relación:', error);
+      window.alert(error.message || 'No se pudo eliminar la relación.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
+  };
+
+  const manejarEliminacionUnion = async (hiloId) => {
+    await eliminarRelacionDirecta(
+      hiloId,
+      '¿Deseas eliminar esta relación de pareja o matrimonio?'
     );
+  };
 
-    if (!confirmado || !arbol?._id) return;
-
-    establecerHilos(prev => prev.filter(hilo => String(hilo.id) !== String(hiloId)));
-
-    registrarCambioPendiente({
-      tipo: 'eliminarHilo',
-      payload: {
-        arbolId: arbol._id,
-        hiloId
-      }
-    });
-
-    establecerMensajeSistema('Línea marcada para eliminar. Presiona Guardar cambios para aplicarla.');
+  const manejarEliminacionLinea = async (hiloId) => {
+    await eliminarRelacionDirecta(
+      hiloId,
+      '¿Deseas eliminar esta relación de descendencia?'
+    );
   };
 
 
@@ -5648,10 +5767,7 @@ La persona seguirá dentro del árbol como miembro normal.`
   const puedeEditarUnionCard = (card) => {
     if (!card?.unionId || !usuarioActualId) return false;
 
-    if (esUsuarioAdmin) {
-      return esModoEdicion || usuarioFormaParteUnion(card);
-    }
-
+    if (esUsuarioAdmin) return true;
     return usuarioFormaParteUnion(card);
   };
 
@@ -5684,13 +5800,6 @@ La persona seguirá dentro del árbol como miembro normal.`
 
     const etiquetaNueva = obtenerConfigUnion(nuevoTipo).etiqueta;
 
-    if (esUsuarioAdmin && esModoEdicion) {
-      actualizarTipoUnionVisual(card.unionId, nuevoTipo);
-      registrarCambioTipoUnion(card.unionId, nuevoTipo);
-      establecerMensajeSistema(`Relación marcada como "${etiquetaNueva}". Presiona Guardar cambios para aplicarlo.`);
-      return;
-    }
-
     const confirmado = window.confirm(
       `¿Deseas cambiar esta relación a "${etiquetaNueva}"?`
     );
@@ -5720,10 +5829,7 @@ La persona seguirá dentro del árbol como miembro normal.`
       ? estadoFamiliar.usuariosRelacion.some(id => String(id) === String(usuarioActualId))
       : false;
 
-    if (esUsuarioAdmin) {
-      return esModoEdicion || formaParte;
-    }
-
+    if (esUsuarioAdmin) return true;
     return formaParte;
   };
 
@@ -5791,16 +5897,6 @@ La persona seguirá dentro del árbol como miembro normal.`
     const tipoUnion = estadoFamiliar.tipoUnion || 'pareja';
     const campoFecha = obtenerCampoFechaUnion(tipoUnion);
     const labelFecha = obtenerLabelFechaUnion(tipoUnion);
-
-    if (esUsuarioAdmin && esModoEdicion) {
-      actualizarFechaUnionVisual(estadoFamiliar.unionId, campoFecha, valorFecha || null);
-      registrarCambioHiloPendiente(estadoFamiliar.unionId, {
-        [campoFecha]: valorFecha || null
-      });
-
-      establecerMensajeSistema(`${labelFecha} marcada. Presiona Guardar cambios para aplicarla.`);
-      return;
-    }
 
     const confirmado = window.confirm(
       valorFecha
@@ -5988,11 +6084,19 @@ La persona seguirá dentro del árbol como miembro normal.`
 
     const agrupadas = {};
     rels.forEach((rel) => {
-      const key = String(Math.round(rel.yIn));
+      const key = `${String(rel.nodoOrigenId)}-${String(Math.round(rel.yIn))}`;
       if (!agrupadas[key]) {
-        agrupadas[key] = { yIn: rel.yIn, salidas: [] };
+        agrupadas[key] = {
+          yIn: rel.yIn,
+          nodoOrigenId: rel.nodoOrigenId,
+          salidas: []
+        };
       }
-      agrupadas[key].salidas.push({ y: rel.yOut, hiloId: rel.hiloId });
+      agrupadas[key].salidas.push({
+        y: rel.yOut,
+        hiloId: rel.hiloId,
+        nodoDestinoId: rel.nodoDestinoId
+      });
     });
 
     return Object.keys(agrupadas).map(key => (
@@ -6000,14 +6104,22 @@ La persona seguirá dentro del árbol como miembro normal.`
         key={`linea-${genOrigen}-${key}`}
         yIn={agrupadas[key].yIn}
         salidas={agrupadas[key].salidas}
-        modoEliminar={modoEliminar}
+        nodoOrigenId={agrupadas[key].nodoOrigenId}
+        puedeEditar={esUsuarioAdmin}
+        alRelacionarDesdeLinea={iniciarRelacionDesdeNodo}
         alEliminarLinea={manejarEliminacionLinea}
       />
     ));
   };
 
   const renderCard = (card) => {
-    const esDestinoValido = modoRelacionar && origenRelacion && String(origenRelacion.nodoId) !== String(card.nodoPrincipalId);
+    const idsCard = card.tipo === 'pareja'
+      ? [card.pareja1?.id, card.pareja2?.id].filter(Boolean).map(String)
+      : [String(card.nodoPrincipalId)];
+    const esDestinoValido = Boolean(
+      (modoRelacionar && origenRelacion && !idsCard.includes(String(origenRelacion.nodoId))) ||
+      (modoMover && nodoEnMovimiento && !idsCard.includes(String(nodoEnMovimiento.id)))
+    );
 
     if (card.tipo === 'pareja') {
       return (
@@ -6016,22 +6128,27 @@ La persona seguirá dentro del árbol como miembro normal.`
           pareja2={card.pareja2}
           tipoUnion={card.tipoUnion}
           unionId={card.unionId}
-          esModoEdicion={esModoEdicion}
           puedeEditarUnion={puedeEditarUnionCard(card)}
+          puedeEliminarUnion={esUsuarioAdmin}
+          puedeRelacionar={esUsuarioAdmin}
+          puedeMover={esUsuarioAdmin}
           alCambiarTipoUnion={(nuevoTipo) => cambiarTipoUnion(card, nuevoTipo)}
           alSeleccionar={seleccionarNodo}
           modoRelacionar={modoRelacionar}
           esDestinoValido={esDestinoValido}
-          onOrigenClick={() => manejarClicOrigen(card)}
-          onDestinoClick={(personaDestino) => manejarClicDestino(card, personaDestino?.id)}
-          modoEliminar={modoEliminar}
-          alEliminar={manejarEliminacion}
+          onOrigenClick={(personaOrigen) => manejarClicOrigen(card, personaOrigen)}
+          onDestinoClick={(personaDestino) => {
+            if (modoMover && nodoEnMovimiento) {
+              moverNodoComoPareja(personaDestino || card.pareja1);
+              return;
+            }
+            manejarClicDestino(card, personaDestino?.id);
+          }}
           alEliminarUnion={manejarEliminacionUnion}
           modoMover={modoMover}
           nodoEnMovimientoId={nodoEnMovimiento?.id || null}
           alSeleccionarMover={seleccionarNodoParaMover}
           alMoverComoPareja={moverNodoComoPareja}
-          alIniciarArrastreMovimiento={iniciarArrastreMovimiento}
         />
       );
     }
@@ -6039,48 +6156,58 @@ La persona seguirá dentro del árbol como miembro normal.`
     return (
       <TarjetaIndividual
         persona={card.persona}
-        esModoEdicion={esModoEdicion}
         alSeleccionar={seleccionarNodo}
-        modoColocacion={modoColocacion}
-        alColocarPareja={colocarComoPareja}
         modoRelacionar={modoRelacionar}
         esDestinoValido={esDestinoValido}
+        puedeRelacionar={esUsuarioAdmin}
+        puedeMover={esUsuarioAdmin}
         onOrigenClick={() => manejarClicOrigen(card)}
-        onDestinoClick={(personaDestino) => manejarClicDestino(card, personaDestino?.id)}
-        modoEliminar={modoEliminar}
-        alEliminar={manejarEliminacion}
+        onDestinoClick={(personaDestino) => {
+          if (modoMover && nodoEnMovimiento) {
+            moverNodoComoPareja(personaDestino || card.persona);
+            return;
+          }
+          manejarClicDestino(card, personaDestino?.id);
+        }}
         modoMover={modoMover}
         nodoEnMovimientoId={nodoEnMovimiento?.id || null}
         alSeleccionarMover={seleccionarNodoParaMover}
         alMoverComoPareja={moverNodoComoPareja}
-        alIniciarArrastreMovimiento={iniciarArrastreMovimiento}
       />
     );
   };
 
-  const renderColumnaGeneracion = (generacion, etiquetaExtra = '') => {
-    const cards = cardsPorGeneracion.get(Number(generacion)) || [];
-    const filaPlaceholder = obtenerSiguienteFila(generacion);
-    const puedeSoltarMovimiento = modoMover && nodoEnMovimiento;
+  const renderColumnaGeneracion = (generacion, etiquetaExtra = '', { soloAgregar = false } = {}) => {
+    const cards = soloAgregar ? [] : (cardsPorGeneracion.get(Number(generacion)) || []);
+    const puedeMoverAqui = modoMover && nodoEnMovimiento;
+    const textoGeneracion = etiquetaExtra || `GENERACIÓN ${romano(generacion)}`;
 
     return (
       <div
-        className={`columna-generacion ${puedeSoltarMovimiento ? 'columna-mover-activa' : ''}`}
+        className={`columna-generacion ${soloAgregar ? 'columna-generacion-agregar' : ''} ${puedeMoverAqui ? 'columna-mover-activa' : ''}`}
         style={{ height: `${ALTURA_LIENZO}px` }}
-        onDragOver={(e) => {
-          if (puedeSoltarMovimiento) {
-            e.preventDefault();
-          }
-        }}
-        onDrop={(e) => {
-          if (puedeSoltarMovimiento) {
-            e.preventDefault();
-            moverNodoAGeneracion(generacion);
-          }
-        }}
       >
-        <div className={`etiqueta-generacion ${etiquetaExtra ? 'fantasma' : ''}`}>
-          {etiquetaExtra || `GENERACIÓN ${romano(generacion)}`}
+        <div className={`etiqueta-generacion ${soloAgregar ? 'fantasma' : ''}`}>
+          <span>{textoGeneracion}</span>
+          {esUsuarioAdmin && (
+            <button
+              type="button"
+              className={`boton-agregar-generacion ${puedeMoverAqui ? 'mover' : ''}`}
+              onClick={(evento) => {
+                evento.stopPropagation();
+                if (puedeMoverAqui) {
+                  moverNodoAGeneracion(generacion);
+                } else {
+                  abrirPanelAnadirFamiliar(generacion);
+                }
+              }}
+              disabled={procesandoAccionEstructural}
+              title={puedeMoverAqui ? `Mover aquí a ${nodoEnMovimiento.nombre}` : `Agregar familiar en ${textoGeneracion.toLowerCase()}`}
+              aria-label={puedeMoverAqui ? `Mover a ${textoGeneracion}` : `Agregar en ${textoGeneracion}`}
+            >
+              <i className={`bi ${puedeMoverAqui ? 'bi-arrows-move' : 'bi-plus-lg'}`}></i>
+            </button>
+          )}
         </div>
 
         {cards.map(card => (
@@ -6089,18 +6216,20 @@ La persona seguirá dentro del árbol como miembro normal.`
           </Celda>
         ))}
 
-        {modoColocacion && (
-          <Celda fila={filaPlaceholder}>
-            <button className="placeholder-añadir" onClick={() => colocarEnGeneracion(generacion)}>
-              <i className="bi bi-plus-circle"></i> Añadir Familia
-            </button>
-          </Celda>
-        )}
-
-        {modoMover && nodoEnMovimiento && (
-          <Celda fila={filaPlaceholder}>
-            <button className="placeholder-añadir" onClick={() => moverNodoAGeneracion(generacion)}>
-              <i className="bi bi-arrows-move"></i> Mover aquí
+        {soloAgregar && esUsuarioAdmin && (
+          <Celda fila={0}>
+            <button
+              type="button"
+              className="placeholder-añadir placeholder-generacion-nueva"
+              onClick={() => (
+                puedeMoverAqui
+                  ? moverNodoAGeneracion(generacion)
+                  : abrirPanelAnadirFamiliar(generacion)
+              )}
+              disabled={procesandoAccionEstructural}
+            >
+              <i className={`bi ${puedeMoverAqui ? 'bi-arrows-move' : 'bi-plus-circle'}`}></i>
+              {puedeMoverAqui ? 'Mover aquí' : 'Agregar generación'}
             </button>
           </Celda>
         )}
@@ -6584,53 +6713,108 @@ La persona seguirá dentro del árbol como miembro normal.`
         </div>
       )}
 
-      {/* BANNERS FLOTANTES DE GUÍA */}
-      {modoColocacion && (
-        <div className="mensaje-colocacion-flotante">
-          <span>
-            Selecciona un contenedor para añadir a <strong>{personaEnColocacion?.nombre}</strong>
-            {personaEnColocacion?.origen === 'usuario_real' && ' por invitación'}
-          </span>
-          <button className="btn-cancelar-colocacion" onClick={() => establecerModoColocacion(false)}>
-            <i className="bi bi-x-circle me-1"></i> Cancelar
-          </button>
-        </div>
-      )}
-
+      {/* ACCIONES CONTEXTUALES DE EDICIÓN RÁPIDA */}
       {modoRelacionar && (
-        <div className="mensaje-colocacion-flotante">
-          {!origenRelacion ? (
-            <span>Selecciona el <strong>punto parpadeante</strong> del familiar origen</span>
-          ) : (
-            <span>Ahora selecciona la tarjeta del <strong>hijo / descendiente</strong></span>
-          )}
-          <button className="btn-cancelar-colocacion" onClick={() => { establecerModoRelacionar(false); establecerOrigenRelacion(null); }}>
-            <i className="bi bi-x-circle me-1"></i> Cancelar
-          </button>
-        </div>
-      )}
-
-      {modoEliminar && (
-        <div className="mensaje-colocacion-flotante rojo">
-          <span>Modo Eliminación: <strong>Selecciona una persona o vínculo</strong> para borrar</span>
-          <button className="btn-cancelar-colocacion" onClick={() => establecerModoEliminar(false)}>
-            <i className="bi bi-x-circle me-1"></i> Cancelar
-          </button>
-        </div>
-      )}
-
-      {modoMover && (
-        <div className="mensaje-colocacion-flotante">
-          {!nodoEnMovimiento ? (
-            <span>Modo Mover: <strong>selecciona la persona</strong> que quieres reubicar</span>
-          ) : (
+        <div className="accion-contextual-arbol">
+          <div>
+            <i className="bi bi-diagram-3"></i>
             <span>
-              Moviendo a <strong>{nodoEnMovimiento.nombre}</strong>. Elige una generación o toca otra persona para hacerlo pareja.
+              Relacionando desde <strong>{origenRelacion?.nombre || 'un familiar'}</strong>. Selecciona otra persona.
             </span>
-          )}
-          <button className="btn-cancelar-colocacion" onClick={cancelarModoMover}>
-            <i className="bi bi-x-circle me-1"></i> Cancelar
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              establecerModoRelacionar(false);
+              establecerOrigenRelacion(null);
+              establecerRelacionPendiente(null);
+            }}
+          >
+            Cancelar
           </button>
+        </div>
+      )}
+
+      {modoMover && nodoEnMovimiento && (
+        <div className="accion-contextual-arbol">
+          <div>
+            <i className="bi bi-arrows-move"></i>
+            <span>
+              Moviendo a <strong>{nodoEnMovimiento.nombre}</strong>. Elige una generación o toca otra persona para unirlos como pareja.
+            </span>
+          </div>
+          <button type="button" onClick={cancelarModoMover}>Cancelar</button>
+        </div>
+      )}
+
+      {ayudaEdicionRapidaVisible && esUsuarioAdmin && (
+        <div className="modal-accion-arbol-overlay" role="presentation">
+          <section className="modal-accion-arbol ayuda-edicion-rapida" role="dialog" aria-modal="true" aria-labelledby="titulo-ayuda-arbol">
+            <button
+              type="button"
+              className="modal-accion-arbol-cerrar"
+              onClick={() => {
+                localStorage.setItem('legacy_ayuda_edicion_rapida_arbol', 'vista');
+                establecerAyudaEdicionRapidaVisible(false);
+              }}
+              aria-label="Cerrar ayuda"
+            >
+              <i className="bi bi-x-lg"></i>
+            </button>
+            <span className="modal-accion-arbol-etiqueta">Edición rápida</span>
+            <h3 id="titulo-ayuda-arbol">Edita el árbol sin activar ningún modo</h3>
+            <div className="lista-ayuda-edicion-rapida">
+              <div><i className="bi bi-plus-circle"></i><span>Usa el botón <strong>+</strong> de una generación para agregar familiares.</span></div>
+              <div><i className="bi bi-hand-index-thumb"></i><span>Mantén presionado un nodo para moverlo.</span></div>
+              <div><i className="bi bi-caret-right-fill"></i><span>Usa la flecha del nodo para crear una relación.</span></div>
+              <div><i className="bi bi-heart"></i><span>Toca el icono central de una pareja para cambiar su estado.</span></div>
+            </div>
+            <button
+              type="button"
+              className="btn-confirmar-accion-arbol"
+              onClick={() => {
+                localStorage.setItem('legacy_ayuda_edicion_rapida_arbol', 'vista');
+                establecerAyudaEdicionRapidaVisible(false);
+              }}
+            >
+              Entendido
+            </button>
+          </section>
+        </div>
+      )}
+
+      {relacionPendiente && (
+        <div
+          className="modal-accion-arbol-overlay"
+          role="presentation"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) cerrarRelacionPendiente();
+          }}
+        >
+          <section className="modal-accion-arbol selector-relacion-arbol" role="dialog" aria-modal="true" aria-labelledby="titulo-relacion-arbol">
+            <button type="button" className="modal-accion-arbol-cerrar" onClick={cerrarRelacionPendiente} aria-label="Cerrar">
+              <i className="bi bi-x-lg"></i>
+            </button>
+            <span className="modal-accion-arbol-etiqueta">Nueva relación</span>
+            <h3 id="titulo-relacion-arbol">
+              {relacionPendiente.nodoOrigen.nombre} y {relacionPendiente.nodoDestino.nombre}
+            </h3>
+            <p>Selecciona el vínculo que deseas registrar. Se pedirá confirmación antes de guardarlo.</p>
+            <div className="opciones-relacion-arbol">
+              {relacionPendiente.opciones.includes('padre_hijo') && (
+                <button type="button" onClick={() => confirmarRelacionPendiente('padre_hijo')} disabled={procesandoAccionEstructural}>
+                  <i className="bi bi-diagram-2"></i>
+                  <span><strong>Padre / madre e hijo</strong><small>La generación anterior quedará como progenitor.</small></span>
+                </button>
+              )}
+              {relacionPendiente.opciones.includes('pareja') && OPCIONES_UNION.map(opcion => (
+                <button key={opcion.valor} type="button" onClick={() => confirmarRelacionPendiente(opcion.valor)} disabled={procesandoAccionEstructural}>
+                  <IconoUnion tipoUnion={opcion.valor} />
+                  <span><strong>{opcion.etiqueta}</strong><small>Unirá ambos nodos en una tarjeta de pareja.</small></span>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       )}
 
@@ -6657,16 +6841,13 @@ La persona seguirá dentro del árbol como miembro normal.`
           {esUsuarioAdmin && (
             <button
               type="button"
-              className={`interruptor-edicion ${esModoEdicion ? 'activo' : ''}`}
-              onClick={alternarModoEdicion}
-              role="switch"
-              aria-checked={esModoEdicion}
-              aria-label={esModoEdicion ? 'Desactivar edición' : 'Activar edición'}
-              title={esModoEdicion ? 'Salir de edición' : 'Activar edición'}
+              className="boton-accion-arbol boton-ayuda-arbol"
+              onClick={() => establecerAyudaEdicionRapidaVisible(true)}
+              aria-label="Cómo editar el árbol"
+              title="Cómo editar el árbol"
             >
-              <i className="bi bi-pencil-square icono-edicion" aria-hidden="true"></i>
-              <span className="texto-control-superior">Edición</span>
-              <span className="switch-deslizador" aria-hidden="true"></span>
+              <i className="bi bi-question-circle" aria-hidden="true"></i>
+              <span className="texto-control-superior">Ayuda</span>
             </button>
           )}
 
@@ -6682,19 +6863,6 @@ La persona seguirá dentro del árbol como miembro normal.`
             <span className="texto-control-superior">Fotos</span>
           </button>
 
-          {esUsuarioAdmin && !modoColocacion && (
-            <button
-              type="button"
-              className={`boton-accion-arbol boton-anadir-superior ${mostrarInvitar ? 'activo' : ''}`}
-              onClick={abrirPanelAnadirFamiliar}
-              aria-label="Añadir una persona al árbol"
-              aria-pressed={mostrarInvitar}
-              title="Añadir una persona al árbol"
-            >
-              <i className="bi bi-person-plus" aria-hidden="true"></i>
-              <span className="texto-control-superior">Añadir</span>
-            </button>
-          )}
 
           <button
             type="button"
@@ -6739,12 +6907,14 @@ La persona seguirá dentro del árbol como miembro normal.`
               style={{ display: 'flex', transform: `scale(${nivelZoom})`, transformOrigin: 'top left', transition: 'transform 0.2s ease-out' }}
             >
 
-              {(modoColocacion || (modoMover && nodoEnMovimiento)) && (
+              {nodos.length > 0 && nodosFiltrados.length > 0 && esUsuarioAdmin && (
                 <>
-                  {renderColumnaGeneracion(generacionesExistentes[0] - 1, 'NUEVOS ANCESTROS')}
-                  <div className="columna-conector" style={{ height: `${ALTURA_LIENZO}px` }}>
-                    {renderLineasGeneracion(generacionesExistentes[0] - 1)}
-                  </div>
+                  {renderColumnaGeneracion(
+                    generacionesFiltroDisponibles[0] - 1,
+                    'ANTEPASADOS',
+                    { soloAgregar: true }
+                  )}
+                  <div className="columna-conector columna-conector-nueva" style={{ height: `${ALTURA_LIENZO}px` }}></div>
                 </>
               )}
 
@@ -6759,22 +6929,44 @@ La persona seguirá dentro del árbol como miembro normal.`
                 </React.Fragment>
               ))}
 
-              {(modoColocacion || (modoMover && nodoEnMovimiento)) && (
+              {nodos.length > 0 && nodosFiltrados.length > 0 && esUsuarioAdmin && (
                 <>
                   <div className="columna-conector" style={{ height: `${ALTURA_LIENZO}px` }}>
                     {renderLineasGeneracion(generacionesExistentes[generacionesExistentes.length - 1])}
                   </div>
-                  {renderColumnaGeneracion(generacionesExistentes[generacionesExistentes.length - 1] + 1, 'NUEVOS DESCENDIENTES')}
+                  {renderColumnaGeneracion(
+                    generacionesFiltroDisponibles[generacionesFiltroDisponibles.length - 1] + 1,
+                    'DESCENDIENTES',
+                    { soloAgregar: true }
+                  )}
                 </>
               )}
 
-              {nodos.length === 0 && !modoColocacion && (
-                <div className="columna-generacion" style={{ height: `${ALTURA_LIENZO}px` }}>
-                  <div className="etiqueta-generacion">GENERACIÓN I</div>
+              {nodos.length === 0 && (
+                <div className="columna-generacion columna-generacion-vacia" style={{ height: `${ALTURA_LIENZO}px` }}>
+                  <div className="etiqueta-generacion">
+                    <span>GENERACIÓN I</span>
+                    {esUsuarioAdmin && (
+                      <button
+                        type="button"
+                        className="boton-agregar-generacion"
+                        onClick={() => abrirPanelAnadirFamiliar(0)}
+                        aria-label="Agregar primer familiar"
+                      >
+                        <i className="bi bi-plus-lg"></i>
+                      </button>
+                    )}
+                  </div>
                   <Celda fila={0}>
-                    <div className="placeholder-añadir text-center">
-                      <i className="bi bi-tree"></i> Tu árbol está vacío
-                    </div>
+                    <button
+                      type="button"
+                      className="placeholder-añadir text-center placeholder-arbol-vacio"
+                      onClick={() => esUsuarioAdmin && abrirPanelAnadirFamiliar(0)}
+                      disabled={!esUsuarioAdmin}
+                    >
+                      <i className="bi bi-tree"></i>
+                      {esUsuarioAdmin ? 'Agregar primer familiar' : 'Este árbol está vacío'}
+                    </button>
                   </Celda>
                 </div>
               )}
@@ -6826,9 +7018,7 @@ La persona seguirá dentro del árbol como miembro normal.`
 
           {/* CONTROLES ZOOM Y EXPORTAR */}
           <div
-            className={`controles-zoom ${
-              esModoEdicion && !modoColocacion ? 'con-barra-edicion' : ''
-            }`}
+            className="controles-zoom"
           >
             <div style={{ position: 'relative' }}>
               <button
@@ -6882,82 +7072,14 @@ La persona seguirá dentro del árbol como miembro normal.`
             <button className="boton-zoom cuadrado" onClick={restablecerZoom} title="Restablecer vista" aria-label="Restablecer vista"><i className="bi bi-arrows-fullscreen" style={{ fontSize: '0.9rem' }}></i></button>
           </div>
 
-          {/* BARRA DE EDICIÓN FLOTANTE */}
-          {esModoEdicion && !modoColocacion && (
-            <div className="barra-edicion-flotante">
-              <button
-                className={`btn-herramienta-edicion ${modoMover ? 'activo' : ''}`}
-                title="Mover una persona a otra generación o como pareja"
-                onClick={iniciarModoMover}
-              >
-                <i className="bi bi-arrows-move"></i> Mover
-              </button>
-              <div className="separador-vertical"></div>
-
-              <button
-                className={`btn-herramienta-edicion ${modoRelacionar ? 'activo' : ''}`}
-                title="Crear vínculo entre dos personas"
-                onClick={iniciarModoRelacionar}
-              >
-                <i className="bi bi-diagram-3"></i> Relacionar
-              </button>
-              <div className="separador-vertical"></div>
-
-              <button
-                className={`btn-herramienta-edicion peligro ${modoEliminar ? 'activo' : ''}`}
-                title="Quitar una persona del árbol"
-                onClick={iniciarModoEliminar}
-              >
-                <i className="bi bi-trash3"></i> Eliminar
-              </button>
-
-              <div className="separador-vertical"></div>
-              <button
-                className="btn-herramienta-edicion"
-                onClick={descartarTodo}
-                disabled={guardandoCambiosArbol}
-              >
-                Descartar
-              </button>
-
-              <button
-                className="btn-guardar-edicion"
-                onClick={guardarCambiosArbol}
-                disabled={guardandoCambiosArbol}
-              >
-                {guardandoCambiosArbol ? (
-                  <>
-                    <span className="spinner-border spinner-border-sm"></span>
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <i className="bi bi-check2-circle"></i>
-                    Guardar cambios
-                  </>
-                )}
-              </button>
-            </div>
-          )}
         </div>
 
         {/* --- PANELES LATERALES DERECHOS CONDICIONALES --- */}
-        {(nodoSeleccionado || mostrarFiltros || mostrarInvitar || mostrarEventos) && !modoColocacion && !modoRelacionar && !modoEliminar && !modoMover && (
+        {(nodoSeleccionado || mostrarFiltros || mostrarInvitar || mostrarEventos) && !modoRelacionar && !modoMover && (
           <div className="panel-lateral-derecho">
             {nodoSeleccionado ? (
               <div className="d-flex flex-column h-100 position-relative">
                 <button className="boton-cerrar-panel btn-cerrar-absoluto" onClick={() => establecerNodoSeleccionado(null)}><i className="bi bi-x"></i></button>
-
-                {esModoEdicion && esUsuarioAdmin && nodoSeleccionado.origen === 'perfil_sin_cuenta' && (
-                  <button
-                    type="button"
-                    className="boton-editar-perfil-sin-cuenta-panel"
-                    onClick={() => iniciarEditarPerfilSinCuenta(nodoSeleccionado)}
-                    title="Editar información de este familiar"
-                  >
-                    <i className="bi bi-pencil-fill"></i>
-                  </button>
-                )}
 
                 <div className="scroll-contenido flex-grow-1 p-4">
                   <div className="text-center mb-4 mt-2">
@@ -7057,6 +7179,46 @@ La persona seguirá dentro del árbol como miembro normal.`
                       );
                     })()}
                   </div>
+
+                  {esUsuarioAdmin && (
+                    <div className="acciones-perfil-sin-cuenta-panel">
+                      {nodoSeleccionado.origen === 'perfil_sin_cuenta' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => iniciarEditarPerfilSinCuenta(nodoSeleccionado)}
+                            disabled={procesandoAccionEstructural}
+                          >
+                            <i className="bi bi-pencil"></i>
+                            Editar datos
+                          </button>
+
+                          <label className="boton-agregar-foto-nodo">
+                            <i className="bi bi-camera"></i>
+                            Agregar fotografía
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(evento) => handleSeleccionarImagenIndividual(evento, 'galeria', nodoSeleccionado.id)}
+                              disabled={subiendoFoto || procesandoAccionEstructural}
+                            />
+                          </label>
+                        </>
+                      )}
+
+                      {nodoSeleccionado.tipo !== 'creador' && (
+                        <button
+                          type="button"
+                          className="peligro"
+                          onClick={() => manejarEliminacion(nodoSeleccionado.id, nodoSeleccionado.nombre)}
+                          disabled={procesandoAccionEstructural}
+                        >
+                          <i className="bi bi-trash3"></i>
+                          Quitar del árbol
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <hr className="my-3 text-muted" style={{ opacity: 0.2 }} />
 
@@ -7286,14 +7448,16 @@ La persona seguirá dentro del árbol como miembro normal.`
                     <h6 className="fw-bold m-0" style={{ color: 'var(--texto-principal)', fontSize: '0.95rem' }}>
                       {mostrandoFormularioPerfilSinCuenta
                         ? (modoFormularioPerfilSinCuenta === 'editar' ? 'Editar perfil sin cuenta' : 'Crear perfil sin cuenta')
-                        : 'Añadir al Árbol'}
+                        : (Number(generacionObjetivoAgregar) < 0
+                          ? 'Agregar antepasado'
+                          : `Agregar en Generación ${romano(Number(generacionObjetivoAgregar) || 0)}`)}
                     </h6>
                     <p className="text-muted small mb-0 mt-1">
                       {mostrandoFormularioPerfilSinCuenta
                         ? (modoFormularioPerfilSinCuenta === 'editar'
                           ? 'Actualiza la información, fechas y recuerdos de este familiar.'
                           : 'Agrega familiares sin necesidad de cuenta o verificación.')
-                        : 'Invita amigos reales o crea un familiar manual.'}
+                        : 'Elige una persona con perfil o crea un familiar sin cuenta. La acción se guardará al instante.'}
                     </p>
                   </div>
 
@@ -7487,8 +7651,9 @@ La persona seguirá dentro del árbol como miembro normal.`
                             <button
                               className="btn btn-outline-primary rounded-circle p-0 d-flex align-items-center justify-content-center flex-shrink-0"
                               style={{ width: '26px', height: '26px' }}
-                              onClick={() => iniciarColocacion({ ...amigo, origen: 'usuario_real' })}
+                              onClick={() => confirmarInvitacionDirecta(amigo)}
                               title="Enviar invitación familiar"
+                              disabled={procesandoAccionEstructural}
                             >
                               <i className="bi bi-plus-lg" style={{ fontSize: '0.8rem' }}></i>
                             </button>
@@ -7512,7 +7677,7 @@ La persona seguirá dentro del árbol como miembro normal.`
                       type="button"
                       className="btn-volver-form-sin-cuenta"
                       onClick={volverASugerenciasDesdePerfilSinCuenta}
-                      disabled={procesandoFotosPerfilSinCuenta}
+                      disabled={procesandoFotosPerfilSinCuenta || procesandoAccionEstructural}
                     >
                       <i className="bi bi-arrow-left"></i>
                       Volver
@@ -7522,10 +7687,14 @@ La persona seguirá dentro del árbol como miembro normal.`
                       type="button"
                       className="btn-crear-form-sin-cuenta"
                       onClick={prepararPerfilSinCuenta}
-                      disabled={procesandoFotosPerfilSinCuenta}
+                      disabled={procesandoFotosPerfilSinCuenta || procesandoAccionEstructural}
                     >
-                      <i className="bi bi-check2-circle"></i>
-                      {modoFormularioPerfilSinCuenta === 'editar' ? 'Actualizar perfil' : 'Preparar perfil'}
+                      {procesandoAccionEstructural ? (
+                        <span className="spinner-border spinner-border-sm"></span>
+                      ) : (
+                        <i className="bi bi-check2-circle"></i>
+                      )}
+                      {modoFormularioPerfilSinCuenta === 'editar' ? 'Guardar cambios' : 'Agregar'}
                     </button>
                   </div>
                 )}

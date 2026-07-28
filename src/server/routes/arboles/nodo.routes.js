@@ -10,6 +10,7 @@ const {
     obtenerDetalleNodo,
     crearPerfilSinCuenta,
     actualizarNodo,
+    moverNodo,
     eliminarNodo
 } = require('../../controllers/arboles/nodo.controller');
 
@@ -32,6 +33,9 @@ router.post('/perfil-sin-cuenta', verificarToken, crearPerfilSinCuenta);
 
 // Actualizar datos de una persona/nodo
 router.patch('/arbol/:arbolId/:nodoId', verificarToken, actualizarNodo);
+
+// Mover una persona de generación o unirla como pareja en una operación atómica
+router.patch('/arbol/:arbolId/:nodoId/mover', verificarToken, moverNodo);
 
 // Eliminar/ocultar persona del árbol
 router.delete('/arbol/:arbolId/:nodoId', verificarToken, eliminarNodo);
