@@ -160,6 +160,13 @@ const publicacionSchema = new mongoose.Schema({
         default: null
     },
 
+    // Etapa personal del autor. Varias publicaciones pueden compartir la misma Etapa.
+    etapaDestacada: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'EtapaDestacada',
+        default: null
+    },
+
     reacciones: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Usuario'
@@ -217,6 +224,7 @@ publicacionSchema.index({ privacidad: 1, createdAt: -1 });
 publicacionSchema.index({ arbolAudiencia: 1, createdAt: -1 });
 publicacionSchema.index({ 'eventoRelacionado.evento': 1, createdAt: -1 });
 publicacionSchema.index({ 'eventoRelacionado.arbol': 1, createdAt: -1 });
+publicacionSchema.index({ etapaDestacada: 1, createdAt: -1 });
 publicacionSchema.index({ arbolAudiencia: 1, tipo: 1, fechaMomento: -1, createdAt: -1 });
 publicacionSchema.index({ 'personasRelacionadas.nodo': 1, fechaMomento: -1, createdAt: -1 });
 

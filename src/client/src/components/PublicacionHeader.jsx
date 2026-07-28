@@ -1,7 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import iconRecuerdoHistorico from '../assets/publicaciones/icon-recuerdo-historico.png';
-import iconMomentoFamiliar from '../assets/publicaciones/icon-momento-familiar.png';
 import './PublicacionHeader.css';
 
 const normalizarTexto = (valor = '') => String(valor || '').trim();
@@ -59,6 +57,12 @@ export default function PublicacionHeader({
   etiqueta = '',
   anio = '',
   ubicacion = '',
+  etapaNombre = '',
+  etapaIcono = 'bi-stars',
+  etapaColor = '#D4AF37',
+  onEtapaClick = undefined,
+  eventoTitulo = '',
+  onEventoClick = undefined,
   onAutorClick = undefined,
   onMenuClick = undefined,
   opcionesMenu = [],
@@ -69,16 +73,30 @@ export default function PublicacionHeader({
   const handle = crearHandleVisual(nombreUsuario || nombre);
   const fechaCompacta = compactarFechaSocial(fecha);
   const etiquetaLimpia = normalizarTexto(etiqueta).replace(/^#+/, '');
+  const etapaNombreLimpio = normalizarTexto(etapaNombre);
+  const etapaEsInteractiva = etapaNombreLimpio && typeof onEtapaClick === 'function';
+  const etapaIconoSeguro = normalizarTexto(etapaIcono) || 'bi-stars';
+  const etapaColorSeguro = /^#[0-9A-F]{6}$/i.test(normalizarTexto(etapaColor)) ? normalizarTexto(etapaColor) : '#D4AF37';
+  const eventoTituloLimpio = normalizarTexto(eventoTitulo);
+  const eventoEsInteractivo = eventoTituloLimpio && typeof onEventoClick === 'function';
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombre || 'Usuario')}&background=0D1B2A&color=fff`;
+  const esPublica = esHistorico || privacidad === 'publico';
   const nombreTipoPublicacion = esHistorico ? 'Recuerdo Histórico' : 'Momento Familiar';
-  const iconoTipoPublicacion = esHistorico ? iconRecuerdoHistorico : iconMomentoFamiliar;
-  const tooltipId = useId();
+  const iconoTipoPublicacion = esHistorico ? 'bi-globe-americas' : 'bi-people-fill';
+  const descripcionTipoPublicacion = esHistorico
+    ? 'Publicación pública que puede ver cualquier persona en Legacy.'
+    : esPublica
+      ? 'Momento Familiar publicado de forma pública y visible para cualquier persona en Legacy.'
+      : `Publicación visible únicamente para los integrantes autorizados de ${formatearNombreFamilia(nombreFamilia)}.`;
+  const informacionTipoId = useId();
+  const informacionTipoTituloId = useId();
+  const informacionTipoDescripcionId = useId();
   const menuId = useId();
-  const insigniaRef = useRef(null);
+  const tipoPublicacionContenedorRef = useRef(null);
+  const tipoPublicacionRef = useRef(null);
   const botonMenuRef = useRef(null);
   const panelMenuRef = useRef(null);
-  const temporizadorTooltipRef = useRef(null);
-  const [tooltipTipoVisible, setTooltipTipoVisible] = useState(false);
+  const [informacionTipoVisible, setInformacionTipoVisible] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [posicionMenu, setPosicionMenu] = useState({ top: 0, left: 0 });
   const [opcionConfirmando, setOpcionConfirmando] = useState(null);
@@ -92,16 +110,8 @@ export default function PublicacionHeader({
   const tieneMenuDeclarativo = opcionesVisibles.length > 0;
   const puedeMostrarBotonMenu = tieneMenuDeclarativo || typeof onMenuClick === 'function';
 
-  const limpiarTemporizadorTooltip = () => {
-    if (temporizadorTooltipRef.current) {
-      window.clearTimeout(temporizadorTooltipRef.current);
-      temporizadorTooltipRef.current = null;
-    }
-  };
-
-  const ocultarTooltipTipo = () => {
-    limpiarTemporizadorTooltip();
-    setTooltipTipoVisible(false);
+  const ocultarInformacionTipo = () => {
+    setInformacionTipoVisible(false);
   };
 
   const cerrarMenu = ({ devolverFoco = true } = {}) => {
@@ -129,27 +139,21 @@ export default function PublicacionHeader({
     setPosicionMenu({ top, left });
   };
 
-  const manejarClickInsignia = (event) => {
+  const manejarClickTipoPublicacion = (event) => {
     event.stopPropagation();
-    limpiarTemporizadorTooltip();
 
-    setTooltipTipoVisible((visibleActual) => {
-      const siguienteEstado = !visibleActual;
+    if (menuAbierto) {
+      setMenuAbierto(false);
+      setOpcionConfirmando(null);
+      setOpcionInformativa(null);
+    }
 
-      if (siguienteEstado) {
-        temporizadorTooltipRef.current = window.setTimeout(() => {
-          setTooltipTipoVisible(false);
-          temporizadorTooltipRef.current = null;
-        }, 2400);
-      }
-
-      return siguienteEstado;
-    });
+    setInformacionTipoVisible((visibleActual) => !visibleActual);
   };
 
   const manejarClickMenu = (event) => {
     event.stopPropagation();
-    ocultarTooltipTipo();
+    ocultarInformacionTipo();
 
     if (!tieneMenuDeclarativo) {
       onMenuClick?.(event);
@@ -200,14 +204,14 @@ export default function PublicacionHeader({
 
   useEffect(() => {
     const manejarPunteroFuera = (event) => {
-      if (!insigniaRef.current?.contains(event.target)) {
-        ocultarTooltipTipo();
+      if (!tipoPublicacionContenedorRef.current?.contains(event.target)) {
+        ocultarInformacionTipo();
       }
     };
 
     const manejarEscape = (event) => {
       if (event.key !== 'Escape') return;
-      ocultarTooltipTipo();
+      ocultarInformacionTipo();
       if (menuAbierto) cerrarMenu();
     };
 
@@ -217,7 +221,6 @@ export default function PublicacionHeader({
     return () => {
       document.removeEventListener('pointerdown', manejarPunteroFuera);
       document.removeEventListener('keydown', manejarEscape);
-      limpiarTemporizadorTooltip();
     };
   }, [menuAbierto, accionEnCursoId]);
 
@@ -456,17 +459,102 @@ export default function PublicacionHeader({
           </div>
 
           <div className="legacy-publicacion-contexto">
-            <span className="legacy-publicacion-contexto-item audiencia">
-              <i
-                className={`bi ${esHistorico || privacidad === 'publico' ? 'bi-globe-americas' : 'bi-shield-lock-fill'}`}
-                aria-hidden="true"
-              ></i>
-              <span>
-                {esHistorico || privacidad === 'publico'
-                  ? 'Público'
-                  : formatearNombreFamilia(nombreFamilia)}
-              </span>
-            </span>
+            <div className="legacy-publicacion-contexto-principal">
+              <div
+                ref={tipoPublicacionContenedorRef}
+                className="legacy-publicacion-tipo-contenedor"
+              >
+                <button
+                  ref={tipoPublicacionRef}
+                  type="button"
+                  className={`legacy-publicacion-contexto-item tipo-publicacion interactivo ${esHistorico ? 'historico' : 'familiar'} ${informacionTipoVisible ? 'activo' : ''}`}
+                  onClick={manejarClickTipoPublicacion}
+                  aria-label={`${nombreTipoPublicacion}. Mostrar información sobre este tipo de publicación.`}
+                  aria-haspopup="dialog"
+                  aria-controls={informacionTipoVisible ? informacionTipoId : undefined}
+                  aria-expanded={informacionTipoVisible}
+                >
+                  <i className={`bi ${iconoTipoPublicacion}`} aria-hidden="true"></i>
+                  <span>{nombreTipoPublicacion}</span>
+                </button>
+
+                {informacionTipoVisible && (
+                  <div
+                    id={informacionTipoId}
+                    className={`legacy-publicacion-tipo-popover ${esHistorico ? 'historico' : 'familiar'}`}
+                    role="dialog"
+                    aria-modal="false"
+                    aria-labelledby={informacionTipoTituloId}
+                    aria-describedby={informacionTipoDescripcionId}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <span className="legacy-publicacion-tipo-popover-icono" aria-hidden="true">
+                      <i className={`bi ${iconoTipoPublicacion}`}></i>
+                    </span>
+                    <div className="legacy-publicacion-tipo-popover-texto">
+                      <strong id={informacionTipoTituloId}>{nombreTipoPublicacion}</strong>
+                      <p id={informacionTipoDescripcionId}>{descripcionTipoPublicacion}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {etapaNombreLimpio && (
+                etapaEsInteractiva ? (
+                  <button
+                    type="button"
+                    className="legacy-publicacion-contexto-item etapa interactivo"
+                    style={{ '--legacy-etapa-color': etapaColorSeguro }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEtapaClick(event);
+                    }}
+                    title={`Ver publicaciones de la Etapa ${etapaNombreLimpio}`}
+                    aria-label={`Filtrar publicaciones por la Etapa ${etapaNombreLimpio}`}
+                  >
+                    <i className={`bi ${etapaIconoSeguro}`} aria-hidden="true"></i>
+                    <span>{etapaNombreLimpio}</span>
+                  </button>
+                ) : (
+                  <span
+                    className="legacy-publicacion-contexto-item etapa"
+                    style={{ '--legacy-etapa-color': etapaColorSeguro }}
+                    title={`Etapa ${etapaNombreLimpio}`}
+                  >
+                    <i className={`bi ${etapaIconoSeguro}`} aria-hidden="true"></i>
+                    <span>{etapaNombreLimpio}</span>
+                  </span>
+                )
+              )}
+
+              {eventoTituloLimpio && (
+                eventoEsInteractivo ? (
+                  <button
+                    type="button"
+                    className="legacy-publicacion-contexto-item evento interactivo"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEventoClick(event);
+                    }}
+                    title={`Ver publicaciones de ${eventoTituloLimpio}`}
+                    aria-label={`Abrir álbum del evento ${eventoTituloLimpio}`}
+                    aria-haspopup="dialog"
+                  >
+                    <i className="bi bi-calendar-heart-fill" aria-hidden="true"></i>
+                    <span>{eventoTituloLimpio}</span>
+                  </button>
+                ) : (
+                  <span
+                    className="legacy-publicacion-contexto-item evento"
+                    title={eventoTituloLimpio}
+                  >
+                    <i className="bi bi-calendar-heart-fill" aria-hidden="true"></i>
+                    <span>{eventoTituloLimpio}</span>
+                  </span>
+                )
+              )}
+            </div>
 
             {etiquetaLimpia && (
               <span className="legacy-publicacion-contexto-item etiqueta" title={`Etiqueta ${etiquetaLimpia}`}>
@@ -491,28 +579,6 @@ export default function PublicacionHeader({
         </div>
 
         <div className="legacy-publicacion-acciones-header">
-          <button
-            ref={insigniaRef}
-            type="button"
-            className={`legacy-publicacion-insignia ${esHistorico ? 'historico' : 'familiar'} ${tooltipTipoVisible ? 'tooltip-visible' : ''}`}
-            onClick={manejarClickInsignia}
-            aria-label={`${nombreTipoPublicacion}. Toca para mostrar el nombre del tipo de publicación.`}
-            aria-describedby={tooltipTipoVisible ? tooltipId : undefined}
-            aria-expanded={tooltipTipoVisible}
-          >
-            <img
-              src={iconoTipoPublicacion}
-              alt=""
-              className="legacy-publicacion-insignia-imagen"
-              aria-hidden="true"
-              draggable="false"
-              decoding="async"
-            />
-            <span id={tooltipId} role="tooltip" className="legacy-publicacion-insignia-tooltip">
-              {nombreTipoPublicacion}
-            </span>
-          </button>
-
           {puedeMostrarBotonMenu && (
             <button
               ref={botonMenuRef}

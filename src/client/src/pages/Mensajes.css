@@ -831,3 +831,266 @@
         margin-left: 7px;
     }
 }
+
+/* =========================================================
+   GRUPOS FAMILIARES VINCULADOS AL ÁRBOL GENEALÓGICO
+   ========================================================= */
+.item-chat-boton {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--fondo-app);
+    background: transparent;
+    text-align: left;
+    color: inherit;
+}
+
+.item-chat-boton:focus-visible,
+.boton-atras-movil:focus-visible,
+.boton-toggle-banner:focus-visible,
+.boton-enviar:focus-visible {
+    outline: 2px solid var(--dorado);
+    outline-offset: -2px;
+}
+
+.avatar-grupo-familiar {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--dorado-fondo-suave, rgba(203, 161, 53, 0.14));
+    border: 1px solid var(--dorado-borde-suave, rgba(203, 161, 53, 0.32));
+    color: var(--dorado-oscuro);
+    font-size: 1.25rem;
+}
+
+.insignia-arbol-grupo {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--fondo-tarjeta);
+    border: 2px solid var(--fondo-tarjeta);
+    color: var(--dorado);
+    box-shadow: 0 1px 4px rgba(13, 27, 42, 0.18);
+    font-size: 0.68rem;
+}
+
+.avatar-grupo-cabecera {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+    font-size: 1.1rem;
+}
+
+.avatar-grupo-cabecera .insignia-arbol-grupo {
+    width: 18px;
+    height: 18px;
+    font-size: 0.6rem;
+}
+
+.preview-prefijo-grupo {
+    color: var(--dorado-oscuro);
+    font-weight: 700;
+}
+
+.fila-mensaje.mensaje-grupal {
+    align-items: flex-end;
+}
+
+.contenido-burbuja-mensaje {
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.fila-mensaje.enviado .contenido-burbuja-mensaje {
+    align-items: flex-end;
+}
+
+.nombre-emisor-grupo {
+    max-width: 100%;
+    margin: 0 0 4px 10px;
+    color: var(--dorado-oscuro);
+    font-size: 0.75rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.foto-mensaje-grupo {
+    flex: 0 0 32px;
+    background-color: var(--fondo-tarjeta);
+    border: 1px solid var(--borde-color);
+}
+
+.meta-burbuja-mensaje {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    line-height: 1;
+    opacity: 0.75;
+}
+
+.estado-conversacion-vacia {
+    max-width: 390px;
+    padding: 24px;
+}
+
+.estado-conversacion-vacia > i {
+    display: block;
+    margin-bottom: 12px;
+    color: var(--dorado);
+    font-size: 2.2rem;
+}
+
+.estado-conversacion-vacia p,
+.estado-sin-chat p {
+    margin-bottom: 0;
+}
+
+.estado-sin-chat {
+    padding: 24px;
+    text-align: center;
+}
+
+.estado-sin-chat > i {
+    color: var(--borde-fuerte, var(--borde-color));
+    font-size: 4rem;
+}
+
+.aviso-bloqueo-grupo {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 10px 24px;
+    background-color: var(--dorado-fondo-suave, rgba(203, 161, 53, 0.12));
+    border-top: 1px solid var(--dorado-borde-suave, rgba(203, 161, 53, 0.3));
+    color: var(--texto-principal);
+}
+
+.aviso-bloqueo-grupo > i {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    color: var(--dorado-oscuro);
+    font-size: 1.05rem;
+}
+
+.aviso-bloqueo-grupo > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aviso-bloqueo-grupo strong {
+    font-size: 0.82rem;
+}
+
+.aviso-bloqueo-grupo span {
+    color: var(--texto-secundario);
+    font-size: 0.76rem;
+}
+
+.input-mensaje:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.boton-enviar:disabled {
+    cursor: not-allowed;
+    transform: none;
+    opacity: 0.55;
+}
+
+html[data-theme="dark"] .banner-e2e {
+    background-color: rgba(16, 185, 129, 0.13);
+    border-bottom-color: rgba(110, 231, 183, 0.2);
+    color: #a7f3d0;
+}
+
+html[data-theme="dark"] .banner-e2e.minimizado {
+    background-color: rgba(16, 185, 129, 0.09);
+}
+
+html[data-theme="dark"] .texto-corto-e2e,
+html[data-theme="dark"] .boton-toggle-banner {
+    color: #6ee7b7;
+}
+
+html[data-theme="dark"] .item-chat.tiene-no-leidos {
+    background-color: rgba(212, 174, 69, 0.09);
+    border-left-color: var(--dorado);
+}
+
+html[data-theme="dark"] .el-globo-notificacion {
+    background-color: var(--dorado) !important;
+    color: var(--texto-inverso, #09111a);
+}
+
+@media (max-width: 576px) {
+    .avatar-grupo-familiar {
+        width: 44px;
+        height: 44px;
+        flex-basis: 44px;
+        font-size: 1.1rem;
+    }
+
+    .avatar-grupo-cabecera {
+        width: 36px;
+        height: 36px;
+        flex-basis: 36px;
+        font-size: 0.95rem;
+    }
+
+    .avatar-grupo-cabecera .insignia-arbol-grupo {
+        width: 16px;
+        height: 16px;
+        font-size: 0.54rem;
+    }
+
+    .fila-mensaje {
+        max-width: 90%;
+    }
+
+    .fila-mensaje.mensaje-grupal {
+        gap: 7px;
+    }
+
+    .foto-mensaje-grupo {
+        width: 28px;
+        height: 28px;
+        flex-basis: 28px;
+    }
+
+    .nombre-emisor-grupo {
+        margin-left: 8px;
+        font-size: 0.7rem;
+    }
+
+    .aviso-bloqueo-grupo {
+        padding: 8px 12px;
+    }
+
+    .aviso-bloqueo-grupo strong {
+        font-size: 0.76rem;
+    }
+
+    .aviso-bloqueo-grupo span {
+        font-size: 0.7rem;
+    }
+}

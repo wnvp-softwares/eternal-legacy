@@ -5,6 +5,9 @@ import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../conf
 import ImageCropperModal from '../components/ImageCropperModal';
 import PublicacionMediaCarousel from '../components/PublicacionMediaCarousel';
 import PublicacionHeader from '../components/PublicacionHeader';
+import EventoPublicacionesModal from '../components/EventoPublicacionesModal';
+import EtapaDestacadaModal, { obtenerColorContrasteEtapa } from '../components/EtapaDestacadaModal';
+import AsignarEtapaPublicacionModal from '../components/AsignarEtapaPublicacionModal';
 import './Inicio.css';
 
 const obtenerId = (valor) => {
@@ -684,6 +687,12 @@ export default function Inicio() {
   const [arbolAudienciaPublicacion, setArbolAudienciaPublicacion] = useState(null);
   const [etiquetasImagen, setEtiquetasImagen] = useState([]);
   const [fechaMomentoPublicacion, setFechaMomentoPublicacion] = useState('');
+  const [etapasDestacadas, setEtapasDestacadas] = useState([]);
+  const [cargandoEtapasDestacadas, setCargandoEtapasDestacadas] = useState(false);
+  const [etapaPublicacion, setEtapaPublicacion] = useState(null);
+  const [etapaInicialPublicacionId, setEtapaInicialPublicacionId] = useState('');
+  const [modalEtapaAbierto, setModalEtapaAbierto] = useState(false);
+  const [publicacionAsignandoEtapa, setPublicacionAsignandoEtapa] = useState(null);
   const [nodosRelacionablesPublicacion, setNodosRelacionablesPublicacion] = useState([]);
   const [personasRelacionadasPublicacion, setPersonasRelacionadasPublicacion] = useState([]);
   const [busquedaNodoRelacionado, setBusquedaNodoRelacionado] = useState('');
@@ -711,6 +720,30 @@ export default function Inicio() {
   const token = localStorage.getItem('token');
   const [usuarioLogueado, setUsuarioLogueado] = useState(leerUsuarioSesion);
   const API_BASE_URL = API_BASE_URL_CONFIG;
+
+  const cargarEtapasDestacadas = async () => {
+    if (!token) return [];
+    try {
+      setCargandoEtapasDestacadas(true);
+      const respuesta = await fetch(`${API_BASE_URL}/destacadas/mias`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudieron cargar las Etapas.');
+      const lista = Array.isArray(datos.etapas) ? datos.etapas : [];
+      setEtapasDestacadas(lista);
+      return lista;
+    } catch (error) {
+      console.error('No se pudieron cargar las Etapas destacadas:', error);
+      return [];
+    } finally {
+      setCargandoEtapasDestacadas(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarEtapasDestacadas();
+  }, [token]);
 
   useEffect(() => {
     if (!modalAbierto) return undefined;
@@ -1467,6 +1500,8 @@ export default function Inicio() {
     setEtiquetasImagen([]);
     setFechaRecuerdoPublicacion('');
     setFechaMomentoPublicacion('');
+    setEtapaPublicacion(null);
+    setEtapaInicialPublicacionId('');
     setPersonasRelacionadasPublicacion([]);
     setBusquedaNodoRelacionado('');
   };
@@ -1772,6 +1807,8 @@ export default function Inicio() {
       setUbicacionTemporal(publicacion.ubicacionTexto || '');
       setFechaRecuerdoPublicacion(formatearFechaParaInput(publicacion.fechaRecuerdo));
       setFechaMomentoPublicacion(formatearFechaParaInput(publicacion.fechaMomento));
+      setEtapaPublicacion(publicacion.etapaDestacada || null);
+      setEtapaInicialPublicacionId(obtenerId(publicacion.etapaDestacada) || '');
       setMencionesPublicacion((Array.isArray(publicacion.menciones) ? publicacion.menciones : []).map(normalizarPersonaParaEditor));
       setEtiquetasImagen((Array.isArray(publicacion.etiquetasMultimedia) ? publicacion.etiquetasMultimedia : []).map(normalizarPersonaParaEditor));
       setPersonasRelacionadasPublicacion((Array.isArray(publicacion.personasRelacionadas) ? publicacion.personasRelacionadas : []).map(normalizarFamiliarParaEditor));
@@ -1849,6 +1886,14 @@ export default function Inicio() {
       return;
     }
 
+    const fechaEtapaPublicacion = tipoPublicacion === 'historico'
+      ? fechaRecuerdoPublicacion
+      : fechaMomentoPublicacion;
+    if (etapaPublicacion && !fechaEtapaPublicacion) {
+      alert('Selecciona la fecha que corresponde a la Etapa.');
+      return;
+    }
+
     if (tipoPublicacion === 'familiar' && !arbolAudienciaPublicacion?.id) {
       alert('Selecciona la familia donde será visible este Momento Familiar.');
       return;
@@ -1905,13 +1950,18 @@ export default function Inicio() {
         }))
       ));
 
-      if (tipoPublicacion === 'historico') {
+      const etapaActualId = obtenerId(etapaPublicacion) || '';
+      if (!esEdicion || String(etapaActualId) !== String(etapaInicialPublicacionId || '')) {
+        formData.append('etapaDestacadaId', etapaActualId);
+      }
+
+      if (etapaPublicacion && tipoPublicacion === 'historico') {
         formData.append('fechaRecuerdo', fechaRecuerdoPublicacion || '');
       }
 
       if (tipoPublicacion === 'familiar') {
         formData.append('arbolAudienciaId', arbolAudienciaPublicacion.id);
-        formData.append('fechaMomento', fechaMomentoPublicacion || '');
+        if (etapaPublicacion) formData.append('fechaMomento', fechaMomentoPublicacion || '');
         formData.append('personasRelacionadas', JSON.stringify(
           personasRelacionadasPublicacion.map(persona => ({ nodoId: persona.id }))
         ));
@@ -2361,6 +2411,68 @@ export default function Inicio() {
     }
   };
 
+  const reemplazarPublicacionLocal = (publicacionActualizada) => {
+    if (!publicacionActualizada) return;
+    const idActualizado = publicacionActualizada._id || publicacionActualizada.id;
+    setPublicaciones(prev => prev.map(item => (
+      String(item._id || item.id) === String(idActualizado)
+        ? { ...item, ...publicacionActualizada }
+        : item
+    )));
+  };
+
+  const manejarAgregarEtapaPublicacion = (pub) => {
+    setPublicacionAsignandoEtapa(pub);
+    return true;
+  };
+
+  const manejarEliminarEtapaPublicacion = async (pub) => {
+    const pubId = pub?._id || pub?.id;
+    if (!pubId) return false;
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${pubId}/etapa`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo retirar la Etapa.');
+      reemplazarPublicacionLocal(datos.publicacion);
+      setEtapasDestacadas(prev => prev.map(etapa => (
+        String(obtenerId(etapa)) === String(obtenerId(pub.etapaDestacada))
+          ? { ...etapa, totalPublicaciones: Math.max(0, Number(etapa.totalPublicaciones || 0) - 1) }
+          : etapa
+      )));
+      return true;
+    } catch (error) {
+      alert(error.message || 'No se pudo retirar la Etapa.');
+      return false;
+    }
+  };
+
+  const manejarEtapaGuardada = (etapa) => {
+    if (!etapa) return;
+    setEtapasDestacadas(prev => {
+      const id = obtenerId(etapa);
+      const existe = prev.some(item => String(obtenerId(item)) === String(id));
+      return existe
+        ? prev.map(item => String(obtenerId(item)) === String(id) ? { ...item, ...etapa } : item)
+        : [...prev, etapa];
+    });
+
+    if (publicacionAsignandoEtapa) {
+      setPublicacionAsignandoEtapa(prev => prev ? { ...prev, etapaDestacada: etapa } : prev);
+    } else {
+      setEtapaPublicacion(etapa);
+      const fechaActual = tipoPublicacion === 'historico' ? fechaRecuerdoPublicacion : fechaMomentoPublicacion;
+      if (!fechaActual) {
+        const hoy = new Date().toISOString().slice(0, 10);
+        if (tipoPublicacion === 'historico') setFechaRecuerdoPublicacion(hoy);
+        else setFechaMomentoPublicacion(hoy);
+      }
+    }
+    setModalEtapaAbierto(false);
+  };
+
   const crearOpcionesMenuPublicacion = (pub, esAutor) => {
     const esHistorico = pub.tipo === 'historico';
 
@@ -2444,6 +2556,26 @@ export default function Inicio() {
         activa: Boolean(pub.guardadaPorMi),
         onClick: () => manejarGuardarPublicacion(pub)
       },
+      pub.etapaDestacada ? {
+        id: 'eliminar-etapa',
+        etiqueta: 'Eliminar Etapa',
+        descripcion: 'Solo se quitará la etiqueta; la publicación y sus archivos se conservarán.',
+        icono: 'bi-tag-fill',
+        separadorAntes: true,
+        confirmacion: {
+          titulo: '¿Quitar la Etapa de esta publicación?',
+          mensaje: 'La publicación seguirá disponible, pero dejará de pertenecer a la Destacada y volverá a ordenarse por su fecha de publicación.',
+          confirmarTexto: 'Eliminar Etapa'
+        },
+        onClick: () => manejarEliminarEtapaPublicacion(pub)
+      } : {
+        id: 'agregar-etapa',
+        etiqueta: 'Agregar Etapa',
+        descripcion: 'Organiza esta publicación dentro de una Destacada y establece su fecha.',
+        icono: 'bi-stars',
+        separadorAntes: true,
+        onClick: () => manejarAgregarEtapaPublicacion(pub)
+      },
       {
         id: 'editar',
         etiqueta: 'Editar publicación',
@@ -2458,12 +2590,12 @@ export default function Inicio() {
         icono: 'bi-people-fill',
         onClick: () => cargarPublicacionParaEditar(pub._id || pub.id, { accionInicial: 'cambiar-audiencia' })
       }] : []),
-      {
+      ...(pub.etapaDestacada ? [{
         id: 'fecha',
-        etiqueta: esHistorico ? 'Editar fecha del recuerdo' : 'Editar fecha del momento',
+        etiqueta: 'Editar fecha de la Etapa',
         icono: 'bi-calendar3',
         onClick: () => cargarPublicacionParaEditar(pub._id || pub.id, { accionInicial: 'editar-fecha' })
-      },
+      }] : []),
       {
         id: 'eliminar',
         etiqueta: 'Eliminar publicación',
@@ -2725,7 +2857,7 @@ export default function Inicio() {
     setEventoRelacionadoPublicacion(eventoNormalizado);
     setEventoRelacionadoDesdeHashtag(true);
 
-    if (!fechaMomentoPublicacion && eventoNormalizado.esPasado && eventoNormalizado.fechaInicio) {
+    if (etapaPublicacion && !fechaMomentoPublicacion && eventoNormalizado.esPasado && eventoNormalizado.fechaInicio) {
       const fechaCruda = String(eventoNormalizado.fechaInicio);
       const coincidenciaFecha = fechaCruda.match(/^\d{4}-\d{2}-\d{2}/);
       if (coincidenciaFecha) {
@@ -2850,37 +2982,6 @@ export default function Inicio() {
 
   const abrirAlbumEvento = (evento) => { cargarPublicacionesDeEvento(evento); };
 
-  const renderChipEventoPublicacion = (evento) => {
-    const eventoNormalizado = normalizarEventoParaPublicacion(evento);
-    if (!eventoNormalizado) return null;
-
-    const fechaCompacta = eventoNormalizado.fechaInicio
-      ? formatearFechaContextoPublicacion(eventoNormalizado.fechaInicio)
-      : '';
-    const estadoTemporal = eventoNormalizado.esPasado ? 'Pasado' : 'Próximo';
-
-    return (
-      <button
-        type="button"
-        className="evento-post-render evento-post-render-clickable"
-        onClick={() => abrirAlbumEvento(eventoNormalizado)}
-        title={`Ver publicaciones de ${eventoNormalizado.titulo}`}
-      >
-        <i className="bi bi-calendar-heart-fill" aria-hidden="true"></i>
-        <span className="evento-post-render-titulo">{eventoNormalizado.titulo}</span>
-        <span className={`evento-post-render-estado ${eventoNormalizado.esPasado ? 'pasado' : 'proximo'}`}>
-          {estadoTemporal}
-        </span>
-        {fechaCompacta && (
-          <>
-            <span className="evento-post-render-separador" aria-hidden="true">·</span>
-            <span className="evento-post-render-fecha">{fechaCompacta}</span>
-          </>
-        )}
-      </button>
-    );
-  };
-
   const renderVistaPublicacionAlbum = (pub = {}) => {
     const tieneMultimedia = Array.isArray(pub.multimedia)
       ? pub.multimedia.some(Boolean)
@@ -2888,34 +2989,57 @@ export default function Inicio() {
     const fechaFormateada = formatearFechaPublicacion(pub.createdAt);
     const autorId = obtenerIdPersonaPerfil(pub.autor) || obtenerIdPersonaPerfil(pub.usuario);
     const eventoRelacionadoAlbum = obtenerEventoRelacionadoDePublicacion(pub);
+    const etapaAlbum = pub.etapaDestacada && typeof pub.etapaDestacada === 'object' ? pub.etapaDestacada : null;
+    const etapaAlbumId = obtenerId(etapaAlbum);
 
     const imagenAutorAlbum = obtenerImagenDeEntidad(pub.autor) || obtenerImagenDeEntidad(pub.usuario);
     const nombreAutorAlbum = obtenerNombreDeEntidad(pub.autor) || obtenerNombreDeEntidad(pub.usuario, 'Familiar');
     const srcAvatarAlbum = obtenerUrlImagenPerfil(imagenAutorAlbum, nombreAutorAlbum);
 
     return (
-      <article key={pub._id || `${pub.contenido}-${fechaFormateada}`} className="album-evento-publicacion">
-        <div className="album-evento-publicacion-header">
-          <img
-            src={srcAvatarAlbum}
-            alt={nombreAutorAlbum}
-            className="foto-perfil-post perfil-interactivo"
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreAutorAlbum)}&background=0D1B2A&color=fff`;
-            }}
-            onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}
-          />
-          <div>
-            <strong className="perfil-interactivo" onClick={() => autorId && irAPerfil(pub.autor || pub.usuario)}>
-              {nombreAutorAlbum}
-            </strong>
-            {fechaFormateada && <span>{fechaFormateada}</span>}
-          </div>
+      <article key={pub._id || `${pub.contenido}-${fechaFormateada}`} className="evento-publicaciones-modal-publicacion">
+        <div className="evento-publicaciones-modal-publicacion-header">
+          <button
+            type="button"
+            className="evento-publicaciones-modal-autor"
+            onClick={autorId ? () => irAPerfil(pub.autor || pub.usuario) : undefined}
+            disabled={!autorId}
+            aria-label={autorId ? `Abrir perfil de ${nombreAutorAlbum}` : undefined}
+          >
+            <img
+              src={srcAvatarAlbum}
+              alt=""
+              className="evento-publicaciones-modal-avatar"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreAutorAlbum)}&background=0D1B2A&color=fff`;
+              }}
+            />
+            <span className="evento-publicaciones-modal-autor-texto">
+              <strong>{nombreAutorAlbum}</strong>
+              {fechaFormateada && <small>{fechaFormateada}</small>}
+            </span>
+          </button>
+          {etapaAlbum && etapaAlbumId && autorId && (
+            <button
+              type="button"
+              className="evento-publicaciones-modal-etapa"
+              style={{ '--evento-modal-etapa-color': etapaAlbum.color || '#D4AF37' }}
+              onClick={() => {
+                const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+                cerrarAlbumEvento();
+                navigate(`${miId && String(miId) === String(autorId) ? '/perfil' : `/perfil/${autorId}`}?destacada=${etapaAlbumId}`);
+              }}
+              title={`Ver la Etapa ${etapaAlbum.nombre}`}
+            >
+              <i className={`bi ${etapaAlbum.icono || 'bi-stars'}`} aria-hidden="true"></i>
+              <span>{etapaAlbum.nombre}</span>
+            </button>
+          )}
         </div>
 
         {pub.contenido && (
-          <p className="album-evento-publicacion-texto">
+          <p className="evento-publicaciones-modal-publicacion-texto">
             {renderTextoConMenciones(pub.contenido, pub.menciones, eventoRelacionadoAlbum)}
           </p>
         )}
@@ -2926,7 +3050,7 @@ export default function Inicio() {
             tipo={pub.tipo === 'historico' ? 'historico' : 'familiar'}
             compacto
             alt="Momento del evento"
-            className="album-evento-multimedia-carousel"
+            className="evento-publicaciones-modal-carrusel"
           />
         )}
       </article>
@@ -2992,7 +3116,7 @@ export default function Inicio() {
   };
 
   const renderChipsHerramientas = () => {
-    const hayChips = ubicacionPublicacion || eventoRelacionadoPublicacion || personasRelacionadasPublicacion.length > 0 || (tipoPublicacion === 'familiar' && arbolAudienciaPublicacion);
+    const hayChips = etapaPublicacion || ubicacionPublicacion || eventoRelacionadoPublicacion || personasRelacionadasPublicacion.length > 0 || (tipoPublicacion === 'familiar' && arbolAudienciaPublicacion);
     if (!hayChips) return null;
 
     return (
@@ -3001,6 +3125,17 @@ export default function Inicio() {
           <span className="chip-publicacion familia">
             <i className="bi bi-shield-lock-fill"></i>
             Visible para {arbolAudienciaPublicacion.nombreFamilia}
+          </span>
+        )}
+        {etapaPublicacion && (
+          <span className="chip-publicacion etapa" style={{ '--etapa-chip-color': etapaPublicacion.color || '#D4AF37' }}>
+            <i className={`bi ${etapaPublicacion.icono || 'bi-stars'}`}></i>
+            {etapaPublicacion.nombre}
+            <button type="button" onClick={() => {
+              setEtapaPublicacion(null);
+              setFechaRecuerdoPublicacion('');
+              setFechaMomentoPublicacion('');
+            }} aria-label="Quitar Etapa"><i className="bi bi-x"></i></button>
           </span>
         )}
         {ubicacionPublicacion && (
@@ -3030,6 +3165,50 @@ export default function Inicio() {
 
   const renderPanelHerramienta = () => {
     if (!panelHerramientaActivo) return null;
+
+    if (panelHerramientaActivo === 'etapas') {
+      return (
+        <div className="panel-herramienta-publicacion panel-etapas-publicacion">
+          <div className="panel-etapas-cabecera">
+            <div>
+              <strong>Seleccionar Etapa</strong>
+              <small>La fecha será obligatoria y ordenará la publicación en tu Línea del Tiempo.</small>
+            </div>
+            <button type="button" onClick={() => setModalEtapaAbierto(true)}><i className="bi bi-plus-lg"></i> Nueva</button>
+          </div>
+          {cargandoEtapasDestacadas ? (
+            <div className="estado-sugerencias-publicacion"><span className="spinner-border spinner-border-sm"></span> Cargando Etapas...</div>
+          ) : etapasDestacadas.length > 0 ? (
+            <div className="lista-etapas-publicacion">
+              {etapasDestacadas.map(etapa => {
+                const seleccionada = String(obtenerId(etapaPublicacion) || '') === String(obtenerId(etapa));
+                return (
+                  <button key={obtenerId(etapa)} type="button" className={seleccionada ? 'seleccionada' : ''} onClick={() => {
+                    setEtapaPublicacion(etapa);
+                    const fechaActual = tipoPublicacion === 'historico' ? fechaRecuerdoPublicacion : fechaMomentoPublicacion;
+                    if (!fechaActual) {
+                      const fechaEvento = tipoPublicacion === 'familiar' && eventoRelacionadoPublicacion?.esPasado
+                        ? formatearFechaParaInput(eventoRelacionadoPublicacion.fechaInicio)
+                        : '';
+                      const fechaSugerida = fechaEvento || new Date().toISOString().slice(0, 10);
+                      if (tipoPublicacion === 'historico') setFechaRecuerdoPublicacion(fechaSugerida);
+                      else setFechaMomentoPublicacion(fechaSugerida);
+                    }
+                    setPanelHerramientaActivo(null);
+                  }}>
+                    <span style={{ backgroundColor: etapa.color, color: obtenerColorContrasteEtapa(etapa.color) }}><i className={`bi ${etapa.icono || 'bi-stars'}`}></i></span>
+                    <strong>{etapa.nombre}</strong>
+                    <i className={`bi ${seleccionada ? 'bi-check-circle-fill' : 'bi-plus-circle'}`}></i>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="estado-sugerencias-publicacion">Crea tu primera Etapa para comenzar a organizar tus recuerdos.</div>
+          )}
+        </div>
+      );
+    }
 
     if (panelHerramientaActivo === 'emoji') {
       return (
@@ -3362,6 +3541,29 @@ export default function Inicio() {
 
   return (
     <div className="container-fluid max-w-custom p-0">
+      <EtapaDestacadaModal
+        abierto={modalEtapaAbierto}
+        token={token}
+        onCerrar={() => setModalEtapaAbierto(false)}
+        onGuardada={manejarEtapaGuardada}
+      />
+
+      <AsignarEtapaPublicacionModal
+        abierto={Boolean(publicacionAsignandoEtapa) && !modalEtapaAbierto}
+        publicacion={publicacionAsignandoEtapa}
+        etapas={etapasDestacadas}
+        token={token}
+        onCerrar={() => setPublicacionAsignandoEtapa(null)}
+        onCrearEtapa={() => {
+          setModalEtapaAbierto(true);
+        }}
+        onAsignada={(publicacionActualizada) => {
+          reemplazarPublicacionLocal(publicacionActualizada);
+          setPublicacionAsignandoEtapa(null);
+          cargarEtapasDestacadas();
+        }}
+      />
+
       <ImageCropperModal
         abierto={cropperPublicacion.abierto}
         archivo={cropperPublicacion.archivo}
@@ -3427,50 +3629,18 @@ export default function Inicio() {
         </div>
       )}
 
+
       {/* ÁLBUM / HILO DE EVENTO FAMILIAR */}
-      {albumEventoAbierto && eventoAlbumSeleccionado && (
-        <div className="modal-backdrop-custom" onClick={cerrarAlbumEvento}>
-          <div className="modal-album-evento" onClick={(e) => e.stopPropagation()}>
-            <button className="btn-cerrar-modal btn-cerrar-album-evento" onClick={cerrarAlbumEvento}><i className="bi bi-x"></i></button>
-
-            <div className="album-evento-hero">
-              <div className="album-evento-icono"><i className="bi bi-calendar-heart-fill"></i></div>
-              <div className="album-evento-info">
-                <span className="album-evento-kicker">ÁLBUM DEL EVENTO</span>
-                <h3>{eventoAlbumSeleccionado.titulo}</h3>
-                <p>{eventoAlbumSeleccionado.detalle || eventoAlbumSeleccionado.nombreFamilia}</p>
-              </div>
-            </div>
-
-            <div className="album-evento-cuerpo">
-              <div className="album-evento-resumen">
-                <div>
-                  <strong>{publicacionesEvento.length}</strong>
-                  <span>{publicacionesEvento.length === 1 ? 'publicación relacionada' : 'publicaciones relacionadas'}</span>
-                </div>
-                <button type="button" className="btn-refrescar-album-evento" onClick={() => cargarPublicacionesDeEvento(eventoAlbumSeleccionado)} disabled={cargandoPublicacionesEvento}>
-                  <i className={`bi ${cargandoPublicacionesEvento ? 'bi-arrow-repeat girando' : 'bi-arrow-clockwise'}`}></i>
-                  Actualizar
-                </button>
-              </div>
-
-              {cargandoPublicacionesEvento ? (
-                <div className="estado-album-evento"><span className="spinner-border spinner-border-sm me-2"></span>Cargando momentos del evento...</div>
-              ) : errorPublicacionesEvento ? (
-                <div className="estado-album-evento error"><i className="bi bi-exclamation-triangle me-2"></i>{errorPublicacionesEvento}</div>
-              ) : publicacionesEvento.length > 0 ? (
-                <div className="lista-publicaciones-album-evento">{publicacionesEvento.map(renderVistaPublicacionAlbum)}</div>
-              ) : (
-                <div className="estado-album-evento vacio">
-                  <i className="bi bi-images"></i>
-                  <strong>Aún no hay momentos en este evento.</strong>
-                  <span>Cuando la familia publique fotos o videos mencionando este evento, aparecerán aquí.</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <EventoPublicacionesModal
+        abierto={albumEventoAbierto}
+        evento={eventoAlbumSeleccionado}
+        publicaciones={publicacionesEvento}
+        cargando={cargandoPublicacionesEvento}
+        error={errorPublicacionesEvento}
+        onCerrar={cerrarAlbumEvento}
+        onActualizar={() => cargarPublicacionesDeEvento(eventoAlbumSeleccionado)}
+        renderPublicacion={renderVistaPublicacionAlbum}
+      />
 
       {/* MODAL DE PUBLICACIÓN */}
       {modalAbierto && (
@@ -3542,37 +3712,24 @@ export default function Inicio() {
                 </div>
               )}
 
-              {tipoPublicacion === 'historico' && (
-                <div className="fecha-momento-publicacion fecha-recuerdo-publicacion mb-3">
-                  <label htmlFor="fecha-recuerdo-publicacion">
-                    <i className="bi bi-calendar3"></i>
-                    Fecha del recuerdo <span>opcional</span>
+              {etapaPublicacion && (
+                <div className="fecha-momento-publicacion fecha-etapa-publicacion mb-3" style={{ '--etapa-fecha-color': etapaPublicacion.color || '#D4AF37' }}>
+                  <label htmlFor="fecha-etapa-publicacion">
+                    <i className={`bi ${etapaPublicacion.icono || 'bi-stars'}`}></i>
+                    Fecha de la Etapa <span>obligatoria</span>
                   </label>
                   <input
-                    id="fecha-recuerdo-publicacion"
+                    id="fecha-etapa-publicacion"
                     type="date"
-                    value={fechaRecuerdoPublicacion}
+                    value={tipoPublicacion === 'historico' ? fechaRecuerdoPublicacion : fechaMomentoPublicacion}
                     max={new Date().toISOString().slice(0, 10)}
-                    onChange={(event) => setFechaRecuerdoPublicacion(event.target.value)}
+                    onChange={(event) => {
+                      if (tipoPublicacion === 'historico') setFechaRecuerdoPublicacion(event.target.value);
+                      else setFechaMomentoPublicacion(event.target.value);
+                    }}
+                    required
                   />
-                  <small>Conserva la fecha histórica sin modificar cuándo se publicó en Legacy.</small>
-                </div>
-              )}
-
-              {tipoPublicacion === 'familiar' && (
-                <div className="fecha-momento-publicacion mb-3">
-                  <label htmlFor="fecha-momento-publicacion">
-                    <i className="bi bi-calendar3"></i>
-                    Fecha del momento <span>opcional</span>
-                  </label>
-                  <input
-                    id="fecha-momento-publicacion"
-                    type="date"
-                    value={fechaMomentoPublicacion}
-                    max={new Date().toISOString().slice(0, 10)}
-                    onChange={(event) => setFechaMomentoPublicacion(event.target.value)}
-                  />
-                  <small>Si la dejas vacía, la línea del tiempo usará la fecha de publicación.</small>
+                  <small>Esta fecha ordenará la publicación en la Línea del Tiempo sin cambiar cuándo fue publicada.</small>
                 </div>
               )}
 
@@ -3614,6 +3771,7 @@ export default function Inicio() {
                 <button className="btn-herramienta-modal" type="button" title="Agregar GIF" disabled={publicando || !puedeAgregarGif} onClick={() => gifInputRef.current?.click()}><i className="bi bi-filetype-gif"></i></button>
                 <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'emoji' ? 'activo' : ''}`} type="button" title="Agregar emoji" onClick={() => abrirPanelHerramienta('emoji')}><i className="bi bi-emoji-smile"></i></button>
                 <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'ubicacion' || ubicacionPublicacion ? 'activo' : ''}`} type="button" title="Agregar ubicación" onClick={() => abrirPanelHerramienta('ubicacion')}><i className="bi bi-geo-alt"></i></button>
+                <button className={`btn-herramienta-modal ${panelHerramientaActivo === 'etapas' || etapaPublicacion ? 'activo' : ''}`} type="button" title="Agregar Etapa" onClick={() => abrirPanelHerramienta('etapas')}><i className="bi bi-stars"></i></button>
 
                 {tipoPublicacion === 'familiar' && (
                   <>
@@ -3746,6 +3904,16 @@ export default function Inicio() {
                   etiqueta={pub.etiqueta?.nombre || ''}
                   anio={anioContexto}
                   ubicacion={ubicacionPost}
+                  etapaNombre={pub.etapaDestacada?.nombre || ''}
+                  etapaIcono={pub.etapaDestacada?.icono || 'bi-stars'}
+                  etapaColor={pub.etapaDestacada?.color || '#D4AF37'}
+                  onEtapaClick={pub.etapaDestacada && autorId
+                    ? () => navigate(`/perfil/${autorId}?destacada=${obtenerId(pub.etapaDestacada)}`)
+                    : undefined}
+                  eventoTitulo={pub.tipo !== 'historico' ? (eventoRelacionadoPost?.titulo || '') : ''}
+                  onEventoClick={pub.tipo !== 'historico' && eventoRelacionadoPost?.id
+                    ? () => abrirAlbumEvento(eventoRelacionadoPost)
+                    : undefined}
                   onAutorClick={autorId ? () => irAPerfil(pub.autor || pub.usuario) : undefined}
                   opcionesMenu={crearOpcionesMenuPublicacion(pub, esAutor)}
                 />
@@ -3757,11 +3925,6 @@ export default function Inicio() {
                   </div>
                 )}
 
-                {pub.tipo !== 'historico' && eventoRelacionadoPost && (
-                  <div className="publicacion-evento-debajo-header">
-                    {renderChipEventoPublicacion(eventoRelacionadoPost)}
-                  </div>
-                )}
 
                 {pub.contenido && (
                   <p className="texto-post historico" style={{ whiteSpace: 'pre-line' }}>{renderTextoConMenciones(pub.contenido, pub.menciones, eventoRelacionadoPost)}</p>

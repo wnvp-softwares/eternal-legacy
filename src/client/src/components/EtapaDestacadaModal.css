@@ -1,0 +1,76 @@
+.etapa-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3200;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fondo-overlay, rgba(0, 0, 0, 0.62));
+  backdrop-filter: blur(5px);
+}
+.etapa-modal {
+  width: min(680px, 100%);
+  max-height: min(90dvh, 820px);
+  overflow: hidden;
+  border: 1px solid var(--borde-color);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  color: var(--texto-principal);
+  background: var(--fondo-tarjeta);
+  box-shadow: var(--sombra-elevada, 0 24px 70px rgba(0,0,0,.35));
+}
+.etapa-modal-cabecera {
+  padding: 20px 22px 17px;
+  border-bottom: 1px solid var(--borde-color);
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  background: var(--fondo-elevado, var(--fondo-tarjeta));
+}
+.etapa-modal-eyebrow { color: var(--dorado-oscuro); font-size: .7rem; font-weight: 850; letter-spacing: .14em; }
+.etapa-modal-cabecera h2 { margin: 3px 0 3px; font-size: 1.3rem; }
+.etapa-modal-cabecera p { margin: 0; color: var(--texto-secundario); font-size: .84rem; }
+.etapa-modal-cerrar { width: 36px; height: 36px; border: 0; border-radius: 50%; flex: none; color: var(--texto-secundario); background: var(--hover-menu); }
+.etapa-modal-formulario { padding: 20px 22px 22px; overflow-y: auto; display: grid; gap: 18px; }
+.etapa-modal-vista-previa { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.etapa-modal-vista-previa strong { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+.etapa-modal-burbuja { width: 72px; height: 72px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.65rem; box-shadow: 0 8px 24px rgba(15,23,42,.18); }
+.etapa-modal-campo { display: grid; gap: 7px; position: relative; }
+.etapa-modal-campo > span, .etapa-modal-seccion legend { color: var(--texto-principal); font-size: .84rem; font-weight: 800; }
+.etapa-modal-campo input, .etapa-modal-buscador-iconos input { width: 100%; border: 1px solid var(--borde-color); border-radius: 12px; color: var(--texto-principal); background: var(--input-bg); }
+.etapa-modal-campo input { min-height: 46px; padding: 10px 52px 10px 13px; }
+.etapa-modal-campo small { position: absolute; right: 12px; bottom: 13px; color: var(--texto-terciario, var(--texto-secundario)); font-size: .68rem; }
+.etapa-modal-seccion { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
+.etapa-modal-colores { display: flex; flex-wrap: wrap; gap: 9px; }
+.etapa-modal-colores > button, .etapa-modal-color-personalizado { width: 31px; height: 31px; border: 2px solid transparent; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
+.etapa-modal-colores > button.activo { outline: 3px solid color-mix(in srgb, var(--dorado) 48%, transparent); outline-offset: 2px; }
+.etapa-modal-color-personalizado { position: relative; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed var(--borde-fuerte, var(--borde-color)); color: var(--texto-secundario); background: var(--fondo-app); }
+.etapa-modal-color-personalizado input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.etapa-modal-buscador-iconos { position: relative; }
+.etapa-modal-buscador-iconos i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--texto-secundario); }
+.etapa-modal-buscador-iconos input { min-height: 40px; padding: 8px 12px 8px 36px; }
+.etapa-modal-iconos { max-height: 190px; overflow-y: auto; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 7px; padding: 2px; }
+.etapa-modal-iconos button { aspect-ratio: 1; min-width: 0; border: 1px solid var(--borde-color); border-radius: 10px; color: var(--texto-secundario); background: var(--fondo-app); font-size: 1rem; }
+.etapa-modal-iconos button:hover, .etapa-modal-iconos button.activo { border-color: var(--dorado); color: var(--dorado-oscuro); background: var(--dorado-fondo-suave); }
+.etapa-modal-error { padding: 10px 12px; border-radius: 10px; display: flex; gap: 8px; color: #b91c1c; background: rgba(220,38,38,.1); font-size: .82rem; }
+.etapa-modal-confirmacion { padding: 12px 14px; border: 1px solid rgba(220,38,38,.35); border-radius: 12px; background: rgba(220,38,38,.08); }
+.etapa-modal-confirmacion strong { color: #dc2626; }
+.etapa-modal-confirmacion p { margin: 4px 0 0; color: var(--texto-secundario); font-size: .8rem; }
+.etapa-modal-acciones { display: flex; align-items: center; gap: 9px; padding-top: 4px; }
+.etapa-modal-acciones-espaciador { flex: 1; }
+.etapa-modal-acciones button { min-height: 41px; padding: 8px 14px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 750; }
+.etapa-modal-eliminar { border: 1px solid rgba(220,38,38,.35); color: #dc2626; background: transparent; }
+.etapa-modal-cancelar { border: 1px solid var(--borde-color); color: var(--texto-principal); background: var(--fondo-app); }
+.etapa-modal-guardar { border: 1px solid var(--dorado-oscuro); color: var(--boton-primario-texto, #111827); background: var(--dorado); }
+.etapa-modal button:focus-visible, .etapa-modal input:focus-visible { outline: 2px solid var(--dorado); outline-offset: 2px; }
+.etapa-modal button:disabled { opacity: .6; cursor: not-allowed; }
+@media (max-width: 650px) {
+  .etapa-modal-backdrop { padding: 0; align-items: flex-end; }
+  .etapa-modal { max-height: 94dvh; border-radius: 20px 20px 0 0; }
+  .etapa-modal-cabecera, .etapa-modal-formulario { padding-left: 16px; padding-right: 16px; }
+  .etapa-modal-iconos { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .etapa-modal-acciones { flex-wrap: wrap; }
+  .etapa-modal-eliminar { order: 3; width: 100%; }
+}

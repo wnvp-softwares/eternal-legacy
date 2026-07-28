@@ -27,6 +27,8 @@ const {
     buscarTodo,
     obtenerPublicacionesPorEvento,
     obtenerMomentosFamiliaresPorNodo,
+    asignarEtapaPublicacion,
+    eliminarEtapaPublicacion,
     reaccionarPublicacion
 } = require('../../controllers/publicaciones/publicacion.controller');
 
@@ -109,6 +111,10 @@ router.patch('/autor/:autorId/pausar-inicio', verificarToken, pausarAutorEnInici
 router.delete('/autor/:autorId/pausar-inicio', verificarToken, reanudarAutorEnInicio);
 router.patch('/:id/ocultar-inicio', verificarToken, ocultarPublicacionDeInicio);
 router.delete('/:id/ocultar-inicio', verificarToken, mostrarPublicacionEnInicio);
+
+// Asociación de Etapas. Deben declararse antes de las rutas dinámicas /:id.
+router.patch('/:id/etapa', verificarToken, asignarEtapaPublicacion);
+router.delete('/:id/etapa', verificarToken, eliminarEtapaPublicacion);
 
 // Preferencias y administración de una publicación concreta.
 router.patch('/:id/fijar', verificarToken, alternarFijacionPublicacion);

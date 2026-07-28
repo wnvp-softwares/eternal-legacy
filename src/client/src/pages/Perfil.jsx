@@ -6,6 +6,9 @@ import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../conf
 import ImageCropperModal from '../components/ImageCropperModal';
 import PublicacionMediaCarousel from '../components/PublicacionMediaCarousel';
 import PublicacionHeader from '../components/PublicacionHeader';
+import EventoPublicacionesModal from '../components/EventoPublicacionesModal';
+import EtapaDestacadaModal, { obtenerColorContrasteEtapa } from '../components/EtapaDestacadaModal';
+import AsignarEtapaPublicacionModal from '../components/AsignarEtapaPublicacionModal';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Perfil.css';
 
@@ -503,6 +506,25 @@ const ordenarPublicacionesPerfil = (lista = []) => [...lista].sort((a, b) => {
   return new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime();
 });
 
+const obtenerEtapaDePublicacion = (publicacion = {}) => {
+  const etapa = publicacion.etapaDestacada;
+  if (!etapa || typeof etapa !== 'object') return null;
+  const id = obtenerIdEntidad(etapa);
+  if (!id || !etapa.nombre) return null;
+  return { ...etapa, id, _id: etapa._id || id };
+};
+
+const derivarEtapasVisibles = (publicaciones = []) => {
+  const porId = new Map();
+  publicaciones.forEach(publicacion => {
+    const etapa = obtenerEtapaDePublicacion(publicacion);
+    if (etapa) porId.set(String(etapa.id), etapa);
+  });
+  return Array.from(porId.values()).sort((a, b) => (
+    Number(a.orden || 0) - Number(b.orden || 0) || String(a.nombre).localeCompare(String(b.nombre), 'es')
+  ));
+};
+
 
 export default function Perfil() {
   const [sonAmigos, setSonAmigos] = useState(false);
@@ -562,6 +584,11 @@ export default function Perfil() {
 
   const [tabActiva, setTabActiva] = useState('memories');
   const [etiquetaSeleccionada, setEtiquetaSeleccionada] = useState(null);
+  const [etapasDestacadas, setEtapasDestacadas] = useState([]);
+  const [etapaActivaId, setEtapaActivaId] = useState('');
+  const [modalEtapaAbierto, setModalEtapaAbierto] = useState(false);
+  const [etapaEditando, setEtapaEditando] = useState(null);
+  const [publicacionAsignandoEtapa, setPublicacionAsignandoEtapa] = useState(null);
 
   // --- ESTADOS PARA INTERACCIONES (REACCIONES Y COMENTARIOS) ---
   const [comentariosAbiertos, setComentariosAbiertos] = useState({}); // { postId: true/false }
@@ -579,6 +606,11 @@ export default function Perfil() {
   const [publicacionVisorSeleccionada, setPublicacionVisorSeleccionada] = useState(null);
   const [origenVisorPublicacion, setOrigenVisorPublicacion] = useState(null);
   const [cargandoComentariosVisor, setCargandoComentariosVisor] = useState(false);
+  const [albumEventoAbierto, setAlbumEventoAbierto] = useState(false);
+  const [eventoAlbumSeleccionado, setEventoAlbumSeleccionado] = useState(null);
+  const [publicacionesEvento, setPublicacionesEvento] = useState([]);
+  const [cargandoPublicacionesEvento, setCargandoPublicacionesEvento] = useState(false);
+  const [errorPublicacionesEvento, setErrorPublicacionesEvento] = useState('');
   const visorPublicacionRef = useRef(null);
   const botonCerrarVisorPublicacionRef = useRef(null);
   const inputComentarioVisorRef = useRef(null);
@@ -611,6 +643,23 @@ export default function Perfil() {
   const esMiPerfil = !id || id === usuarioLogueado?.id || id === usuarioLogueado?._id;
 
   const API_BASE_URL = API_BASE_URL_CONFIG;
+
+  const cargarEtapasPropias = async () => {
+    if (!token || !esMiPerfil) return [];
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/destacadas/mias`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudieron cargar las Etapas.');
+      const lista = Array.isArray(datos.etapas) ? datos.etapas : [];
+      setEtapasDestacadas(lista);
+      return lista;
+    } catch (errorEtapas) {
+      console.error('❌ Error al cargar Etapas destacadas:', errorEtapas);
+      return [];
+    }
+  };
 
   const [perfilBd, setPerfilBd] = useState(null);
   const [publicaciones, setPublicaciones] = useState([]);
@@ -842,6 +891,8 @@ export default function Perfil() {
         const publicacionesOrdenadas = ordenarPublicacionesPerfil(listaPosts);
 
         setPublicaciones(publicacionesOrdenadas);
+        if (esMiPerfil) await cargarEtapasPropias();
+        else setEtapasDestacadas(derivarEtapasVisibles(publicacionesOrdenadas));
         await cargarComentariosDePublicaciones(publicacionesOrdenadas);
         setError('');
       } catch (err) {
@@ -854,6 +905,38 @@ export default function Perfil() {
 
     cargarDatosPerfil();
   }, [token, id]);
+
+  useEffect(() => {
+    if (esMiPerfil) return;
+    setEtapasDestacadas(derivarEtapasVisibles(publicaciones));
+  }, [esMiPerfil, publicaciones]);
+
+  useEffect(() => {
+    const idConsulta = new URLSearchParams(location.search).get('destacada') || '';
+    if (!idConsulta) {
+      setEtapaActivaId('');
+      return;
+    }
+    if (etapasDestacadas.some(etapa => String(obtenerIdEntidad(etapa)) === String(idConsulta))) {
+      setEtapaActivaId(idConsulta);
+      setTabActiva('memories');
+      return;
+    }
+
+    setEtapaActivaId('');
+  }, [location.search, etapasDestacadas]);
+
+  const seleccionarEtapaDestacada = (etapaId, { forzar = false } = {}) => {
+    const idLimpio = String(etapaId || '');
+    const siguiente = !forzar && String(etapaActivaId) === idLimpio ? '' : idLimpio;
+    setEtapaActivaId(siguiente);
+    setTabActiva('memories');
+    const parametros = new URLSearchParams(location.search);
+    if (siguiente) parametros.set('destacada', siguiente);
+    else parametros.delete('destacada');
+    const query = parametros.toString();
+    navigate(`${location.pathname}${query ? `?${query}` : ''}${location.hash || ''}`, { replace: true });
+  };
 
   // --- FUNCIONES DEL MODAL DE EDICIÓN ---
   const toggleEdicion = () => {
@@ -1510,6 +1593,82 @@ export default function Perfil() {
     }
   };
 
+  const reemplazarPublicacionEnPerfil = (publicacionActualizada) => {
+    if (!publicacionActualizada) return;
+    const idActualizado = publicacionActualizada._id || publicacionActualizada.id;
+    const reemplazar = item => String(item._id || item.id) === String(idActualizado)
+      ? { ...item, ...publicacionActualizada }
+      : item;
+    setPublicaciones(prev => prev.map(reemplazar));
+    setPublicacionesGuardadas(prev => prev.map(reemplazar));
+    setPublicacionVisorSeleccionada(prev => prev ? reemplazar(prev) : prev);
+  };
+
+  const manejarAgregarEtapaPublicacion = (post) => {
+    setPublicacionAsignandoEtapa(post);
+    return true;
+  };
+
+  const manejarEliminarEtapaPublicacion = async (post) => {
+    const postId = post?._id || post?.id;
+    if (!postId) return false;
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/${postId}/etapa`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo retirar la Etapa.');
+      reemplazarPublicacionEnPerfil(datos.publicacion);
+      setEtapasDestacadas(prev => prev.map(etapa => (
+        String(obtenerIdEntidad(etapa)) === String(obtenerIdEntidad(post.etapaDestacada))
+          ? { ...etapa, totalPublicaciones: Math.max(0, Number(etapa.totalPublicaciones || 0) - 1) }
+          : etapa
+      )));
+      return true;
+    } catch (errorEtapa) {
+      alert(errorEtapa.message || 'No se pudo retirar la Etapa.');
+      return false;
+    }
+  };
+
+  const manejarEtapaGuardada = (etapa) => {
+    if (!etapa) return;
+    const etapaId = obtenerIdEntidad(etapa);
+    setEtapasDestacadas(prev => {
+      const existe = prev.some(item => String(obtenerIdEntidad(item)) === String(etapaId));
+      return existe
+        ? prev.map(item => String(obtenerIdEntidad(item)) === String(etapaId) ? { ...item, ...etapa } : item)
+        : [...prev, etapa];
+    });
+    const actualizarEtapa = item => (
+      String(obtenerIdEntidad(item?.etapaDestacada) || '') === String(etapaId)
+        ? { ...item, etapaDestacada: etapa }
+        : item
+    );
+    setPublicaciones(prev => prev.map(actualizarEtapa));
+    setPublicacionesGuardadas(prev => prev.map(actualizarEtapa));
+    setPublicacionVisorSeleccionada(prev => prev ? actualizarEtapa(prev) : prev);
+    if (publicacionAsignandoEtapa) {
+      setPublicacionAsignandoEtapa(prev => prev ? { ...prev, etapaDestacada: etapa } : prev);
+    }
+    setModalEtapaAbierto(false);
+    setEtapaEditando(null);
+  };
+
+  const manejarEtapaEliminada = ({ etapaId }) => {
+    const limpiar = item => String(obtenerIdEntidad(item?.etapaDestacada) || '') === String(etapaId)
+      ? { ...item, etapaDestacada: null, fechaRecuerdo: null, fechaMomento: null }
+      : item;
+    setEtapasDestacadas(prev => prev.filter(item => String(obtenerIdEntidad(item)) !== String(etapaId)));
+    setPublicaciones(prev => prev.map(limpiar));
+    setPublicacionesGuardadas(prev => prev.map(limpiar));
+    setPublicacionVisorSeleccionada(prev => prev ? limpiar(prev) : prev);
+    if (String(etapaActivaId) === String(etapaId)) seleccionarEtapaDestacada('', { forzar: true });
+    setModalEtapaAbierto(false);
+    setEtapaEditando(null);
+  };
+
   const crearOpcionesMenuPublicacion = (post, esAutor, origen = 'perfil') => {
     const esHistorico = post.tipo === 'historico';
     const desdeGuardados = origen === 'guardados';
@@ -1604,6 +1763,26 @@ export default function Perfil() {
         activa: Boolean(post.guardadaPorMi),
         onClick: () => manejarGuardarPublicacion(post)
       },
+      post.etapaDestacada ? {
+        id: 'eliminar-etapa',
+        etiqueta: 'Eliminar Etapa',
+        descripcion: 'Solo se quitará la etiqueta; la publicación y sus archivos se conservarán.',
+        icono: 'bi-tag-fill',
+        separadorAntes: true,
+        confirmacion: {
+          titulo: '¿Quitar la Etapa de esta publicación?',
+          mensaje: 'La publicación seguirá disponible, pero dejará de pertenecer a la Destacada y volverá a ordenarse por su fecha de publicación.',
+          confirmarTexto: 'Eliminar Etapa'
+        },
+        onClick: () => manejarEliminarEtapaPublicacion(post)
+      } : {
+        id: 'agregar-etapa',
+        etiqueta: 'Agregar Etapa',
+        descripcion: 'Organiza esta publicación dentro de una Destacada y establece su fecha.',
+        icono: 'bi-stars',
+        separadorAntes: true,
+        onClick: () => manejarAgregarEtapaPublicacion(post)
+      },
       {
         id: 'editar',
         etiqueta: 'Editar publicación',
@@ -1618,12 +1797,12 @@ export default function Perfil() {
         icono: 'bi-people-fill',
         onClick: () => abrirEditorPublicacion(post, 'cambiar-audiencia')
       }] : []),
-      {
+      ...(post.etapaDestacada ? [{
         id: 'fecha',
-        etiqueta: esHistorico ? 'Editar fecha del recuerdo' : 'Editar fecha del momento',
+        etiqueta: 'Editar fecha de la Etapa',
         icono: 'bi-calendar3',
         onClick: () => abrirEditorPublicacion(post, 'editar-fecha')
-      },
+      }] : []),
       {
         id: 'eliminar',
         etiqueta: 'Eliminar publicación',
@@ -1720,7 +1899,7 @@ export default function Perfil() {
     }
   };
 
-  const cerrarVisorPublicacion = () => {
+  const cerrarVisorPublicacion = ({ devolverFoco = true } = {}) => {
     const elementoOrigen = elementoOrigenVisorRef.current;
     cargaComentariosVisorRef.current += 1;
     setCargandoComentariosVisor(false);
@@ -1728,11 +1907,13 @@ export default function Perfil() {
     setOrigenVisorPublicacion(null);
     elementoOrigenVisorRef.current = null;
 
-    window.setTimeout(() => {
-      if (elementoOrigen instanceof HTMLElement && elementoOrigen.isConnected) {
-        elementoOrigen.focus();
-      }
-    }, 0);
+    if (devolverFoco) {
+      window.setTimeout(() => {
+        if (elementoOrigen instanceof HTMLElement && elementoOrigen.isConnected) {
+          elementoOrigen.focus();
+        }
+      }, 0);
+    }
   };
 
   const abrirVisorPublicacion = async (post, origen = 'guardados', elementoOrigen = null) => {
@@ -1945,17 +2126,188 @@ export default function Perfil() {
     return detalles.filter(Boolean).join(' · ');
   };
 
-  const renderChipEventoPublicacion = (evento) => {
-    if (!evento) return null;
+  const normalizarEventoAlbum = (evento = {}) => {
+    const idEvento = obtenerIdEntidad(evento);
+    const titulo = normalizarTexto(
+      evento.titulo || evento.tituloSnapshot || evento.nombre || 'Evento familiar'
+    );
+
+    if (!idEvento && !titulo) return null;
+
+    return {
+      ...evento,
+      id: idEvento,
+      titulo: titulo || 'Evento familiar',
+      fechaInicio: evento.fechaInicio || evento.fechaInicioSnapshot || null,
+      tipoEvento: evento.tipoEvento || evento.tipoEventoSnapshot || 'otro',
+      nombreFamilia: normalizarTexto(
+        evento.nombreFamilia || evento.nombreFamiliaSnapshot || ''
+      ),
+      detalle: formatearDetalleEventoPerfil(evento)
+    };
+  };
+
+  const publicacionPerteneceAEvento = (publicacion = {}, evento = {}) => {
+    const eventoPublicacion = obtenerEventoRelacionadoDePublicacion(publicacion);
+    const eventoNormalizado = normalizarEventoAlbum(evento);
+
+    if (!eventoPublicacion || !eventoNormalizado) return false;
+
+    if (eventoPublicacion.id && eventoNormalizado.id) {
+      return String(eventoPublicacion.id) === String(eventoNormalizado.id);
+    }
+
+    const tituloPublicacion = normalizarTexto(eventoPublicacion.titulo).toLocaleLowerCase();
+    const tituloEvento = normalizarTexto(eventoNormalizado.titulo).toLocaleLowerCase();
+    if (!tituloPublicacion || tituloPublicacion !== tituloEvento) return false;
+
+    const familiaPublicacion = normalizarTexto(eventoPublicacion.nombreFamilia).toLocaleLowerCase();
+    const familiaEvento = normalizarTexto(eventoNormalizado.nombreFamilia).toLocaleLowerCase();
+
+    return !familiaPublicacion || !familiaEvento || familiaPublicacion === familiaEvento;
+  };
+
+  const obtenerPublicacionesLocalesDeEvento = (evento) => {
+    const mapaPublicaciones = new Map();
+
+    [...publicaciones, ...publicacionesGuardadas]
+      .filter(publicacion => publicacionPerteneceAEvento(publicacion, evento))
+      .forEach((publicacion, indice) => {
+        const clave = publicacion?._id || publicacion?.id || `local-${indice}`;
+        if (!mapaPublicaciones.has(String(clave))) {
+          mapaPublicaciones.set(String(clave), publicacion);
+        }
+      });
+
+    return Array.from(mapaPublicaciones.values());
+  };
+
+  const cerrarAlbumEvento = () => {
+    setAlbumEventoAbierto(false);
+    setEventoAlbumSeleccionado(null);
+    setPublicacionesEvento([]);
+    setErrorPublicacionesEvento('');
+  };
+
+  const cargarPublicacionesDeEvento = async (evento) => {
+    const eventoNormalizado = normalizarEventoAlbum(evento);
+    if (!eventoNormalizado?.id) return;
+
+    setEventoAlbumSeleccionado(eventoNormalizado);
+    setAlbumEventoAbierto(true);
+    setCargandoPublicacionesEvento(true);
+    setErrorPublicacionesEvento('');
+
+    const publicacionesLocales = obtenerPublicacionesLocalesDeEvento(eventoNormalizado);
+
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/publicaciones/evento/${eventoNormalizado.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const datos = await respuesta.json().catch(() => ({}));
+
+      if (respuesta.ok) {
+        const lista = Array.isArray(datos.publicaciones)
+          ? datos.publicaciones
+          : (Array.isArray(datos) ? datos : []);
+        setPublicacionesEvento(lista.length > 0 ? lista : publicacionesLocales);
+        return;
+      }
+
+      setPublicacionesEvento(publicacionesLocales);
+      if (respuesta.status !== 404) {
+        setErrorPublicacionesEvento(
+          datos.mensaje || 'No se pudieron cargar todas las publicaciones de este evento.'
+        );
+      }
+    } catch (error) {
+      setPublicacionesEvento(publicacionesLocales);
+      setErrorPublicacionesEvento(
+        publicacionesLocales.length > 0
+          ? ''
+          : 'No se pudieron cargar las publicaciones de este evento.'
+      );
+    } finally {
+      setCargandoPublicacionesEvento(false);
+    }
+  };
+
+  const abrirAlbumEvento = (evento, { cerrarVisor = false } = {}) => {
+    if (cerrarVisor) cerrarVisorPublicacion({ devolverFoco: false });
+    cargarPublicacionesDeEvento(evento);
+  };
+
+  const renderVistaPublicacionAlbum = (publicacion = {}) => {
+    const tieneMultimedia = Array.isArray(publicacion.multimedia)
+      ? publicacion.multimedia.some(Boolean)
+      : Boolean(publicacion.multimedia);
+    const autor = publicacion.autor || publicacion.usuario || {};
+    const autorId = obtenerIdPersonaPerfil(autor);
+    const etapaAlbum = obtenerEtapaDePublicacion(publicacion);
+    const nombreAutor = obtenerNombreDeEntidad(autor, 'Familiar');
+    const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreAutor)}&background=0D1B2A&color=fff`;
+    const avatarAutor = obtenerUrlImagenUsuario(obtenerImagenDeEntidad(autor)) || avatarFallback;
+    const fechaFormateada = formatearFecha(publicacion.createdAt);
 
     return (
-      <div className="evento-post-render perfil-evento-publicacion">
-        <i className="bi bi-calendar-heart-fill" aria-hidden="true"></i>
-        <div>
-          <strong>{evento.titulo || 'Evento familiar'}</strong>
-          <span>{formatearDetalleEventoPerfil(evento)}</span>
+      <article className="evento-publicaciones-modal-publicacion">
+        <div className="evento-publicaciones-modal-publicacion-header">
+          <button
+            type="button"
+            className="evento-publicaciones-modal-autor"
+            onClick={autorId ? () => irAPerfil(autor) : undefined}
+            disabled={!autorId}
+            aria-label={autorId ? `Abrir perfil de ${nombreAutor}` : undefined}
+          >
+            <img
+              src={avatarAutor}
+              alt=""
+              className="evento-publicaciones-modal-avatar"
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = avatarFallback;
+              }}
+            />
+            <span className="evento-publicaciones-modal-autor-texto">
+              <strong>{nombreAutor}</strong>
+              {fechaFormateada && <small>{fechaFormateada}</small>}
+            </span>
+          </button>
+          {etapaAlbum && autorId && (
+            <button
+              type="button"
+              className="evento-publicaciones-modal-etapa"
+              style={{ '--evento-modal-etapa-color': etapaAlbum.color || '#D4AF37' }}
+              onClick={() => {
+                const miId = usuarioLogueado?.id || usuarioLogueado?._id;
+                cerrarAlbumEvento();
+                navigate(`${miId && String(miId) === String(autorId) ? '/perfil' : `/perfil/${autorId}`}?destacada=${etapaAlbum.id}`);
+              }}
+              title={`Ver la Etapa ${etapaAlbum.nombre}`}
+            >
+              <i className={`bi ${etapaAlbum.icono || 'bi-stars'}`} aria-hidden="true"></i>
+              <span>{etapaAlbum.nombre}</span>
+            </button>
+          )}
         </div>
-      </div>
+
+        {publicacion.contenido && (
+          <p className="evento-publicaciones-modal-publicacion-texto">
+            {renderTextoConMenciones(publicacion.contenido, publicacion.menciones)}
+          </p>
+        )}
+
+        {tieneMultimedia && (
+          <PublicacionMediaCarousel
+            multimedia={publicacion.multimedia}
+            tipo={publicacion.tipo === 'historico' ? 'historico' : 'familiar'}
+            compacto
+            alt="Momento del evento"
+            className="evento-publicaciones-modal-carrusel"
+          />
+        )}
+      </article>
     );
   };
 
@@ -2061,8 +2413,30 @@ export default function Perfil() {
     };
   }, [publicacionVisorSeleccionada, origenVisorPublicacion, publicacionesGuardadas, publicaciones]);
 
-  const publicacionesFiltradas = ordenarPublicacionesPerfil(publicaciones);
-  const publicacionesHistoricas = publicacionesFiltradas.filter(post => post.tipo === 'historico');
+  const publicacionesBase = ordenarPublicacionesPerfil(publicaciones);
+  const publicacionesFiltradas = etapaActivaId
+    ? publicacionesBase.filter(post => String(obtenerIdEntidad(post.etapaDestacada) || '') === String(etapaActivaId))
+    : publicacionesBase;
+  const obtenerFechaCronologicaPublicacion = (post = {}) => {
+    const etapa = obtenerEtapaDePublicacion(post);
+    if (etapa) return post.tipo === 'familiar' ? (post.fechaMomento || post.createdAt) : (post.fechaRecuerdo || post.createdAt);
+    // Compatibilidad con fechas legadas creadas antes de las Etapas.
+    return post.fechaRecuerdo || post.fechaMomento || post.createdAt;
+  };
+  const publicacionesHistoricas = [...publicacionesFiltradas].sort((a, b) => (
+    new Date(obtenerFechaCronologicaPublicacion(b) || 0).getTime() -
+    new Date(obtenerFechaCronologicaPublicacion(a) || 0).getTime()
+  ));
+  const gruposLineaTiempo = publicacionesHistoricas.reduce((grupos, post) => {
+    const anio = obtenerAnioPublicacion(obtenerFechaCronologicaPublicacion(post));
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && String(ultimo.anio) === String(anio)) {
+      ultimo.publicaciones.push(post);
+    } else {
+      grupos.push({ anio, publicaciones: [post] });
+    }
+    return grupos;
+  }, []);
   const fotosGaleria = publicacionesFiltradas.filter(post => Boolean(obtenerUrlMultimediaPublicacion(post.multimedia)));
   const coleccionVisorPublicacion = origenVisorPublicacion === 'fotos'
     ? fotosGaleria
@@ -2206,6 +2580,18 @@ export default function Perfil() {
                   publicacionVisor.ubicacion?.direccion ||
                   ''
                 }
+                etapaNombre={publicacionVisor.etapaDestacada?.nombre || ''}
+                etapaIcono={publicacionVisor.etapaDestacada?.icono || 'bi-stars'}
+                etapaColor={publicacionVisor.etapaDestacada?.color || '#D4AF37'}
+                onEtapaClick={publicacionVisor.etapaDestacada ? () => {
+                  const etapaId = obtenerIdEntidad(publicacionVisor.etapaDestacada);
+                  cerrarVisorPublicacion();
+                  seleccionarEtapaDestacada(etapaId, { forzar: true });
+                } : undefined}
+                eventoTitulo={!esHistoricoVisor ? (eventoVisor?.titulo || '') : ''}
+                onEventoClick={!esHistoricoVisor && eventoVisor?.id
+                  ? () => abrirAlbumEvento(eventoVisor, { cerrarVisor: true })
+                  : undefined}
                 onAutorClick={autorVisorId ? () => {
                   cerrarVisorPublicacion();
                   irAPerfil(autorVisor);
@@ -2216,11 +2602,6 @@ export default function Perfil() {
             </div>
 
             <div className="perfil-visor-guardados-contenido">
-              {!esHistoricoVisor && eventoVisor && (
-                <div className="perfil-visor-guardados-evento">
-                  {renderChipEventoPublicacion(eventoVisor)}
-                </div>
-              )}
 
               {contenidoVisor && (
                 <div className="perfil-visor-guardados-texto">
@@ -2401,6 +2782,35 @@ export default function Perfil() {
 
   return (
     <div className="container-fluid max-w-custom perfil-page p-0">
+      <EtapaDestacadaModal
+        abierto={modalEtapaAbierto}
+        etapa={etapaEditando}
+        token={token}
+        onCerrar={() => {
+          setModalEtapaAbierto(false);
+          setEtapaEditando(null);
+        }}
+        onGuardada={manejarEtapaGuardada}
+        onEliminada={manejarEtapaEliminada}
+      />
+
+      <AsignarEtapaPublicacionModal
+        abierto={Boolean(publicacionAsignandoEtapa) && !modalEtapaAbierto}
+        publicacion={publicacionAsignandoEtapa}
+        etapas={etapasDestacadas}
+        token={token}
+        onCerrar={() => setPublicacionAsignandoEtapa(null)}
+        onCrearEtapa={() => {
+          setEtapaEditando(null);
+          setModalEtapaAbierto(true);
+        }}
+        onAsignada={(publicacionActualizada) => {
+          reemplazarPublicacionEnPerfil(publicacionActualizada);
+          setPublicacionAsignandoEtapa(null);
+          if (esMiPerfil) cargarEtapasPropias();
+        }}
+      />
+
       <ImageCropperModal
         abierto={cropperPerfil.abierto}
         archivo={cropperPerfil.archivo}
@@ -2418,6 +2828,17 @@ export default function Perfil() {
       />
 
       {visorPublicacionPortal}
+
+      <EventoPublicacionesModal
+        abierto={albumEventoAbierto}
+        evento={eventoAlbumSeleccionado}
+        publicaciones={publicacionesEvento}
+        cargando={cargandoPublicacionesEvento}
+        error={errorPublicacionesEvento}
+        onCerrar={cerrarAlbumEvento}
+        onActualizar={() => cargarPublicacionesDeEvento(eventoAlbumSeleccionado)}
+        renderPublicacion={renderVistaPublicacionAlbum}
+      />
 
       {avisoPreferenciaFeed && (
         <div className="aviso-preferencia-feed" role="status" aria-live="polite">
@@ -2790,12 +3211,41 @@ export default function Perfil() {
               </div>
             )}
 
-            <div className="contenedor-etiquetas perfil-destacados-compactos">
-              <button type="button" className="perfil-destacado-nuevo" title="Crear un nuevo destacado">
-                <span className="perfil-destacado-icono"><i className="bi bi-plus-lg"></i></span>
-                <span>Nuevo</span>
-              </button>
-            </div>
+            {(esMiPerfil || etapasDestacadas.length > 0) && (
+              <div className="contenedor-etiquetas perfil-destacados-compactos" aria-label="Etapas destacadas del perfil">
+                {esMiPerfil && (
+                  <button type="button" className="perfil-destacado-nuevo" title="Crear una nueva Etapa" onClick={() => {
+                    setEtapaEditando(null);
+                    setModalEtapaAbierto(true);
+                  }}>
+                    <span className="perfil-destacado-icono"><i className="bi bi-plus-lg"></i></span>
+                    <span>Nuevo</span>
+                  </button>
+                )}
+                {etapasDestacadas.map(etapa => {
+                  const etapaId = obtenerIdEntidad(etapa);
+                  const activa = String(etapaActivaId) === String(etapaId);
+                  return (
+                    <div key={etapaId} className={`perfil-destacado-item ${activa ? 'activo' : ''}`}>
+                      <button type="button" className="perfil-destacado-seleccionar" onClick={() => seleccionarEtapaDestacada(etapaId)} title={`Ver publicaciones de ${etapa.nombre}`} aria-pressed={activa}>
+                        <span className="perfil-destacado-burbuja" style={{ backgroundColor: etapa.color || '#D4AF37', color: obtenerColorContrasteEtapa(etapa.color || '#D4AF37') }}>
+                          <i className={`bi ${etapa.icono || 'bi-stars'}`}></i>
+                        </span>
+                        <span className="perfil-destacado-nombre">{etapa.nombre}</span>
+                      </button>
+                      {esMiPerfil && (
+                        <button type="button" className="perfil-destacado-opciones" onClick={() => {
+                          setEtapaEditando(etapa);
+                          setModalEtapaAbierto(true);
+                        }} aria-label={`Editar Etapa ${etapa.nombre}`} title="Editar Etapa">
+                          <i className="bi bi-three-dots"></i>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <nav className="tabs-perfil" aria-label="Secciones del perfil">
@@ -2873,6 +3323,16 @@ export default function Perfil() {
                           etiqueta={post.etiqueta?.nombre || post.categoria || post.etiquetaNombre || ''}
                           anio={anioContexto}
                           ubicacion={post.ubicacionTexto || post.ubicacion?.texto || post.ubicacion?.direccion || ''}
+                          etapaNombre={post.etapaDestacada?.nombre || ''}
+                          etapaIcono={post.etapaDestacada?.icono || 'bi-stars'}
+                          etapaColor={post.etapaDestacada?.color || '#D4AF37'}
+                          onEtapaClick={post.etapaDestacada
+                            ? () => seleccionarEtapaDestacada(obtenerIdEntidad(post.etapaDestacada), { forzar: true })
+                            : undefined}
+                          eventoTitulo={!esHistorico ? (eventoRelacionado?.titulo || '') : ''}
+                          onEventoClick={!esHistorico && eventoRelacionado?.id
+                            ? () => abrirAlbumEvento(eventoRelacionado)
+                            : undefined}
                           onAutorClick={autorId ? () => irAPerfil(autor) : undefined}
                           opcionesMenu={crearOpcionesMenuPublicacion(post, esAutor)}
                         />
@@ -2885,13 +3345,6 @@ export default function Perfil() {
                         )}
                       </div>
 
-                      {!esHistorico && eventoRelacionado && (
-                        <div className="perfil-publicacion-area-evento">
-                          <div className="publicacion-evento-debajo-header">
-                            {renderChipEventoPublicacion(eventoRelacionado)}
-                          </div>
-                        </div>
-                      )}
 
                       {contenidoPost && (
                         <p className="texto-post historico perfil-publicacion-texto perfil-publicacion-area-texto">
@@ -3011,53 +3464,53 @@ export default function Perfil() {
           <div className="col-12">
             <div className="timeline-contenedor">
               <div className="timeline-hilo"></div>
-              {publicacionesHistoricas.length > 0 ? (
-                publicacionesHistoricas.map((post) => (
-                  <div key={post._id} className="timeline-item">
+              {gruposLineaTiempo.length > 0 ? (
+                gruposLineaTiempo.map((grupo) => (
+                  <div key={grupo.anio} className="timeline-item timeline-grupo-anio">
                     <div className="timeline-nodo">
-                      <span>{post.anio || obtenerAnioPublicacion(post.createdAt)}</span>
+                      <span>{grupo.anio}</span>
                     </div>
-                    <div className="tarjeta shadow-sm pb-3 px-3 px-sm-4 mb-0">
-                      {/* Flexbox responsivo: fila en pantallas sm en adelante, columna en móviles pequeños */}
-                      <div className="d-flex flex-column flex-sm-row align-items-sm-start justify-content-between gap-3">
-
-                        {/* Bloque de Texto (ocupa el máximo espacio disponible a la izquierda) */}
-                        <div className="flex-grow-1">
-                          <p className="texto-post mb-2 fw-bold">{post.titulo || 'Hito Familiar'}</p>
-                          <p className="texto-post historico text-muted small mb-0">{post.texto || post.contenido}</p>
-                        </div>
-
-                        {/* Bloque de Imagen (se renderiza a la derecha si existe) */}
-                        {obtenerUrlMultimediaPublicacion(post.multimedia) && (
-                          <div style={{ minWidth: '120px', maxWidth: '180px', width: '100%' }} className="align-self-center align-self-sm-start">
-                            {esVideoMultimediaPublicacion(post.multimedia) ? (
-                              <video
-                                src={obtenerUrlMultimediaPublicacion(post.multimedia)}
-                                className="img-fluid rounded"
-                                style={{ maxHeight: '120px', width: '100%', objectFit: 'cover', backgroundColor: '#111827' }}
-                                muted
-                                preload="metadata"
-                              />
-                            ) : (
-                              <img
-                                src={obtenerUrlMultimediaPublicacion(post.multimedia)}
-                                alt="Timeline"
-                                className="img-fluid rounded"
-                                style={{ maxHeight: '120px', width: '100%', objectFit: 'cover' }}
-                              />
-                            )}
-                          </div>
-                        )}
-
-                      </div>
+                    <div className="timeline-grupo-publicaciones">
+                      {grupo.publicaciones.map(post => {
+                        const etapa = obtenerEtapaDePublicacion(post);
+                        const fechaCronologica = obtenerFechaCronologicaPublicacion(post);
+                        return (
+                          <article key={post._id || post.id} className="tarjeta timeline-publicacion shadow-sm pb-3 px-3 px-sm-4 mb-0">
+                            <div className="timeline-publicacion-meta">
+                              <time>{formatearFechaContextoPublicacion(fechaCronologica)}</time>
+                              {etapa && (
+                                <button type="button" style={{ '--timeline-etapa-color': etapa.color || '#D4AF37' }} onClick={() => seleccionarEtapaDestacada(etapa.id, { forzar: true })}>
+                                  <i className={`bi ${etapa.icono || 'bi-stars'}`}></i>
+                                  <span>{etapa.nombre}</span>
+                                </button>
+                              )}
+                            </div>
+                            <div className="d-flex flex-column flex-sm-row align-items-sm-start justify-content-between gap-3">
+                              <div className="flex-grow-1">
+                                <p className="texto-post mb-2 fw-bold">{post.titulo || (post.tipo === 'familiar' ? 'Momento Familiar' : 'Recuerdo Histórico')}</p>
+                                <p className="texto-post historico text-muted small mb-0">{post.texto || post.contenido}</p>
+                              </div>
+                              {obtenerUrlMultimediaPublicacion(post.multimedia) && (
+                                <div className="timeline-publicacion-media align-self-center align-self-sm-start">
+                                  {esVideoMultimediaPublicacion(post.multimedia) ? (
+                                    <video src={obtenerUrlMultimediaPublicacion(post.multimedia)} className="img-fluid rounded" muted preload="metadata" />
+                                  ) : (
+                                    <img src={obtenerUrlMultimediaPublicacion(post.multimedia)} alt="Publicación de la Línea del Tiempo" className="img-fluid rounded" />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm border border-light position-relative" style={{ zIndex: 2 }}>
-                  <i className="bi bi-hourglass-bottom fs-1 mb-3 d-block text-dorado"></i>
-                  <h5>No hay hitos históricos registrados</h5>
-                  <p>Añade un año o fecha histórica a tus recuerdos para verlos ordenados cronológicamente.</p>
+                <div className="timeline-estado-vacio">
+                  <i className="bi bi-hourglass-bottom"></i>
+                  <h5>No hay publicaciones en la Línea del Tiempo</h5>
+                  <p>Las publicaciones aparecerán ordenadas por su Etapa o por la fecha en que fueron publicadas.</p>
                 </div>
               )}
             </div>

@@ -1,0 +1,439 @@
+.evento-publicaciones-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--fondo-overlay, rgba(3, 10, 18, 0.68));
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  overscroll-behavior: contain;
+  animation: evento-publicaciones-fondo-aparecer 0.2s ease-out;
+}
+
+.evento-publicaciones-modal {
+  position: relative;
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(86vh, 820px);
+  max-height: min(86dvh, 820px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--borde-color);
+  border-radius: 26px;
+  color: var(--texto-principal);
+  background: var(--fondo-tarjeta);
+  box-shadow: var(--sombra-elevada, 0 28px 80px rgba(15, 23, 42, 0.26));
+  animation: evento-publicaciones-modal-aparecer 0.24s ease-out;
+}
+
+.evento-publicaciones-modal-cerrar {
+  position: absolute;
+  z-index: 3;
+  top: 18px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(13, 27, 42, 0.48);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.evento-publicaciones-modal-cerrar:hover {
+  color: #ffffff;
+  background: rgba(13, 27, 42, 0.78);
+  transform: translateY(-1px);
+}
+
+.evento-publicaciones-modal-cerrar:focus-visible,
+.evento-publicaciones-modal-actualizar:focus-visible,
+.evento-publicaciones-modal-autor:focus-visible {
+  outline: 2px solid var(--dorado);
+  outline-offset: 2px;
+}
+
+.evento-publicaciones-modal-hero {
+  flex: 0 0 auto;
+  padding: 30px 74px 28px 30px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at top right, rgba(203, 161, 53, 0.22), transparent 34%),
+    linear-gradient(135deg, #0d1b2a 0%, #14253a 100%);
+}
+
+.evento-publicaciones-modal-icono {
+  flex: 0 0 62px;
+  width: 62px;
+  height: 62px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f6d77f;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 1.8rem;
+}
+
+.evento-publicaciones-modal-info {
+  min-width: 0;
+}
+
+.evento-publicaciones-modal-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: #f6d77f;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+.evento-publicaciones-modal-info h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #ffffff;
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
+  font-weight: 700;
+  line-height: 1.08;
+}
+
+.evento-publicaciones-modal-info p {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.evento-publicaciones-modal-cuerpo {
+  min-height: 0;
+  padding: 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.evento-publicaciones-modal-resumen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--borde-color);
+  border-radius: 18px;
+  background: var(--fondo-app);
+}
+
+.evento-publicaciones-modal-resumen strong {
+  display: block;
+  color: var(--texto-principal);
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.evento-publicaciones-modal-resumen span {
+  color: var(--texto-secundario);
+  font-size: 0.85rem;
+}
+
+.evento-publicaciones-modal-actualizar {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--dorado-borde-suave);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--dorado-oscuro);
+  background: var(--dorado-fondo-suave);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.evento-publicaciones-modal-actualizar:hover:not(:disabled) {
+  border-color: var(--dorado);
+  background: color-mix(in srgb, var(--dorado) 18%, var(--fondo-tarjeta));
+  transform: translateY(-1px);
+}
+
+.evento-publicaciones-modal-actualizar:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.evento-publicaciones-modal-actualizar .girando {
+  animation: evento-publicaciones-girar 0.85s linear infinite;
+}
+
+.evento-publicaciones-modal-lista {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.evento-publicaciones-modal-publicacion {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--borde-color);
+  border-radius: 18px;
+  background: var(--fondo-tarjeta);
+  box-shadow: var(--sombra-suave, 0 10px 24px rgba(15, 23, 42, 0.06));
+}
+
+.evento-publicaciones-modal-publicacion-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.evento-publicaciones-modal-autor {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+
+.evento-publicaciones-modal-autor:not(:disabled) {
+  cursor: pointer;
+}
+
+.evento-publicaciones-modal-autor:disabled {
+  opacity: 1;
+}
+
+.evento-publicaciones-modal-avatar {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  display: block;
+  border: 1px solid var(--borde-color);
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--fondo-app);
+}
+
+.evento-publicaciones-modal-autor-texto {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.evento-publicaciones-modal-autor strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--texto-principal);
+  font-size: 0.92rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evento-publicaciones-modal-autor:not(:disabled):hover strong {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.evento-publicaciones-modal-autor small {
+  margin-top: 2px;
+  color: var(--texto-secundario);
+  font-size: 0.74rem;
+  line-height: 1.2;
+}
+
+.evento-publicaciones-modal-publicacion-texto {
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+  color: var(--texto-principal);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.evento-publicaciones-modal-carrusel {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.evento-publicaciones-modal-estado {
+  min-height: 72px;
+  padding: 18px;
+  border: 1px solid var(--borde-color);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--texto-secundario);
+  background: var(--fondo-app);
+  text-align: center;
+}
+
+.evento-publicaciones-modal-estado.error {
+  color: var(--error-texto, #b91c1c);
+  border-color: var(--error-borde, #fecaca);
+  background: var(--error-fondo, #fef2f2);
+}
+
+.evento-publicaciones-modal-estado.vacio {
+  min-height: 220px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.evento-publicaciones-modal-estado.vacio > i {
+  color: var(--dorado);
+  font-size: 2.2rem;
+}
+
+.evento-publicaciones-modal-estado.vacio strong {
+  color: var(--texto-principal);
+  font-size: 1rem;
+}
+
+.evento-publicaciones-modal-estado.vacio span {
+  max-width: 360px;
+  color: var(--texto-secundario);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+html[data-theme="dark"] .evento-publicaciones-modal,
+[data-tema="oscuro"] .evento-publicaciones-modal {
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.48);
+}
+
+html[data-theme="dark"] .evento-publicaciones-modal-hero,
+[data-tema="oscuro"] .evento-publicaciones-modal-hero {
+  background:
+    radial-gradient(circle at top right, rgba(203, 161, 53, 0.18), transparent 35%),
+    linear-gradient(135deg, #06111f 0%, #0d1b2a 100%);
+}
+
+html[data-theme="dark"] .evento-publicaciones-modal-estado.error,
+[data-tema="oscuro"] .evento-publicaciones-modal-estado.error {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(127, 29, 29, 0.25);
+}
+
+@media (max-width: 992px) {
+  .evento-publicaciones-modal {
+    width: min(720px, calc(100vw - 28px));
+  }
+
+  .evento-publicaciones-modal-lista {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 576px) {
+  .evento-publicaciones-modal-backdrop {
+    padding: 9px;
+  }
+
+  .evento-publicaciones-modal {
+    width: 100%;
+    max-height: calc(100vh - 18px);
+    max-height: calc(100dvh - 18px);
+    border-radius: 22px;
+  }
+
+  .evento-publicaciones-modal-cerrar {
+    top: 14px;
+    right: 14px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .evento-publicaciones-modal-hero {
+    padding: 24px 58px 22px 18px;
+    align-items: flex-start;
+    gap: 13px;
+  }
+
+  .evento-publicaciones-modal-icono {
+    flex-basis: 48px;
+    width: 48px;
+    height: 48px;
+    border-radius: 15px;
+    font-size: 1.4rem;
+  }
+
+  .evento-publicaciones-modal-info h2 {
+    font-size: clamp(1.25rem, 7vw, 1.7rem);
+  }
+
+  .evento-publicaciones-modal-info p {
+    font-size: 0.82rem;
+  }
+
+  .evento-publicaciones-modal-cuerpo {
+    padding: 16px;
+  }
+
+  .evento-publicaciones-modal-resumen {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .evento-publicaciones-modal-actualizar {
+    width: 100%;
+  }
+}
+
+@keyframes evento-publicaciones-girar {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes evento-publicaciones-fondo-aparecer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes evento-publicaciones-modal-aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evento-publicaciones-modal-backdrop,
+  .evento-publicaciones-modal,
+  .evento-publicaciones-modal-cerrar,
+  .evento-publicaciones-modal-actualizar {
+    animation: none;
+    transition: none;
+  }
+}

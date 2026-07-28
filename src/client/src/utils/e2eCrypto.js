@@ -315,102 +315,176 @@ export const sincronizarLlavesE2EConCuenta = async ({ token, apiBaseUrl, passwor
     return obtenerOGenerarLlavesE2E({ token, apiBaseUrl, password, userId });
 };
 
-// 2. Cifrar Mensaje (E2E)
-export const encriptarMensaje = async (texto, publicKeyReceptorJWK, publicKeyCreadorJWK) => {
+// 2. Cifrar Mensaje directo (E2E)
+const importarLlavePublicaE2E = async (publicKeyJWK) => {
+    const llave = typeof publicKeyJWK === 'string'
+        ? JSON.parse(publicKeyJWK)
+        : publicKeyJWK;
+
+    return window.crypto.subtle.importKey(
+        'jwk',
+        llave,
+        { name: 'RSA-OAEP', hash: 'SHA-256' },
+        false,
+        ['encrypt']
+    );
+};
+
+const obtenerPrivateKeyLocal = () => {
+    const userId = obtenerIdUsuarioActual();
+    return (
+        localStorage.getItem(claveStorageE2E('e2e_private_key', userId)) ||
+        localStorage.getItem('e2e_private_key')
+    );
+};
+
+const cifrarContenidoConAES = async (texto) => {
     const aesKey = await window.crypto.subtle.generateKey(
         { name: 'AES-GCM', length: 256 },
         true,
         ['encrypt', 'decrypt']
     );
 
-    const encoder = new TextEncoder();
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
     const contenidoCifradoBuffer = await window.crypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
         aesKey,
-        encoder.encode(texto)
+        new TextEncoder().encode(texto)
     );
-
-    const keyReceptor = await window.crypto.subtle.importKey(
-        'jwk',
-        JSON.parse(publicKeyReceptorJWK),
-        { name: 'RSA-OAEP', hash: 'SHA-256' },
-        false,
-        ['encrypt']
-    );
-
-    const keyCreador = await window.crypto.subtle.importKey(
-        'jwk',
-        JSON.parse(publicKeyCreadorJWK),
-        { name: 'RSA-OAEP', hash: 'SHA-256' },
-        false,
-        ['encrypt']
-    );
-
     const rawAesKey = await window.crypto.subtle.exportKey('raw', aesKey);
-
-    const claveCifradaReceptorBuffer = await window.crypto.subtle.encrypt(
-        { name: 'RSA-OAEP' },
-        keyReceptor,
-        rawAesKey
-    );
-
-    const claveCifradaCreadorBuffer = await window.crypto.subtle.encrypt(
-        { name: 'RSA-OAEP' },
-        keyCreador,
-        rawAesKey
-    );
 
     return {
         contenidoCifrado: arrayBufferToBase64(contenidoCifradoBuffer),
         iv: arrayBufferToBase64(iv),
-        claveCifradaReceptor: arrayBufferToBase64(claveCifradaReceptorBuffer),
-        claveCifradaCreador: arrayBufferToBase64(claveCifradaCreadorBuffer)
+        rawAesKey
     };
 };
 
-// 3. Descifrar Mensaje (E2E)
+const cifrarClaveAESParaPublicKey = async (rawAesKey, publicKeyJWK) => {
+    const publicKey = await importarLlavePublicaE2E(publicKeyJWK);
+    const claveCifradaBuffer = await window.crypto.subtle.encrypt(
+        { name: 'RSA-OAEP' },
+        publicKey,
+        rawAesKey
+    );
+
+    return arrayBufferToBase64(claveCifradaBuffer);
+};
+
+const desencriptarContenidoConClave = async (msgObj, claveCifrada) => {
+    const privateKeyJWK = obtenerPrivateKeyLocal();
+    if (!privateKeyJWK) return '[Llave privada no encontrada]';
+    if (!claveCifrada) return '[No tienes una clave para descifrar este mensaje]';
+
+    const privateKey = await window.crypto.subtle.importKey(
+        'jwk',
+        JSON.parse(privateKeyJWK),
+        { name: 'RSA-OAEP', hash: 'SHA-256' },
+        false,
+        ['decrypt']
+    );
+
+    const rawAesKey = await window.crypto.subtle.decrypt(
+        { name: 'RSA-OAEP' },
+        privateKey,
+        base64ToArrayBuffer(claveCifrada)
+    );
+
+    const aesKey = await window.crypto.subtle.importKey(
+        'raw',
+        rawAesKey,
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt']
+    );
+
+    const textoBuffer = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: base64ToArrayBuffer(msgObj.iv) },
+        aesKey,
+        base64ToArrayBuffer(msgObj.contenidoCifrado)
+    );
+
+    return new TextDecoder().decode(textoBuffer);
+};
+
+export const encriptarMensaje = async (texto, publicKeyReceptorJWK, publicKeyCreadorJWK) => {
+    const paquete = await cifrarContenidoConAES(texto);
+
+    const [claveCifradaReceptor, claveCifradaCreador] = await Promise.all([
+        cifrarClaveAESParaPublicKey(paquete.rawAesKey, publicKeyReceptorJWK),
+        cifrarClaveAESParaPublicKey(paquete.rawAesKey, publicKeyCreadorJWK)
+    ]);
+
+    return {
+        contenidoCifrado: paquete.contenidoCifrado,
+        iv: paquete.iv,
+        claveCifradaReceptor,
+        claveCifradaCreador
+    };
+};
+
+// Cifra un solo contenido y envuelve su clave AES para cada miembro activo del árbol.
+export const encriptarMensajeGrupo = async (texto, miembros = []) => {
+    const miembrosValidos = (Array.isArray(miembros) ? miembros : [])
+        .map((miembro) => ({
+            usuario: miembro?.id || miembro?._id || miembro?.usuario || null,
+            publicKey: miembro?.publicKey || null
+        }))
+        .filter((miembro) => miembro.usuario && miembro.publicKey);
+
+    if (miembrosValidos.length === 0) {
+        throw new Error('No hay miembros con cifrado configurado para este grupo familiar.');
+    }
+
+    const idsUnicos = new Set(miembrosValidos.map((miembro) => String(miembro.usuario)));
+    if (idsUnicos.size !== miembrosValidos.length) {
+        throw new Error('La lista de miembros del grupo contiene usuarios duplicados.');
+    }
+
+    const paquete = await cifrarContenidoConAES(texto);
+    const clavesCifradas = await Promise.all(
+        miembrosValidos.map(async (miembro) => ({
+            usuario: miembro.usuario,
+            claveCifrada: await cifrarClaveAESParaPublicKey(paquete.rawAesKey, miembro.publicKey)
+        }))
+    );
+
+    return {
+        contenidoCifrado: paquete.contenidoCifrado,
+        iv: paquete.iv,
+        clavesCifradas
+    };
+};
+
+// 3. Descifrar Mensaje directo (E2E)
 export const desencriptarMensaje = async (msgObj, esCreador = false) => {
     try {
-        const userId = obtenerIdUsuarioActual();
-        const privateKeyJWK =
-            localStorage.getItem(claveStorageE2E('e2e_private_key', userId)) ||
-            localStorage.getItem('e2e_private_key');
+        const claveCifradaTarget = esCreador
+            ? msgObj.claveCifradaCreador
+            : msgObj.claveCifradaReceptor;
 
-        if (!privateKeyJWK) return '[Llave privada no encontrada]';
-
-        const privateKey = await window.crypto.subtle.importKey(
-            'jwk',
-            JSON.parse(privateKeyJWK),
-            { name: 'RSA-OAEP', hash: 'SHA-256' },
-            false,
-            ['decrypt']
-        );
-
-        const claveCifradaTarget = esCreador ? msgObj.claveCifradaCreador : msgObj.claveCifradaReceptor;
-        const rawAesKey = await window.crypto.subtle.decrypt(
-            { name: 'RSA-OAEP' },
-            privateKey,
-            base64ToArrayBuffer(claveCifradaTarget)
-        );
-
-        const aesKey = await window.crypto.subtle.importKey(
-            'raw',
-            rawAesKey,
-            { name: 'AES-GCM' },
-            false,
-            ['decrypt']
-        );
-
-        const textoBuffer = await window.crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: base64ToArrayBuffer(msgObj.iv) },
-            aesKey,
-            base64ToArrayBuffer(msgObj.contenidoCifrado)
-        );
-
-        return new TextDecoder().decode(textoBuffer);
+        return await desencriptarContenidoConClave(msgObj, claveCifradaTarget);
     } catch (error) {
         console.error('Error descifrando mensaje:', error);
         return '[Mensaje no descifrable]';
+    }
+};
+
+// Descifra un mensaje grupal usando la copia de la clave AES asignada al usuario actual.
+export const desencriptarMensajeGrupo = async (msgObj) => {
+    try {
+        const userId = obtenerIdUsuarioActual();
+        const claveCifradaUsuario = msgObj?.claveCifradaUsuario || (
+            Array.isArray(msgObj?.clavesCifradas)
+                ? msgObj.clavesCifradas.find((entrada) => (
+                    String(entrada?.usuario?._id || entrada?.usuario || '') === String(userId || '')
+                ))?.claveCifrada
+                : null
+        );
+
+        return await desencriptarContenidoConClave(msgObj, claveCifradaUsuario);
+    } catch (error) {
+        console.error('Error descifrando mensaje familiar:', error);
+        return '[Mensaje familiar no descifrable]';
     }
 };

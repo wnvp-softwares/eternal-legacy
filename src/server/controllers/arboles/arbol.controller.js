@@ -1,4 +1,4 @@
-const { Arbol, Nodo, Hilo, Usuario, InvitacionFamiliar } = require('../../models/index.model');
+const { Arbol, Nodo, Hilo, Usuario, InvitacionFamiliar, MensajeGrupoFamiliar } = require('../../models/index.model');
 
 const LIMITE_ADMINS_ARBOL = 5;
 
@@ -506,7 +506,8 @@ const eliminarMiArbol = async (req, res) => {
         await Promise.all([
             Hilo.deleteMany({ arbol: arbol._id }),
             Nodo.deleteMany({ arbol: arbol._id }),
-            InvitacionFamiliar.deleteMany({ arbol: arbol._id })
+            InvitacionFamiliar.deleteMany({ arbol: arbol._id }),
+            MensajeGrupoFamiliar.deleteMany({ arbol: arbol._id })
         ]);
 
         await Arbol.deleteOne({ _id: arbol._id });

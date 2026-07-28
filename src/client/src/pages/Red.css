@@ -158,17 +158,26 @@
 }
 
 .relacion-conexion {
-    color: var(--dorado-oscuro);
+    color: var(--texto-secundario);
     font-size: 0.85rem;
     font-weight: 500;
     margin-bottom: 15px;
 }
 
 .relacion-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid var(--borde-color);
-    color: var(--texto-secundario) !important;
+    background-color: var(--fondo-elevado);
+    color: var(--texto-secundario);
     font-size: 0.75rem;
+    font-weight: 800;
     letter-spacing: 0.5px;
+    line-height: 1;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 999px;
 }
 
 /* =========================================
@@ -397,9 +406,45 @@
 .btn-ver-perfil:hover {
     background-color: var(--dorado);
     border-color: var(--dorado);
-    color: white;
+    color: var(--texto-inverso);
     box-shadow: 0 8px 18px rgba(203, 161, 53, 0.25);
     transform: translateY(-2px);
+}
+
+.btn-ver-perfil:focus-visible,
+.btn-seguir-vuelta-red:focus-visible {
+    outline: 2px solid var(--dorado);
+    outline-offset: 3px;
+}
+
+.btn-seguir-vuelta-red {
+    min-height: 38px;
+    border: 1px solid var(--dorado);
+    background-color: var(--dorado);
+    color: var(--texto-inverso);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.82rem;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.btn-seguir-vuelta-red:hover:not(:disabled) {
+    background-color: var(--dorado-oscuro);
+    border-color: var(--dorado-oscuro);
+    color: var(--texto-inverso);
+    box-shadow: 0 8px 18px rgba(203, 161, 53, 0.25);
+    transform: translateY(-2px);
+}
+
+.btn-seguir-vuelta-red:disabled {
+    opacity: 0.58;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 /* =========================================
@@ -1017,7 +1062,7 @@
     }
 
     .btn-ver-perfil,
-    .acciones-conexion-red .btn-dorado {
+    .btn-seguir-vuelta-red {
         min-height: 36px;
         padding: 7px 9px;
         font-size: 0.74rem;

@@ -21,6 +21,7 @@ router.use('/arbol', require('./arboles/arbol.routes'));
 
 // --- 3. PUBLICACIONES ---
 router.use('/publicaciones', require('./publicaciones/publicacion.routes'));
+router.use('/destacadas', require('./publicaciones/etapaDestacada.routes'));
 router.use('/comentarios', require('./publicaciones/comentario.routes'));
 router.use('/uploads', require('./publicaciones/uploads.routes'));
 

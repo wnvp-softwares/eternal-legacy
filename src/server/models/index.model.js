@@ -16,9 +16,11 @@ const InvitacionFamiliar = require('./arboles/invitacionFamiliar.model');
 const Publicacion = require('./publicacion/publicacion.model');
 const Comentario = require('./publicacion/comentario.model');
 const Upload = require('./publicacion/uploads.model');
+const EtapaDestacada = require('./publicacion/etapaDestacada.model');
 
 // --- Importación de Interacción ---
 const Mensajeria = require('./interaccion/mensajeria.model');
+const MensajeGrupoFamiliar = require('./interaccion/mensajeGrupoFamiliar.model');
 const Notificacion = require('./interaccion/notificaciones.model');
 
 module.exports = {
@@ -40,8 +42,10 @@ module.exports = {
     Publicacion,
     Comentario,
     Upload,
+    EtapaDestacada,
 
     // Interacción
     Mensajeria,
+    MensajeGrupoFamiliar,
     Notificacion
 };

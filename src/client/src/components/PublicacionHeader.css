@@ -29,8 +29,9 @@
 
 .legacy-publicacion-avatar-boton.interactivo:focus-visible,
 .legacy-publicacion-nombre.interactivo:focus-visible,
-.legacy-publicacion-insignia:focus-visible,
-.legacy-publicacion-menu:focus-visible {
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo:focus-visible,
+.legacy-publicacion-menu:focus-visible,
+.legacy-publicacion-contexto-item.evento.interactivo:focus-visible {
   outline: 2px solid var(--dorado);
   outline-offset: 2px;
 }
@@ -122,6 +123,23 @@
   margin-top: 7px;
 }
 
+.legacy-publicacion-contexto-principal {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  overflow: visible;
+}
+
+.legacy-publicacion-tipo-contenedor {
+  position: relative;
+  min-width: 0;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
 .legacy-publicacion-contexto-item {
   min-width: 0;
   display: inline-flex;
@@ -152,107 +170,241 @@
   text-overflow: ellipsis;
 }
 
+
+.legacy-publicacion-contexto-item.evento {
+  min-width: 0;
+  max-width: min(100%, 320px);
+  overflow: hidden;
+  color: var(--texto-secundario);
+}
+
+/*
+ * La acción del evento conserva semántica de botón porque abre un diálogo,
+ * pero visualmente se comporta como un enlace de contexto compacto.
+ */
+button.legacy-publicacion-contexto-item.evento {
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.legacy-publicacion-contexto-item.evento > i {
+  flex: none;
+  color: var(--dorado);
+  font-size: 0.72em;
+  transition: color 0.16s ease, filter 0.16s ease;
+}
+
+.legacy-publicacion-contexto-item.evento > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.80em;
+  color: var(--texto-secundario);
+}
+
+.legacy-publicacion-contexto-item.evento.interactivo {
+  cursor: pointer;
+  transition: color 0.16s ease, opacity 0.16s ease;
+}
+
+.legacy-publicacion-contexto-item.evento.interactivo:hover,
+.legacy-publicacion-contexto-item.evento.interactivo:focus-visible {
+  color: var(--dorado);
+}
+
+.legacy-publicacion-contexto-item.evento.interactivo:hover > span,
+.legacy-publicacion-contexto-item.evento.interactivo:focus-visible > span {
+  color: var(--dorado);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.legacy-publicacion-contexto-item.evento.interactivo:hover > i,
+.legacy-publicacion-contexto-item.evento.interactivo:focus-visible > i {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--dorado) 42%, transparent));
+}
+
+.legacy-publicacion-contexto-item.evento.interactivo:active {
+  opacity: 0.72;
+}
+
 .legacy-publicacion-acciones-header {
   min-width: 0;
   display: inline-flex;
   align-items: flex-start;
   justify-content: flex-end;
-  gap: 5px;
 }
 
-.legacy-publicacion-insignia {
-  position: relative;
-  width: 30px;
-  height: 30px;
-  padding: 0;
+/*
+ * El tipo de publicación vive junto al resto de los metadatos. Conserva
+ * semántica de botón porque despliega información, pero se presenta como enlace.
+ */
+button.legacy-publicacion-contexto-item.tipo-publicacion {
+  margin: 0;
+  padding: 2px 0;
   border: 0;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: 0;
+  color: var(--texto-secundario);
   background: transparent;
-  cursor: help;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.legacy-publicacion-insignia-imagen {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: contain;
-  object-position: center;
-  pointer-events: none;
-  user-select: none;
-  transition: transform 0.18s ease, filter 0.18s ease;
+.legacy-publicacion-contexto-item.tipo-publicacion > i {
+  flex: none;
+  color: var(--texto-secundario);
+  font-size: 0.72em;
+  transition: color 0.16s ease, filter 0.16s ease;
 }
 
-.legacy-publicacion-insignia:hover .legacy-publicacion-insignia-imagen,
-.legacy-publicacion-insignia:focus-visible .legacy-publicacion-insignia-imagen,
-.legacy-publicacion-insignia.tooltip-visible .legacy-publicacion-insignia-imagen {
-  transform: translateY(-1px) scale(1.04);
+.legacy-publicacion-contexto-item.tipo-publicacion.familiar > i {
+  color: var(--dorado);
 }
 
-.legacy-publicacion-insignia.historico:hover .legacy-publicacion-insignia-imagen,
-.legacy-publicacion-insignia.historico:focus-visible .legacy-publicacion-insignia-imagen,
-.legacy-publicacion-insignia.historico.tooltip-visible .legacy-publicacion-insignia-imagen {
-  filter: drop-shadow(0 3px 5px rgba(31, 41, 55, 0.22));
-}
-
-.legacy-publicacion-insignia.familiar:hover .legacy-publicacion-insignia-imagen,
-.legacy-publicacion-insignia.familiar:focus-visible .legacy-publicacion-insignia-imagen,
-.legacy-publicacion-insignia.familiar.tooltip-visible .legacy-publicacion-insignia-imagen {
-  filter: drop-shadow(0 3px 5px rgba(172, 123, 20, 0.24));
-}
-
-.legacy-publicacion-insignia-tooltip {
-  position: absolute;
-  z-index: 40;
-  top: calc(100% + 8px);
-  right: 0;
-  width: max-content;
-  max-width: min(190px, calc(100vw - 32px));
-  padding: 7px 10px;
-  border: 1px solid var(--borde-color);
-  border-radius: 9px;
-  color: var(--texto-principal);
-  background-color: var(--fondo-tarjeta);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
-  font-size: 0.74rem;
-  font-weight: 650;
-  line-height: 1.2;
+.legacy-publicacion-contexto-item.tipo-publicacion > span {
   white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-4px) scale(0.98);
-  transform-origin: top right;
-  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+  font-size: 0.80em;
 }
 
-.legacy-publicacion-insignia-tooltip::before {
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo {
+  cursor: pointer;
+  transition: color 0.16s ease, opacity 0.16s ease;
+}
+
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo:hover,
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo:focus-visible,
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo.activo {
+  color: var(--dorado-oscuro);
+}
+
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo:hover > span,
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo:focus-visible > span,
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo.activo > span {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo:hover > i,
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo:focus-visible > i,
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo.activo > i {
+  color: var(--dorado);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--dorado) 38%, transparent));
+}
+
+.legacy-publicacion-contexto-item.tipo-publicacion.interactivo:active {
+  opacity: 0.72;
+}
+
+.legacy-publicacion-tipo-popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 8px);
+  left: 0;
+  right: auto;
+  width: min(260px, calc(100vw - 72px));
+  padding: 11px 12px;
+  border: 1px solid var(--borde-color);
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  color: var(--texto-principal);
+  background: var(--fondo-elevado, var(--fondo-tarjeta));
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.2);
+  transform-origin: top left;
+  animation: legacy-tipo-popover-aparecer 0.16s ease-out;
+}
+
+.legacy-publicacion-tipo-popover::before {
   content: '';
   position: absolute;
   top: -5px;
-  right: 10px;
+  left: 12px;
+  right: auto;
   width: 9px;
   height: 9px;
   border-top: 1px solid var(--borde-color);
   border-left: 1px solid var(--borde-color);
-  background-color: var(--fondo-tarjeta);
+  background: var(--fondo-elevado, var(--fondo-tarjeta));
   transform: rotate(45deg);
 }
 
-.legacy-publicacion-insignia:focus-visible .legacy-publicacion-insignia-tooltip,
-.legacy-publicacion-insignia.tooltip-visible .legacy-publicacion-insignia-tooltip {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0) scale(1);
+.legacy-publicacion-tipo-popover-icono {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .legacy-publicacion-insignia:hover .legacy-publicacion-insignia-tooltip {
+.legacy-publicacion-tipo-popover.historico .legacy-publicacion-tipo-popover-icono {
+  color: var(--texto-principal);
+  background: var(--hover-menu);
+}
+
+.legacy-publicacion-tipo-popover.familiar .legacy-publicacion-tipo-popover-icono {
+  color: var(--dorado-oscuro);
+  background: var(--dorado-fondo-suave);
+}
+
+.legacy-publicacion-tipo-popover-texto {
+  min-width: 0;
+}
+
+.legacy-publicacion-tipo-popover-texto strong {
+  display: block;
+  margin: 0;
+  color: var(--texto-principal);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.legacy-publicacion-tipo-popover-texto p {
+  margin: 3px 0 0;
+  color: var(--texto-secundario);
+  font-size: 0.74rem;
+  line-height: 1.38;
+}
+
+[data-tema="oscuro"] .legacy-publicacion-tipo-popover,
+html[data-theme="dark"] .legacy-publicacion-tipo-popover {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42);
+}
+
+@keyframes legacy-tipo-popover-aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
     opacity: 1;
-    visibility: visible;
     transform: translateY(0) scale(1);
   }
 }
@@ -278,8 +430,24 @@
   background-color: var(--hover-menu);
 }
 
-[data-tema="oscuro"] .legacy-publicacion-insignia-tooltip {
-  box-shadow: 0 9px 24px rgba(0, 0, 0, 0.34);
+
+@media (max-width: 900px) {
+  .legacy-publicacion-contexto-principal {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .legacy-publicacion-contexto-principal > .legacy-publicacion-tipo-contenedor {
+    flex: 0 0 auto;
+  }
+
+  .legacy-publicacion-contexto-principal > .evento {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+  }
 }
 
 @media (max-width: 576px) {
@@ -318,29 +486,22 @@
     font-size: 0.68rem;
   }
 
-  .legacy-publicacion-acciones-header {
-    gap: 3px;
-  }
-
-  .legacy-publicacion-insignia {
-    width: 28px;
-    height: 28px;
-    cursor: pointer;
-  }
-
   .legacy-publicacion-menu {
     width: 30px;
     height: 30px;
   }
 
-  .legacy-publicacion-insignia-tooltip {
+  .legacy-publicacion-tipo-popover {
     top: calc(100% + 7px);
-    right: -30px;
-    font-size: 0.72rem;
+    left: 0;
+    right: auto;
+    width: min(250px, calc(100vw - 66px));
+    padding: 10px 11px;
   }
 
-  .legacy-publicacion-insignia-tooltip::before {
-    right: 40px;
+  .legacy-publicacion-tipo-popover::before {
+    left: 11px;
+    right: auto;
   }
 }
 
@@ -358,18 +519,19 @@
     gap: 4px;
   }
 
-  .legacy-publicacion-insignia {
-    width: 27px;
-    height: 27px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
 
   .legacy-publicacion-menu,
-  .legacy-publicacion-insignia-imagen,
-  .legacy-publicacion-insignia-tooltip {
+  .legacy-publicacion-contexto-item.tipo-publicacion.interactivo,
+  .legacy-publicacion-contexto-item.tipo-publicacion > i,
+  .legacy-publicacion-contexto-item.evento.interactivo {
     transition: none;
+  }
+
+  .legacy-publicacion-tipo-popover {
+    animation: none;
   }
 }
 /* =========================================================
@@ -792,4 +954,60 @@
 
 .publicacion-indicador-fijada i {
   color: var(--dorado);
+}
+/* =========================================================
+   ETAPA DESTACADA ASOCIADA A LA PUBLICACIÓN
+   ========================================================= */
+.legacy-publicacion-contexto-item.etapa {
+  min-width: 0;
+  max-width: min(100%, 190px);
+  overflow: hidden;
+  color: var(--texto-secundario);
+}
+button.legacy-publicacion-contexto-item.etapa {
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.legacy-publicacion-contexto-item.etapa > i {
+  flex: none;
+  color: var(--legacy-etapa-color, var(--dorado));
+  font-size: .72em;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--legacy-etapa-color, var(--dorado)) 28%, transparent));
+}
+.legacy-publicacion-contexto-item.etapa > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .80em;
+}
+.legacy-publicacion-contexto-item.etapa.interactivo { cursor: pointer; }
+.legacy-publicacion-contexto-item.etapa.interactivo:hover > span,
+.legacy-publicacion-contexto-item.etapa.interactivo:focus-visible > span {
+  color: var(--legacy-etapa-color, var(--dorado-oscuro));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.legacy-publicacion-contexto-item.etapa.interactivo:focus-visible {
+  outline: 2px solid var(--legacy-etapa-color, var(--dorado));
+  outline-offset: 2px;
+}
+@media (max-width: 900px) {
+  .legacy-publicacion-contexto-principal > .etapa {
+    flex: 0 1 130px;
+    min-width: 0;
+  }
+}
+@media (max-width: 576px) {
+  .legacy-publicacion-contexto-principal { gap: 7px; }
+  .legacy-publicacion-contexto-principal > .etapa { flex-basis: 105px; }
 }

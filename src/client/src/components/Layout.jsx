@@ -340,18 +340,27 @@ export default function Layout() {
 
     const obtenerTotalNoLeidos = async () => {
       try {
-        const respuesta = await fetch(`${API_BASE_URL}/mensajes/contactos`, {
+        const respuesta = await fetch(`${API_BASE_URL}/mensajes/bandeja`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
         if (respuesta.ok) {
           const data = await respuesta.json();
+          const totalServidor = Number(data?.totalNoLeidos);
+
+          if (Number.isFinite(totalServidor)) {
+            setMensajesNoLeidos(totalServidor);
+            return;
+          }
 
           const listaContactos = Array.isArray(data)
             ? data
             : (data.contactos || data.contactosPermitidos || data.personas || data.contactosDirectos || []);
-
-          const total = listaContactos.reduce((acc, contacto) => acc + (contacto.mensajesNoLeidos || 0), 0);
+          const listaGrupos = Array.isArray(data?.grupos) ? data.grupos : [];
+          const total = [...listaContactos, ...listaGrupos].reduce(
+            (acc, chat) => acc + (Number(chat.mensajesNoLeidos) || 0),
+            0
+          );
           setMensajesNoLeidos(total);
         }
       } catch (error) {

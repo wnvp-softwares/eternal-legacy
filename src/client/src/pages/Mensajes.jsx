@@ -1,26 +1,47 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { usePreferencias } from '../context/PreferenciasContext';
-import { obtenerOGenerarLlavesE2E, encriptarMensaje, desencriptarMensaje } from '../utils/e2eCrypto';
+import {
+  obtenerOGenerarLlavesE2E,
+  encriptarMensaje,
+  desencriptarMensaje,
+  encriptarMensajeGrupo,
+  desencriptarMensajeGrupo
+} from '../utils/e2eCrypto';
 import { API_BASE_URL as API_BASE_URL_CONFIG, resolverUrlBackend } from '../config/env';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Mensajes.css';
 
 const API_BASE_URL = API_BASE_URL_CONFIG;
+const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
+const ZONA_HORARIA_PREDETERMINADA = 'America/Mexico_City';
 
-// Helper defensivo para extraer IDs (mismo patrón que en Inicio.jsx)
 const obtenerId = (valor) => {
   if (!valor) return null;
   if (typeof valor === 'string') return valor;
   return valor._id || valor.id || null;
 };
 
+const esGrupoFamiliar = (chat) => chat?.tipoChat === 'grupo-familiar';
 
-const MILISEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
-const ZONA_HORARIA_PREDETERMINADA = 'America/Mexico_City';
+const obtenerIdChat = (chat) => (
+  esGrupoFamiliar(chat)
+    ? (chat?.arbolId || obtenerId(chat))
+    : obtenerId(chat)
+);
+
+const obtenerClaveChat = (chat) => {
+  const id = obtenerIdChat(chat);
+  if (!id) return '';
+  return `${esGrupoFamiliar(chat) ? 'grupo' : 'directo'}-${id}`;
+};
+
+const obtenerNombreChat = (chat) => {
+  if (esGrupoFamiliar(chat)) return chat?.nombreFamilia || 'Grupo familiar';
+  return chat?.nombreUsuario || chat?.nombre || 'Usuario';
+};
 
 const obtenerFechaValida = (valor) => {
   if (!valor) return null;
-
   const fecha = valor instanceof Date ? valor : new Date(valor);
   return Number.isNaN(fecha.getTime()) ? null : fecha;
 };
@@ -68,7 +89,6 @@ const obtenerClaveDiaMensaje = (valor, zonaHoraria) => {
 const obtenerIndiceDiaMensaje = (valor, zonaHoraria) => {
   const partes = obtenerPartesFechaEnZona(valor, zonaHoraria);
   if (!partes) return null;
-
   return Math.floor(Date.UTC(partes.year, partes.month - 1, partes.day) / MILISEGUNDOS_POR_DIA);
 };
 
@@ -93,7 +113,6 @@ const formatearEtiquetaDiaMensaje = (valor, idioma = 'es-MX', zonaHoraria = ZONA
         timeZone: zonaHoraria || ZONA_HORARIA_PREDETERMINADA,
         weekday: 'long'
       }).format(fecha);
-
       return nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1);
     } catch (error) {
       // Continúa con la fecha numérica como respaldo.
@@ -110,7 +129,6 @@ const formatearEtiquetaDiaMensaje = (valor, idioma = 'es-MX', zonaHoraria = ZONA
   } catch (error) {
     const partes = obtenerPartesFechaEnZona(fecha, zonaHoraria);
     if (!partes) return '';
-
     return `${String(partes.day).padStart(2, '0')}/${String(partes.month).padStart(2, '0')}/${partes.year}`;
   }
 };
@@ -132,13 +150,9 @@ const formatearHoraMensaje = (valor, idioma = 'es-MX', zonaHoraria = ZONA_HORARI
 
 const formatearTiempoPreviewContacto = (valor, idioma = 'es-MX', zonaHoraria = ZONA_HORARIA_PREDETERMINADA) => {
   if (!valor) return '';
-
   const etiqueta = formatearEtiquetaDiaMensaje(valor, idioma, zonaHoraria);
   const hoy = String(idioma || 'es-MX').toLowerCase().startsWith('en') ? 'Today' : 'Hoy';
-
-  return etiqueta === hoy
-    ? formatearHoraMensaje(valor, idioma, zonaHoraria)
-    : etiqueta;
+  return etiqueta === hoy ? formatearHoraMensaje(valor, idioma, zonaHoraria) : etiqueta;
 };
 
 const construirElementosConversacion = (mensajes = [], idioma, zonaHoraria) => {
@@ -147,7 +161,6 @@ const construirElementosConversacion = (mensajes = [], idioma, zonaHoraria) => {
     .sort((a, b) => {
       const fechaA = obtenerFechaValida(a.mensaje?.createdAt);
       const fechaB = obtenerFechaValida(b.mensaje?.createdAt);
-
       if (fechaA && fechaB) return fechaA.getTime() - fechaB.getTime();
       if (fechaA) return -1;
       if (fechaB) return 1;
@@ -179,15 +192,22 @@ const construirElementosConversacion = (mensajes = [], idioma, zonaHoraria) => {
   return elementos;
 };
 
+const obtenerUrlImagenUsuario = (usuario, nombreFallback = 'Usuario') => {
+  const ruta = usuario?.imagenPerfil?.urlArchivo || usuario?.imagenPerfil || usuario?.fotoPerfil;
+  if (typeof ruta === 'string' && ruta.trim()) return resolverUrlBackend(ruta);
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreFallback)}&background=0D1B2A&color=fff`;
+};
+
 export default function Mensajes() {
   const { idioma, zonaHoraria } = usePreferencias();
-  const [contactos, setContactos] = useState([]);
+  const [chats, setChats] = useState([]);
   const [busquedaPersona, setBusquedaPersona] = useState('');
   const [chatSeleccionado, setChatSeleccionado] = useState(null);
   const [mensajes, setMensajes] = useState([]);
   const [mensajeTexto, setMensajeTexto] = useState('');
   const [bannerMinimizado, setBannerMinimizado] = useState(false);
   const [cargandoMensajes, setCargandoMensajes] = useState(false);
+  const [enviandoMensaje, setEnviandoMensaje] = useState(false);
   const [miPublicKey, setMiPublicKey] = useState(null);
 
   const historialMensajesRef = useRef(null);
@@ -195,12 +215,11 @@ export default function Mensajes() {
   const inputMensajeRef = useRef(null);
   const alturaViewportBaseRef = useRef(0);
   const token = localStorage.getItem('token');
+  const claveChatSeleccionado = obtenerClaveChat(chatSeleccionado);
+  const seleccionadoEsGrupo = esGrupoFamiliar(chatSeleccionado);
 
   const prepararRestauracionScroll = (forzarFinal = false) => {
     const historial = historialMensajesRef.current;
-
-    // Una acción explícita (abrir chat o enviar) siempre tiene prioridad
-    // frente a una actualización automática que llegue al mismo tiempo.
     if (!forzarFinal && accionScrollPendienteRef.current?.modo === 'final') return;
 
     if (forzarFinal || !historial) {
@@ -209,16 +228,11 @@ export default function Mensajes() {
     }
 
     const distanciaAlFinal = historial.scrollHeight - historial.scrollTop - historial.clientHeight;
-    const estaCercaDelFinal = distanciaAlFinal <= 80;
-
-    accionScrollPendienteRef.current = estaCercaDelFinal
+    accionScrollPendienteRef.current = distanciaAlFinal <= 80
       ? { modo: 'final' }
       : { modo: 'preservar', scrollTop: historial.scrollTop };
   };
 
-  // 1. Inicializar Claves E2E
-  // IMPORTANTE: ya no reemplazamos la llave pública cada vez que se abre Mensajes.
-  // Las llaves se sincronizan al iniciar sesión para que celular y computadora usen la misma llave de cuenta.
   useEffect(() => {
     const inicializarE2E = async () => {
       try {
@@ -228,96 +242,99 @@ export default function Mensajes() {
           apiBaseUrl: API_BASE_URL,
           userId: usuarioLocal.id || usuarioLocal._id || null
         });
-
         setMiPublicKey(publicKeyJWK);
-      } catch (err) {
-        console.error('Error al inicializar cifrado E2E:', err);
+      } catch (error) {
+        console.error('Error al inicializar cifrado E2E:', error);
       }
     };
 
     if (token) inicializarE2E();
   }, [token]);
 
-  const cargarContactos = useCallback(async () => {
+  const cargarBandeja = useCallback(async () => {
     if (!token || !miPublicKey) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/mensajes/contactos`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const respuesta = await fetch(`${API_BASE_URL}/mensajes/bandeja`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
+      if (!respuesta.ok) return;
 
-      if (!res.ok) return;
+      const data = await respuesta.json();
+      const contactos = Array.isArray(data?.contactos) ? data.contactos : [];
+      const grupos = Array.isArray(data?.grupos) ? data.grupos : [];
+      const usuarioLocal = JSON.parse(localStorage.getItem('usuario') || '{}');
+      const miId = usuarioLocal.id || usuarioLocal._id;
 
-      const data = await res.json();
-      const listaContactos = Array.isArray(data)
-        ? data
-        : (data.contactos || data.contactosPermitidos || data.personas || data.contactosDirectos || []);
-
-      const miUsuario = JSON.parse(localStorage.getItem('usuario') || '{}');
-      const miId = miUsuario.id || miUsuario._id;
-
-      const contactosConPreview = await Promise.all(listaContactos.map(async (contacto) => {
+      const contactosPreparados = await Promise.all(contactos.map(async (contacto) => {
         const ultimoMensaje = contacto?.ultimoMensaje;
+        const base = { ...contacto, tipoChat: 'directo' };
         if (!ultimoMensaje) {
-          return {
-            ...contacto,
-            previewUltimoMensaje: '',
-            ultimoMensajeEsMio: false,
-            ultimoMensajeFecha: null
-          };
+          return { ...base, previewUltimoMensaje: '', ultimoMensajeEsMio: false, ultimoMensajeFecha: null };
         }
 
         const ultimoMensajeEsMio = String(ultimoMensaje.creador || ultimoMensaje.emisor) === String(miId);
-
-        try {
-          const textoPlano = await desencriptarMensaje(ultimoMensaje, ultimoMensajeEsMio);
-          return {
-            ...contacto,
-            previewUltimoMensaje: String(textoPlano || '').trim(),
-            ultimoMensajeEsMio,
-            ultimoMensajeFecha: ultimoMensaje.createdAt || null
-          };
-        } catch (error) {
-          console.warn('No se pudo descifrar la preview de una conversación:', error);
-          return {
-            ...contacto,
-            previewUltimoMensaje: 'Mensaje cifrado',
-            ultimoMensajeEsMio,
-            ultimoMensajeFecha: ultimoMensaje.createdAt || null
-          };
-        }
+        const textoPlano = await desencriptarMensaje(ultimoMensaje, ultimoMensajeEsMio);
+        return {
+          ...base,
+          previewUltimoMensaje: String(textoPlano || '').trim(),
+          ultimoMensajeEsMio,
+          ultimoMensajeFecha: ultimoMensaje.createdAt || null
+        };
       }));
 
-      contactosConPreview.sort((a, b) => {
+      const gruposPreparados = await Promise.all(grupos.map(async (grupo) => {
+        const ultimoMensaje = grupo?.ultimoMensaje;
+        const base = { ...grupo, tipoChat: 'grupo-familiar' };
+        if (!ultimoMensaje) {
+          return {
+            ...base,
+            previewUltimoMensaje: '',
+            ultimoMensajeEsMio: false,
+            ultimoMensajeFecha: null,
+            ultimoMensajeEmisorNombre: ''
+          };
+        }
+
+        const emisorId = obtenerId(ultimoMensaje.emisor) || ultimoMensaje.emisor;
+        const ultimoMensajeEsMio = String(emisorId) === String(miId);
+        const textoPlano = await desencriptarMensajeGrupo(ultimoMensaje);
+        return {
+          ...base,
+          previewUltimoMensaje: String(textoPlano || '').trim(),
+          ultimoMensajeEsMio,
+          ultimoMensajeFecha: ultimoMensaje.createdAt || null,
+          ultimoMensajeEmisorNombre: ultimoMensaje.emisor?.nombreUsuario || 'Familiar'
+        };
+      }));
+
+      const bandeja = [...contactosPreparados, ...gruposPreparados].sort((a, b) => {
         const fechaA = obtenerFechaValida(a.ultimoMensajeFecha)?.getTime() || 0;
         const fechaB = obtenerFechaValida(b.ultimoMensajeFecha)?.getTime() || 0;
         if (fechaA !== fechaB) return fechaB - fechaA;
-
-        const nombreA = String(a.nombreUsuario || a.nombre || '');
-        const nombreB = String(b.nombreUsuario || b.nombre || '');
-        return nombreA.localeCompare(nombreB, idioma || 'es-MX');
+        return obtenerNombreChat(a).localeCompare(obtenerNombreChat(b), idioma || 'es-MX');
       });
 
-      setContactos(contactosConPreview);
+      setChats(bandeja);
+      setChatSeleccionado((actual) => {
+        if (!actual) return null;
+        return bandeja.find((chat) => obtenerClaveChat(chat) === obtenerClaveChat(actual)) || null;
+      });
     } catch (error) {
-      console.error('Error al cargar contactos:', error);
+      console.error('Error al cargar la bandeja de mensajes:', error);
     }
   }, [token, miPublicKey, idioma]);
 
-  // 2. Cargar contactos, previews y contadores de forma periódica.
   useEffect(() => {
     if (!token || !miPublicKey) return undefined;
-
-    cargarContactos();
-    const intervalo = window.setInterval(cargarContactos, 5000);
+    cargarBandeja();
+    const intervalo = window.setInterval(cargarBandeja, 5000);
     return () => window.clearInterval(intervalo);
-  }, [token, miPublicKey, cargarContactos]);
+  }, [token, miPublicKey, cargarBandeja]);
 
-  // Mantiene el chat dentro del viewport visual real cuando aparece o desaparece el teclado móvil.
   useLayoutEffect(() => {
     const raiz = document.documentElement;
     const viewport = window.visualViewport;
-
     raiz.dataset.vistaMensajesActiva = 'true';
 
     const actualizarViewport = () => {
@@ -329,8 +346,7 @@ export default function Mensajes() {
         alturaViewportBaseRef.current = altoVisible;
       }
 
-      const elementoActivo = document.activeElement;
-      const inputActivo = elementoActivo === inputMensajeRef.current;
+      const inputActivo = document.activeElement === inputMensajeRef.current;
       const diferencia = alturaViewportBaseRef.current - altoVisible;
       const tecladoAbierto = anchoVisible < 1200 && diferencia > 100 && (
         inputActivo || raiz.dataset.tecladoMensajes === 'abierto'
@@ -349,7 +365,6 @@ export default function Mensajes() {
 
     const manejarCambioFoco = () => window.setTimeout(actualizarViewport, 60);
     actualizarViewport();
-
     viewport?.addEventListener('resize', actualizarViewport);
     viewport?.addEventListener('scroll', actualizarViewport);
     window.addEventListener('resize', actualizarViewport);
@@ -372,144 +387,181 @@ export default function Mensajes() {
     };
   }, []);
 
-  // 3. Cargar y Descifrar Mensajes del Chat Seleccionado
-  const cargarMensajesConversacion = async (contactoId, { desplazarAlFinal = false } = {}) => {
-    if (!contactoId || !token) return;
+  const cargarMensajesConversacion = useCallback(async (chat, { desplazarAlFinal = false } = {}) => {
+    const chatId = obtenerIdChat(chat);
+    if (!chatId || !token) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/mensajes/conversacion/${contactoId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const ruta = esGrupoFamiliar(chat)
+        ? `${API_BASE_URL}/mensajes/grupos/${chatId}/conversacion`
+        : `${API_BASE_URL}/mensajes/conversacion/${chatId}`;
+      const respuesta = await fetch(ruta, { headers: { Authorization: `Bearer ${token}` } });
+      if (!respuesta.ok) return;
 
-      if (res.ok) {
-        const datosCifrados = await res.json();
-        const miUsuario = JSON.parse(localStorage.getItem('usuario') || '{}');
-        const miId = miUsuario.id || miUsuario._id;
+      const datos = await respuesta.json();
+      const usuarioLocal = JSON.parse(localStorage.getItem('usuario') || '{}');
+      const miId = usuarioLocal.id || usuarioLocal._id;
+      const listaMensajes = Array.isArray(datos) ? datos : (datos.mensajes || []);
 
-        const listaMensajes = Array.isArray(datosCifrados)
-          ? datosCifrados
-          : (datosCifrados.mensajes || []);
+      const mensajesDescifrados = await Promise.all(listaMensajes.map(async (mensaje) => {
+        const emisor = mensaje.emisor || mensaje.creador;
+        const emisorId = obtenerId(emisor) || emisor;
+        const esMio = String(emisorId) === String(miId);
+        const textoPlano = esGrupoFamiliar(chat)
+          ? await desencriptarMensajeGrupo(mensaje)
+          : await desencriptarMensaje(mensaje, esMio);
 
-        const mensajesDescifrados = await Promise.all(
-          listaMensajes.map(async (msg) => {
-            const esCreador = String(msg.creador || msg.emisor) === String(miId);
-            const textoPlano = await desencriptarMensaje(msg, esCreador);
+        return {
+          id: obtenerId(mensaje) || `${Date.now()}-${Math.random()}`,
+          tipo: esMio ? 'enviado' : 'recibido',
+          texto: textoPlano,
+          createdAt: mensaje.createdAt,
+          leido: esGrupoFamiliar(chat)
+            ? false
+            : mensaje.fechaVisto !== null,
+          emisor: esGrupoFamiliar(chat) ? emisor : null
+        };
+      }));
 
-            return {
-              id: obtenerId(msg) || Math.random().toString(),
-              tipo: esCreador ? 'enviado' : 'recibido',
-              texto: textoPlano,
-              createdAt: msg.createdAt,
-              leido: msg.fechaVisto !== null
-            };
-          })
-        );
-
-        // Tomamos la posición justo antes de actualizar el DOM, no antes
-        // de la petición, para respetar cualquier scroll hecho mientras cargaba.
-        prepararRestauracionScroll(desplazarAlFinal);
-        setMensajes(mensajesDescifrados);
-      }
+      prepararRestauracionScroll(desplazarAlFinal);
+      setMensajes(mensajesDescifrados);
     } catch (error) {
       console.error('Error al cargar conversación:', error);
     }
-  };
+  }, [token]);
 
-  const marcarConversacionComoLeida = async (contactoId) => {
-    if (!contactoId || !token) return;
+  const marcarConversacionComoLeida = useCallback(async (chat) => {
+    const chatId = obtenerIdChat(chat);
+    if (!chatId || !token) return;
+
+    const ruta = esGrupoFamiliar(chat)
+      ? `${API_BASE_URL}/mensajes/grupos/${chatId}/marcar-leido`
+      : `${API_BASE_URL}/mensajes/marcar-leido/${chatId}`;
+
     try {
-      await fetch(`${API_BASE_URL}/mensajes/marcar-leido/${contactoId}`, {
+      await fetch(ruta, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
     } catch (error) {
-      console.error('Error al marcar como leído:', error);
+      console.error('Error al marcar conversación como leída:', error);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
-    const contactoId = obtenerId(chatSeleccionado);
-    if (!contactoId) return;
+    if (!claveChatSeleccionado || !chatSeleccionado) {
+      setMensajes([]);
+      return undefined;
+    }
 
+    const chatBase = {
+      ...chatSeleccionado,
+      tipoChat: chatSeleccionado.tipoChat,
+      _id: obtenerIdChat(chatSeleccionado),
+      arbolId: chatSeleccionado.arbolId
+    };
+
+    setBannerMinimizado(false);
     setCargandoMensajes(true);
-
-    // Leemos y cargamos al entrar
-    marcarConversacionComoLeida(contactoId);
-    cargarMensajesConversacion(contactoId, { desplazarAlFinal: true })
+    marcarConversacionComoLeida(chatBase);
+    cargarMensajesConversacion(chatBase, { desplazarAlFinal: true })
       .finally(() => setCargandoMensajes(false));
 
-    const intervalo = setInterval(() => {
-      marcarConversacionComoLeida(contactoId); // Sigue marcando como leído si llegan nuevos estando adentro
-      cargarMensajesConversacion(contactoId);
+    const intervalo = window.setInterval(() => {
+      marcarConversacionComoLeida(chatBase);
+      cargarMensajesConversacion(chatBase);
     }, 3000);
 
-    return () => clearInterval(intervalo);
-  }, [chatSeleccionado, token]);
+    return () => window.clearInterval(intervalo);
+    // La clave evita reiniciar el polling cuando la bandeja refresca los metadatos del mismo chat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveChatSeleccionado, token, cargarMensajesConversacion, marcarConversacionComoLeida]);
 
   useLayoutEffect(() => {
     const historial = historialMensajesRef.current;
     const accion = accionScrollPendienteRef.current;
-
     if (!historial || !accion || cargandoMensajes) return;
 
-    if (accion.modo === 'final') {
-      historial.scrollTop = historial.scrollHeight;
-    } else if (accion.modo === 'preservar') {
-      historial.scrollTop = accion.scrollTop;
-    }
-
+    if (accion.modo === 'final') historial.scrollTop = historial.scrollHeight;
+    else if (accion.modo === 'preservar') historial.scrollTop = accion.scrollTop;
     accionScrollPendienteRef.current = null;
   }, [mensajes, cargandoMensajes]);
 
-  // 4. Enviar Mensaje Cifrado
   const manejarEnviarMensaje = async () => {
-    const contactoId = obtenerId(chatSeleccionado);
-    if (!mensajeTexto.trim() || !contactoId || !miPublicKey) return;
+    const chatId = obtenerIdChat(chatSeleccionado);
+    const textoAEnviar = mensajeTexto.trim();
+    if (!textoAEnviar || !chatId || !miPublicKey || enviandoMensaje) return;
 
-    if (!chatSeleccionado.publicKey) {
-      alert('El usuario seleccionado aún no ha configurado su cifrado. Pídele que cierre sesión, vuelva a iniciar sesión y abra Mensajes una vez.');
+    if (seleccionadoEsGrupo && !chatSeleccionado?.puedeEnviar) {
+      const faltantes = (chatSeleccionado?.miembrosSinCifrado || [])
+        .map((miembro) => miembro.nombreUsuario)
+        .filter(Boolean);
+      const mensaje = chatSeleccionado?.motivoBloqueo === 'sin_otro_miembro'
+        ? 'Añade a otro miembro con cuenta al Árbol Genealógico para iniciar esta conversación.'
+        : `Aún no se puede enviar. Falta configurar el cifrado de: ${faltantes.join(', ') || 'uno o más integrantes'}.`;
+      window.alert(mensaje);
+      return;
+    }
+
+    if (!seleccionadoEsGrupo && !chatSeleccionado?.publicKey) {
+      window.alert('El usuario seleccionado aún no ha configurado su cifrado. Pídele que cierre sesión, vuelva a iniciar sesión y abra Mensajes una vez.');
       return;
     }
 
     try {
-      const textoAEnviar = mensajeTexto.trim();
-      setMensajeTexto('');
+      setEnviandoMensaje(true);
+      let ruta;
+      let cuerpo;
 
-      const datosCifrados = await encriptarMensaje(
-        textoAEnviar,
-        chatSeleccionado.publicKey,
-        miPublicKey
-      );
+      if (seleccionadoEsGrupo) {
+        const datosCifrados = await encriptarMensajeGrupo(
+          textoAEnviar,
+          chatSeleccionado.miembros || []
+        );
+        ruta = `${API_BASE_URL}/mensajes/grupos/${chatId}/enviar`;
+        cuerpo = datosCifrados;
+      } else {
+        const datosCifrados = await encriptarMensaje(
+          textoAEnviar,
+          chatSeleccionado.publicKey,
+          miPublicKey
+        );
+        ruta = `${API_BASE_URL}/mensajes/enviar`;
+        cuerpo = { receptorId: chatId, ...datosCifrados };
+      }
 
-      const res = await fetch(`${API_BASE_URL}/mensajes/enviar`, {
+      const respuesta = await fetch(ruta, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          receptorId: contactoId,
-          ...datosCifrados
-        })
+        body: JSON.stringify(cuerpo)
       });
 
-      if (res.ok) {
-        await cargarMensajesConversacion(contactoId, { desplazarAlFinal: true });
-        await cargarContactos();
-      } else {
-        const errorData = await res.json();
-        alert(errorData.mensaje || 'Error al enviar mensaje');
+      if (!respuesta.ok) {
+        const datosError = await respuesta.json().catch(() => ({}));
+        if (respuesta.status === 409) await cargarBandeja();
+        window.alert(datosError.mensaje || 'No se pudo enviar el mensaje.');
+        return;
       }
+
+      setMensajeTexto('');
+      await cargarMensajesConversacion(chatSeleccionado, { desplazarAlFinal: true });
+      await cargarBandeja();
     } catch (error) {
       console.error('Error al cifrar y enviar mensaje:', error);
+      window.alert(error.message || 'No se pudo cifrar y enviar el mensaje.');
+    } finally {
+      setEnviandoMensaje(false);
     }
   };
 
-  // Filtrar personas por término de búsqueda (Manejo seguro)
-  const contactosFiltrados = (Array.isArray(contactos) ? contactos : []).filter((contacto) => {
-    const nombre = contacto.nombreUsuario || contacto.nombre || '';
-    return nombre.toLowerCase().includes(busquedaPersona.toLowerCase());
-  });
+  const chatsFiltrados = useMemo(() => {
+    const termino = busquedaPersona.trim().toLowerCase();
+    if (!termino) return chats;
+    return chats.filter((chat) => obtenerNombreChat(chat).toLowerCase().includes(termino));
+  }, [chats, busquedaPersona]);
 
   const elementosConversacion = construirElementosConversacion(
     mensajes,
@@ -517,156 +569,196 @@ export default function Mensajes() {
     zonaHoraria || ZONA_HORARIA_PREDETERMINADA
   );
 
+  const grupoBloqueado = seleccionadoEsGrupo && !chatSeleccionado?.puedeEnviar;
+  const nombresSinCifrado = (chatSeleccionado?.miembrosSinCifrado || [])
+    .map((miembro) => miembro.nombreUsuario)
+    .filter(Boolean);
+
   return (
     <div className="contenedor-mensajes">
       <div className="tarjeta-mensajes">
-
-        {/* --- COLUMNA IZQUIERDA: LISTA DE CONTACTOS PERMITIDOS --- */}
         <div className={`columna-lista-chats ${chatSeleccionado ? 'd-none d-lg-flex' : 'd-flex'}`}>
           <div className="cabecera-lista">
             <h2 className="fuente-elegante fw-bold titulo-mensajes fs-3">Mensajes</h2>
-
             <div className="buscador-chats">
               <i className="bi bi-search"></i>
               <input
                 type="text"
                 className="input-buscar-chat"
-                placeholder="Buscar amigo o familia..."
+                placeholder="Buscar persona o familia..."
                 value={busquedaPersona}
-                onChange={(e) => setBusquedaPersona(e.target.value)}
+                onChange={(evento) => setBusquedaPersona(evento.target.value)}
               />
             </div>
           </div>
 
           <div className="lista-contactos">
-            {contactosFiltrados.length === 0 ? (
+            {chatsFiltrados.length === 0 ? (
               <div className="p-3 text-center text-muted">
                 <small>
                   {busquedaPersona
-                    ? 'No se encontraron personas con ese nombre.'
-                    : 'No tienes conexiones de amigos o familia disponibles para chatear.'}
+                    ? 'No se encontraron personas o familias con ese nombre.'
+                    : 'No tienes conversaciones ni grupos familiares disponibles.'}
                 </small>
               </div>
             ) : (
-              contactosFiltrados.map((contacto) => {
-                const idContacto = obtenerId(contacto);
-                const nombreContacto = contacto.nombreUsuario || contacto.nombre || 'Usuario';
-                const tieneMensajesNuevos = contacto.mensajesNoLeidos > 0; // <-- NUEVO
-
-                const urlImagen = contacto.imagenPerfil?.urlArchivo
-                  ? resolverUrlBackend(contacto.imagenPerfil.urlArchivo)
-                  : `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreContacto)}`;
+              chatsFiltrados.map((chat) => {
+                const clave = obtenerClaveChat(chat);
+                const nombre = obtenerNombreChat(chat);
+                const tieneMensajesNuevos = Number(chat.mensajesNoLeidos) > 0;
+                const grupo = esGrupoFamiliar(chat);
+                const urlImagen = grupo ? null : obtenerUrlImagenUsuario(chat, nombre);
 
                 return (
-                  <div
-                    key={idContacto || nombreContacto}
-                    className={`item-chat ${obtenerId(chatSeleccionado) === idContacto ? 'activo' : ''} ${tieneMensajesNuevos ? 'tiene-no-leidos' : ''}`} // <-- Clase condicional
+                  <button
+                    type="button"
+                    key={clave}
+                    className={`item-chat item-chat-boton ${claveChatSeleccionado === clave ? 'activo' : ''} ${tieneMensajesNuevos ? 'tiene-no-leidos' : ''}`}
                     onClick={() => {
-                      setChatSeleccionado(contacto);
-                      setContactos(prev => prev.map(item => (
-                        String(obtenerId(item)) === String(idContacto)
-                          ? { ...item, mensajesNoLeidos: 0 }
-                          : item
+                      setChatSeleccionado(chat);
+                      setChats((actuales) => actuales.map((item) => (
+                        obtenerClaveChat(item) === clave ? { ...item, mensajesNoLeidos: 0 } : item
                       )));
                     }}
                   >
                     <div className="avatar-chat">
-                      <img src={urlImagen} alt={nombreContacto} className="foto-avatar" />
+                      {grupo ? (
+                        <span className="avatar-grupo-familiar" aria-hidden="true">
+                          <i className="bi bi-people-fill"></i>
+                          <span className="insignia-arbol-grupo"><i className="bi bi-tree-fill"></i></span>
+                        </span>
+                      ) : (
+                        <img src={urlImagen} alt={nombre} className="foto-avatar" />
+                      )}
                     </div>
+
                     <div className="info-chat flex-grow-1">
                       <div className="nombre-tiempo d-flex justify-content-between align-items-center">
-                        <h6 className={`nombre-chat mb-0 ${tieneMensajesNuevos ? 'fw-bold' : ''}`}>{nombreContacto}</h6>
+                        <h6 className={`nombre-chat mb-0 ${tieneMensajesNuevos ? 'fw-bold' : ''}`}>{nombre}</h6>
                         <div className="estado-tiempo-chat">
-                          {contacto.ultimoMensajeFecha && (
+                          {chat.ultimoMensajeFecha && (
                             <span className="tiempo-chat">
                               {formatearTiempoPreviewContacto(
-                                contacto.ultimoMensajeFecha,
+                                chat.ultimoMensajeFecha,
                                 idioma || 'es-MX',
                                 zonaHoraria || ZONA_HORARIA_PREDETERMINADA
                               )}
                             </span>
                           )}
                           {tieneMensajesNuevos && (
-                            <span className="badge rounded-pill bg-primary el-globo-notificacion animate__animated animate__bounceIn">
-                              {contacto.mensajesNoLeidos}
+                            <span className="badge rounded-pill el-globo-notificacion animate__animated animate__bounceIn">
+                              {chat.mensajesNoLeidos}
                             </span>
                           )}
                         </div>
                       </div>
+
                       <div className="mensaje-previo">
                         <p className={`texto-previo mb-0 ${tieneMensajesNuevos ? 'fw-bold' : ''}`}>
-                          {contacto.previewUltimoMensaje ? (
+                          {chat.previewUltimoMensaje ? (
                             <>
-                              {contacto.ultimoMensajeEsMio && <span className="preview-prefijo-propio">Tú: </span>}
-                              {contacto.previewUltimoMensaje}
+                              {chat.ultimoMensajeEsMio ? (
+                                <span className="preview-prefijo-propio">Tú: </span>
+                              ) : grupo && chat.ultimoMensajeEmisorNombre ? (
+                                <span className="preview-prefijo-grupo">{chat.ultimoMensajeEmisorNombre}: </span>
+                              ) : null}
+                              {chat.previewUltimoMensaje}
                             </>
+                          ) : grupo ? (
+                            <span className="preview-sin-mensajes">
+                              <i className="bi bi-tree me-1"></i>
+                              Grupo familiar · {chat.totalMiembros || 1} miembros
+                            </span>
                           ) : (
                             <span className="preview-sin-mensajes"><i className="bi bi-chat-dots me-1"></i>Sin mensajes todavía</span>
                           )}
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })
             )}
           </div>
         </div>
 
-        {/* --- COLUMNA DERECHA: CHAT ACTIVO --- */}
         <div className={`columna-chat-activo ${!chatSeleccionado ? 'd-none d-lg-flex' : 'd-flex'}`}>
           {chatSeleccionado ? (
             <>
               <div className="cabecera-conversacion-fija">
-                {/* Cabecera del Chat */}
                 <div className="cabecera-chat-activo">
-                <div className="info-cabecera">
-                  <button className="boton-atras-movil d-lg-none" onClick={() => setChatSeleccionado(null)}>
-                    <i className="bi bi-arrow-left"></i>
-                  </button>
-                  <img
-                    src={chatSeleccionado.imagenPerfil?.urlArchivo
-                      ? resolverUrlBackend(chatSeleccionado.imagenPerfil.urlArchivo)
-                      : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatSeleccionado.nombreUsuario || 'Usuario')}`}
-                    alt={chatSeleccionado.nombreUsuario}
-                    className="foto-avatar"
-                    style={{ width: '42px', height: '42px' }}
-                  />
-                  <div className="detalles-cabecera">
-                    <h5>{chatSeleccionado.nombreUsuario || chatSeleccionado.nombre}</h5>
-                    <p className="text-muted mb-0">Contacto verificado</p>
+                  <div className="info-cabecera">
+                    <button
+                      type="button"
+                      className="boton-atras-movil d-lg-none"
+                      onClick={() => setChatSeleccionado(null)}
+                      aria-label="Volver a la bandeja"
+                    >
+                      <i className="bi bi-arrow-left"></i>
+                    </button>
+
+                    {seleccionadoEsGrupo ? (
+                      <span className="avatar-grupo-familiar avatar-grupo-cabecera" aria-hidden="true">
+                        <i className="bi bi-people-fill"></i>
+                        <span className="insignia-arbol-grupo"><i className="bi bi-tree-fill"></i></span>
+                      </span>
+                    ) : (
+                      <img
+                        src={obtenerUrlImagenUsuario(chatSeleccionado, obtenerNombreChat(chatSeleccionado))}
+                        alt={obtenerNombreChat(chatSeleccionado)}
+                        className="foto-avatar"
+                        style={{ width: '42px', height: '42px' }}
+                      />
+                    )}
+
+                    <div className="detalles-cabecera">
+                      <h5>{obtenerNombreChat(chatSeleccionado)}</h5>
+                      <p className="text-muted mb-0">
+                        {seleccionadoEsGrupo
+                          ? `Grupo familiar · ${chatSeleccionado.totalMiembros || 1} miembros con cuenta`
+                          : 'Contacto verificado'}
+                      </p>
+                    </div>
                   </div>
                 </div>
+
+                <div className={`banner-e2e ${bannerMinimizado ? 'minimizado' : ''}`}>
+                  <div className="contenido-banner">
+                    <i className="bi bi-shield-lock-fill icono-e2e"></i>
+                    {!bannerMinimizado ? (
+                      <span>
+                        {seleccionadoEsGrupo ? (
+                          <>Los mensajes de esta familia están cifrados de <strong>Extremo a Extremo (E2E)</strong> para los miembros activos del árbol.</>
+                        ) : (
+                          <>Los mensajes entre tú y <strong>{obtenerNombreChat(chatSeleccionado)}</strong> están cifrados de <strong>Extremo a Extremo (E2E)</strong>.</>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="texto-corto-e2e">Cifrado Extremo a Extremo activo</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="boton-toggle-banner"
+                    onClick={() => setBannerMinimizado((valor) => !valor)}
+                    aria-label={bannerMinimizado ? 'Mostrar información de cifrado' : 'Minimizar información de cifrado'}
+                  >
+                    <i className={`bi bi-chevron-${bannerMinimizado ? 'down' : 'up'}`}></i>
+                  </button>
+                </div>
               </div>
 
-              {/* Banner Cifrado E2E */}
-              <div className={`banner-e2e ${bannerMinimizado ? 'minimizado' : ''}`}>
-                <div className="contenido-banner">
-                  <i className="bi bi-shield-lock-fill icono-e2e"></i>
-                  {!bannerMinimizado ? (
-                    <span>
-                      Los mensajes entre tú y <strong>{chatSeleccionado.nombreUsuario || chatSeleccionado.nombre}</strong> están cifrados de <strong>Extremo a Extremo (E2E)</strong>.
-                    </span>
-                  ) : (
-                    <span className="texto-corto-e2e">Cifrado Extremo a Extremo activo</span>
-                  )}
-                </div>
-                <button
-                  className="boton-toggle-banner"
-                  onClick={() => setBannerMinimizado(!bannerMinimizado)}
-                >
-                  <i className={`bi bi-chevron-${bannerMinimizado ? 'down' : 'up'}`}></i>
-                </button>
-                </div>
-              </div>
-
-              {/* Historial de Mensajes Descifrados */}
               <div ref={historialMensajesRef} className="historial-mensajes">
                 {cargandoMensajes ? (
                   <div className="text-center my-auto text-muted">Cargando mensajes cifrados...</div>
                 ) : mensajes.length === 0 ? (
-                  <div className="text-center my-auto text-muted">
-                    Inicia la conversación. Los mensajes que envíes serán cifrados.
+                  <div className="estado-conversacion-vacia text-center my-auto text-muted">
+                    <i className={`bi ${seleccionadoEsGrupo ? 'bi-people' : 'bi-chat-heart'}`}></i>
+                    <p>
+                      {seleccionadoEsGrupo
+                        ? 'Inicia la conversación familiar. Solo los miembros activos con cuenta podrán leerla.'
+                        : 'Inicia la conversación. Los mensajes que envíes serán cifrados.'}
+                    </p>
                   </div>
                 ) : (
                   elementosConversacion.map((elemento) => {
@@ -678,25 +770,35 @@ export default function Mensajes() {
                       );
                     }
 
-                    const msg = elemento.mensaje;
+                    const mensaje = elemento.mensaje;
+                    const mostrarEmisor = seleccionadoEsGrupo && mensaje.tipo === 'recibido';
+                    const nombreEmisor = mensaje.emisor?.nombreUsuario || 'Familiar';
 
                     return (
-                      <div key={elemento.clave} className={`fila-mensaje ${msg.tipo}`}>
-                        <div className={`burbuja ${msg.tipo}`}>
-                          {msg.texto}
-                          <div className="d-flex align-items-center justify-content-end mt-1 opacity-75" style={{ fontSize: '0.7rem' }}>
-                            <span className="me-1">
-                              {formatearHoraMensaje(
-                                msg.createdAt,
-                                idioma || 'es-MX',
-                                zonaHoraria || ZONA_HORARIA_PREDETERMINADA
+                      <div key={elemento.clave} className={`fila-mensaje ${mensaje.tipo} ${seleccionadoEsGrupo ? 'mensaje-grupal' : ''}`}>
+                        {mostrarEmisor && (
+                          <img
+                            src={obtenerUrlImagenUsuario(mensaje.emisor, nombreEmisor)}
+                            alt=""
+                            className="foto-mensaje foto-mensaje-grupo"
+                          />
+                        )}
+                        <div className="contenido-burbuja-mensaje">
+                          {mostrarEmisor && <span className="nombre-emisor-grupo">{nombreEmisor}</span>}
+                          <div className={`burbuja ${mensaje.tipo}`}>
+                            {mensaje.texto}
+                            <div className="meta-burbuja-mensaje">
+                              <span>
+                                {formatearHoraMensaje(
+                                  mensaje.createdAt,
+                                  idioma || 'es-MX',
+                                  zonaHoraria || ZONA_HORARIA_PREDETERMINADA
+                                )}
+                              </span>
+                              {!seleccionadoEsGrupo && mensaje.tipo === 'enviado' && (
+                                <i className={`bi ${mensaje.leido ? 'bi-check-all text-info' : 'bi-check'} fs-6`}></i>
                               )}
-                            </span>
-
-                            {/* Si el mensaje fue enviado por mí, muestra el estatus de lectura */}
-                            {msg.tipo === 'enviado' && (
-                              <i className={`bi ${msg.leido ? 'bi-check-all text-info' : 'bi-check'} fs-6`} style={{ marginLeft: '4px' }}></i>
-                            )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -705,33 +807,60 @@ export default function Mensajes() {
                 )}
               </div>
 
-              {/* Área de Entrada */}
+              {grupoBloqueado && (
+                <div className="aviso-bloqueo-grupo" role="status">
+                  <i className="bi bi-shield-exclamation"></i>
+                  <div>
+                    <strong>
+                      {chatSeleccionado.motivoBloqueo === 'sin_otro_miembro'
+                        ? 'El grupo necesita otro miembro con cuenta'
+                        : 'Cifrado pendiente en el grupo'}
+                    </strong>
+                    <span>
+                      {chatSeleccionado.motivoBloqueo === 'sin_otro_miembro'
+                        ? 'Añade a otra persona con cuenta desde el Árbol Genealógico para comenzar a conversar.'
+                        : `Deben configurar su cifrado: ${nombresSinCifrado.join(', ') || 'uno o más integrantes'}.`}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="area-escribir">
                 <input
                   ref={inputMensajeRef}
                   type="text"
                   className="input-mensaje"
-                  placeholder="Escribe un mensaje cifrado..."
+                  placeholder={grupoBloqueado ? 'Envío temporalmente deshabilitado' : 'Escribe un mensaje cifrado...'}
                   value={mensajeTexto}
-                  onChange={(e) => setMensajeTexto(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') manejarEnviarMensaje();
+                  disabled={grupoBloqueado || enviandoMensaje}
+                  onChange={(evento) => setMensajeTexto(evento.target.value)}
+                  onKeyDown={(evento) => {
+                    if (evento.key === 'Enter') manejarEnviarMensaje();
                   }}
                 />
-                <button className="boton-enviar" onClick={manejarEnviarMensaje}>
-                  <i className="bi bi-send-fill"></i>
+                <button
+                  type="button"
+                  className="boton-enviar"
+                  onClick={manejarEnviarMensaje}
+                  disabled={grupoBloqueado || enviandoMensaje || !mensajeTexto.trim()}
+                  aria-label="Enviar mensaje"
+                >
+                  {enviandoMensaje ? (
+                    <span className="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                  ) : (
+                    <i className="bi bi-send-fill"></i>
+                  )}
                 </button>
               </div>
             </>
           ) : (
-            <div className="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
-              <i className="bi bi-chat-dots" style={{ fontSize: '4rem', color: 'var(--borde-color)' }}></i>
+            <div className="estado-sin-chat d-flex flex-column align-items-center justify-content-center h-100 text-muted">
+              <i className="bi bi-chat-dots"></i>
               <h4 className="mt-3 fuente-elegante">Tus Mensajes</h4>
-              <p>Selecciona una persona para iniciar una conversación segura.</p>
+              <p>Selecciona una persona o un grupo familiar para iniciar una conversación segura.</p>
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

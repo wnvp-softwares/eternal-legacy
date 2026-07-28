@@ -1,297 +1,560 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap");
 
-body {
-    font-family: 'Inter', sans-serif;
+/* =========================================================
+   LOGIN, REGISTRO Y VERIFICACIÓN
+   Todos los colores consumen el sistema global de index.css.
+   ========================================================= */
+.contenedor-login{
+    min-height: 100vh;
+    min-height: 100dvh;
+    background-color: var(--fondo-app);
+    color: var(--texto-principal);
+    font-family: "Inter", sans-serif;
 }
 
-/* Clases en Español */
-.fuente-elegante {
-    font-family: 'Playfair Display', serif;
+.contenedor-login .fuente-elegante{
+    font-family: "Playfair Display", serif;
     letter-spacing: -0.5px;
 }
 
-.contenedor-login {
-    min-height: 100vh;
-    background-color: #ffffff;
-}
-
-.lado-izquierdo {
-    background-image: linear-gradient(rgba(13, 27, 42, 0.6), rgba(13, 27, 42, 0.9)), url('../assets/bg-login.jpg'); 
+.contenedor-login .lado-izquierdo{
+    background-image:
+        linear-gradient(rgba(13, 27, 42, 0.6), rgba(13, 27, 42, 0.9)),
+        url("../assets/bg-login.jpg");
     background-size: cover;
     background-position: center;
 }
 
-.icono-infinito {
-    color: #CBA135; 
+.contenedor-login .icono-infinito{
+    color: var(--dorado);
     font-size: 4rem;
     line-height: 1;
     margin-bottom: 2rem;
 }
 
-/* CORRECCIÓN: Agregamos !important para vencer el azul de Bootstrap */
-.texto-dorado {
-    color: #CBA135 !important;
+.contenedor-login .panel-login{
+    min-height: 100vh;
+    min-height: 100dvh;
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-principal);
+    box-shadow: var(--sombra-elevada);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.contenedor-login .marca-login-movil,
+.contenedor-login .titulo-login,
+.contenedor-login .texto-login-destacado,
+.contenedor-login .temporizador-verificacion{
+    color: var(--texto-principal);
+}
+
+.contenedor-login .texto-login-secundario,
+.contenedor-login .etiqueta-login{
+    color: var(--texto-secundario);
+}
+
+.contenedor-login .texto-dorado{
+    color: var(--dorado-oscuro) !important;
     text-decoration: none !important;
 }
 
-.texto-dorado:hover {
-    color: #b88e28 !important;
+.contenedor-login .texto-dorado:hover{
+    color: var(--dorado) !important;
     text-decoration: underline !important;
 }
 
-.boton-oscuro {
-    background-color: #0D1B2A; 
-    color: white;
-    border-radius: 0.75rem; 
+.contenedor-login .texto-dorado:focus-visible{
+    color: var(--dorado) !important;
+    outline: 2px solid var(--dorado);
+    outline-offset: 3px;
+    border-radius: 4px;
+}
+
+.contenedor-login .estado-espera-login{
+    min-height: 350px;
+}
+
+.contenedor-login .spinner-login{
+    width: 3.5rem;
+    height: 3.5rem;
+    color: var(--dorado);
+}
+
+.contenedor-login .icono-verificacion-login{
+    color: var(--dorado);
+    font-size: 4rem;
+}
+
+.contenedor-login .alerta-login-error{
+    width: 100%;
+    margin-bottom: 1rem;
+    color: var(--error-texto);
+    background-color: var(--error-fondo-suave);
+    border: 1px solid color-mix(in srgb, var(--error-texto) 28%, transparent);
+}
+
+/* =========================================================
+   BOTONES
+   En claro conservan el azul marino; en oscuro usan el dorado
+   definido por --boton-primario-*.
+   ========================================================= */
+.contenedor-login .boton-oscuro{
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background-color: var(--boton-primario-fondo);
+    color: var(--boton-primario-texto);
+    border: 1px solid var(--boton-primario-fondo);
+    border-radius: 0.75rem;
     padding: 0.875rem;
-    font-weight: 500;
-    transition: all 0.2s ease;
-    border: none;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
-.boton-oscuro:hover {
-    background-color: #1a2d42;
+.contenedor-login .boton-oscuro:hover:not(:disabled){
+    background-color: var(--boton-primario-hover);
+    border-color: var(--boton-primario-hover);
+    color: var(--boton-primario-texto);
     transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--sombra-suave);
 }
 
-.grupo-input-personalizado {
+.contenedor-login .boton-oscuro:active:not(:disabled){
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.contenedor-login .boton-oscuro:focus-visible{
+    outline: 3px solid var(--dorado-borde-suave);
+    outline-offset: 3px;
+}
+
+.contenedor-login .boton-oscuro:disabled{
+    background-color: var(--input-bg);
+    border-color: var(--borde-color);
+    color: var(--texto-terciario);
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+    opacity: 1;
+}
+
+.contenedor-login .boton-aceptar-reglas{
+    min-height: 44px;
+}
+
+/* =========================================================
+   CAMPOS DE FORMULARIO
+   ========================================================= */
+.contenedor-login .grupo-input-personalizado{
     position: relative;
     display: flex;
     align-items: center;
 }
 
-.icono-input {
+.contenedor-login .icono-input{
     position: absolute;
     left: 1.2rem;
-    color: #9ca3af;
-    z-index: 10;
+    z-index: 2;
+    color: var(--texto-terciario);
     font-size: 1.1rem;
+    pointer-events: none;
     transition: color 0.2s ease;
 }
 
-.input-personalizado {
+.contenedor-login .input-personalizado{
     width: 100%;
-    padding: 0.85rem 1rem 0.85rem 3rem; 
+    padding: 0.85rem 1rem 0.85rem 3rem;
+    border: 1px solid var(--borde-color);
     border-radius: 0.75rem;
-    border: 1px solid #e5e7eb;
-    background-color: #f9fafb;
-    transition: all 0.2s ease;
     outline: none;
-    color: #374151;
+    background-color: var(--input-bg);
+    color: var(--texto-principal);
+    caret-color: var(--dorado);
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
-.input-personalizado:focus {
-    border-color: #CBA135;
-    box-shadow: 0 0 0 3px rgba(203, 161, 53, 0.15);
-    background-color: #ffffff;
+.contenedor-login .input-personalizado::placeholder{
+    color: var(--texto-terciario);
+    opacity: 1;
 }
 
-.grupo-input-personalizado:focus-within .icono-input {
-    color: #CBA135;
+.contenedor-login .input-personalizado:hover:not(:disabled){
+    border-color: var(--borde-fuerte);
 }
 
-/* NUEVO: Animación fluida de deslizamiento y aparición */
+.contenedor-login .input-personalizado:focus{
+    border-color: var(--dorado);
+    background-color: var(--fondo-elevado);
+    color: var(--texto-principal);
+    box-shadow: 0 0 0 3px var(--dorado-borde-suave);
+}
+
+.contenedor-login .grupo-input-personalizado:focus-within .icono-input{
+    color: var(--dorado);
+}
+
+.contenedor-login .input-personalizado:disabled{
+    background-color: var(--hover-menu);
+    border-color: var(--borde-color);
+    color: var(--texto-terciario);
+    cursor: not-allowed;
+    opacity: 0.75;
+}
+
+.contenedor-login input:-webkit-autofill,
+.contenedor-login textarea:-webkit-autofill,
+.contenedor-login select:-webkit-autofill{
+    -webkit-text-fill-color: var(--texto-principal);
+    box-shadow: 0 0 0 1000px var(--input-bg) inset;
+    caret-color: var(--texto-principal);
+    transition: background-color 9999s ease-out 0s;
+}
+
+.contenedor-login .separador-login{
+    border-top: 1px solid var(--borde-color);
+}
+
+/* Animación de entrada del formulario. */
 @keyframes aparecerSuave {
-    0% {
+    from {
         opacity: 0;
         transform: translateX(20px);
     }
-    100% {
+
+    to {
         opacity: 1;
         transform: translateX(0);
     }
 }
 
-.animacion-formulario {
+.contenedor-login .animacion-formulario{
     animation: aparecerSuave 0.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 
-
-/* =========================================
-   AJUSTE RESPONSIVE: CÓDIGO DE VERIFICACIÓN
-   ========================================= */
-.login-verificacion {
+/* =========================================================
+   CÓDIGO DE VERIFICACIÓN
+   ========================================================= */
+.contenedor-login .login-verificacion{
     width: 100%;
 }
 
-.codigo-verificacion-contenedor {
+.contenedor-login .codigo-verificacion-contenedor{
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0.5rem;
     width: 100%;
     max-width: 360px;
-    margin-left: auto;
     margin-right: auto;
+    margin-left: auto;
 }
 
-.input-codigo-verificacion {
+.contenedor-login .input-codigo-verificacion{
     width: 100% !important;
     min-width: 0;
     height: auto;
-    aspect-ratio: 1 / 1.15;
     max-height: 4.5rem;
+    aspect-ratio: 1 / 1.15;
     border-radius: 0.75rem;
+    padding: 0 !important;
+    color: var(--texto-principal) !important;
     font-size: 1.65rem !important;
     line-height: 1;
+    text-align: center;
 }
 
-.input-codigo-verificacion:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
-}
-
-@media (max-width: 420px) {
-    .codigo-verificacion-contenedor {
-        gap: 0.4rem;
-        max-width: 100%;
-    }
-
-    .input-codigo-verificacion {
-        aspect-ratio: 1 / 1.08;
-        font-size: 1.35rem !important;
-        border-radius: 0.65rem;
-    }
-}
-
-@media (max-width: 340px) {
-    .contenedor-login .w-100.mx-auto {
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-    }
-
-    .login-verificacion .bi-envelope-check {
-        font-size: 3rem !important;
-    }
-
-    .codigo-verificacion-contenedor {
-        gap: 0.3rem;
-    }
-
-    .input-codigo-verificacion {
-        font-size: 1.15rem !important;
-        border-radius: 0.55rem;
-    }
+.contenedor-login .input-codigo-verificacion:disabled{
+    opacity: 0.58;
 }
 
 /* =========================================================
-   AJUSTE RESPONSIVE FINAL: TIPOGRAFÍA MÓVIL
-   Reduce ligeramente las fuentes en móviles sin provocar zoom
-   automático en inputs de Android/iOS.
+   MODALES DE REGLAS Y DOCUMENTOS LEGALES
    ========================================================= */
+.contenedor-login .modal-login-overlay{
+    z-index: 1060;
+    background-color: var(--fondo-overlay);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+}
+
+.contenedor-login .modal-login-overlay-secundario{
+    z-index: 1070;
+}
+
+.contenedor-login .modal-login-dialogo{
+    max-width: 600px;
+}
+
+.contenedor-login .modal-login-contenido{
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-principal);
+    border: 1px solid var(--borde-color);
+    border-radius: 15px;
+    box-shadow: var(--sombra-elevada);
+}
+
+.contenedor-login .modal-login-cabecera{
+    flex-shrink: 0;
+    gap: 1rem;
+    background-color: var(--fondo-elevado);
+    border: 0;
+    border-bottom: 1px solid var(--borde-color);
+    border-radius: 15px 15px 0 0;
+}
+
+.contenedor-login .modal-login-titulo,
+.contenedor-login .modal-login-subtitulo{
+    color: var(--texto-principal);
+}
+
+.contenedor-login .modal-login-cuerpo{
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-secundario);
+    overscroll-behavior: contain;
+}
+
+.contenedor-login .modal-login-cuerpo strong{
+    color: var(--texto-principal);
+}
+
+.contenedor-login .modal-login-cuerpo p:last-child,
+.contenedor-login .modal-login-cuerpo ol:last-child,
+.contenedor-login .modal-login-cuerpo ul:last-child{
+    margin-bottom: 0;
+}
+
+.contenedor-login .modal-login-cuerpo--reglas{
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.contenedor-login .modal-login-documento{
+    max-height: 60vh;
+    font-size: 0.9rem;
+    line-height: 1.65;
+}
+
+.contenedor-login .modal-login-documento ul,
+.contenedor-login .modal-login-documento ol{
+    padding-left: 1.35rem;
+}
+
+.contenedor-login .modal-login-documento li + li{
+    margin-top: 0.4rem;
+}
+
+.contenedor-login .modal-login-version{
+    color: var(--texto-secundario);
+}
+
+.contenedor-login .modal-login-separador{
+    border: 0;
+    border-top: 1px solid var(--borde-color);
+    opacity: 1;
+}
+
+.contenedor-login .modal-login-pie{
+    flex-shrink: 0;
+    background-color: var(--fondo-elevado);
+    border: 0;
+    border-top: 1px solid var(--borde-color);
+    border-radius: 0 0 15px 15px;
+}
+
+.contenedor-login .boton-cerrar-modal-login{
+    width: 38px;
+    height: 38px;
+    margin-left: auto;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background-color: transparent;
+    color: var(--texto-secundario);
+    font-size: 1.05rem;
+    cursor: pointer;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease;
+}
+
+.contenedor-login .boton-cerrar-modal-login:hover{
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+}
+
+.contenedor-login .boton-cerrar-modal-login:focus-visible{
+    border-color: var(--dorado);
+    outline: 3px solid var(--dorado-borde-suave);
+    outline-offset: 2px;
+}
+
+.contenedor-login .modal-login-check{
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.2rem;
+    background-color: var(--input-bg);
+    border-color: var(--borde-fuerte);
+    cursor: pointer;
+}
+
+.contenedor-login .modal-login-check:checked{
+    background-color: var(--dorado);
+    border-color: var(--dorado);
+}
+
+.contenedor-login .modal-login-check:focus{
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 3px var(--dorado-borde-suave);
+}
+
+.contenedor-login .modal-login-label{
+    color: var(--texto-principal);
+    cursor: pointer;
+}
+
+/* =========================================================
+   RESPONSIVE. Todas las reglas quedan encapsuladas en Login.
+   ========================================================= */
+@media (max-width: 991.98px) {
+    .contenedor-login .panel-login{
+        box-shadow: none;
+    }
+}
+
 @media (max-width: 576px) {
-    body {
+    .contenedor-login{
         font-size: 14.75px;
     }
 
-    h1,
-    .h1,
-    .titulo-seccion {
+    .contenedor-login h1,
+.contenedor-login .h1{
         font-size: clamp(1.55rem, 7.5vw, 2rem) !important;
         line-height: 1.08;
         letter-spacing: -0.035em;
     }
 
-    h2,
-    .h2,
-    .titulo-panel,
-    .titulo-widget,
-    .titulo-mensajes,
-    .titulo-configuracion,
-    .titulo-edicion-x {
+    .contenedor-login h2,
+.contenedor-login .h2,
+.contenedor-login .modal-login-titulo{
         font-size: clamp(1.25rem, 6vw, 1.6rem) !important;
         line-height: 1.12;
         letter-spacing: -0.025em;
     }
 
-    h3,
-    .h3 {
+    .contenedor-login h3,
+.contenedor-login .h3{
         font-size: clamp(1.08rem, 5.2vw, 1.35rem) !important;
         line-height: 1.15;
     }
 
-    p,
-    span,
-    label,
-    .texto-post,
-    .bio-perfil,
-    .datos-extra-perfil,
-    .texto-notificacion,
-    .nombre-chat,
-    .nombre-autor,
-    .nombre-conexion,
-    .nombre-sugerencia,
-    .item-configuracion,
-    .boton-accion-arbol,
-    .interruptor-edicion,
-    .tab-red,
-    .tab-perfil {
+    .contenedor-login p,
+.contenedor-login span,
+.contenedor-login label{
         line-height: 1.35;
     }
 
-    .texto-post,
-    .bio-perfil,
-    .datos-extra-perfil,
-    .texto-notificacion,
-    .nombre-chat,
-    .nombre-autor,
-    .nombre-conexion,
-    .nombre-sugerencia,
-    .item-configuracion,
-    .boton-accion-arbol,
-    .interruptor-edicion {
-        font-size: 0.9rem;
-    }
-
-    small,
-    .small,
-    .usuario-tag,
-    .info-autor,
-    .tiempo-chat,
-    .tiempo-notificacion,
-    .texto-previo,
-    .relacion-conexion,
-    .relacion-badge,
-    .info-autor,
-    .ayuda-configuracion {
+    .contenedor-login small,
+.contenedor-login .small{
         font-size: 0.78rem;
     }
 
-    button,
-    .btn {
+    .contenedor-login button,
+.contenedor-login .btn{
         font-size: 0.86rem;
     }
 
-    input,
-    textarea,
-    select {
+    .contenedor-login input,
+.contenedor-login textarea,
+.contenedor-login select{
         font-size: 16px !important;
+    }
+
+    .contenedor-login .modal-login-overlay .modal-dialog{
+        margin: 0.75rem;
+    }
+
+    .contenedor-login .modal-login-cabecera,
+.contenedor-login .modal-login-cuerpo,
+.contenedor-login .modal-login-pie{
+        padding-right: 1.15rem !important;
+        padding-left: 1.15rem !important;
+    }
+
+    .contenedor-login .modal-login-documento{
+        max-height: 66vh;
+    }
+}
+
+@media (max-width: 420px) {
+    .contenedor-login .codigo-verificacion-contenedor{
+        gap: 0.4rem;
+        max-width: 100%;
+    }
+
+    .contenedor-login .input-codigo-verificacion{
+        aspect-ratio: 1 / 1.08;
+        border-radius: 0.65rem;
+        font-size: 1.35rem !important;
     }
 }
 
 @media (max-width: 380px) {
-    body {
+    .contenedor-login{
         font-size: 14px;
     }
 
-    h1,
-    .h1,
-    .titulo-seccion {
+    .contenedor-login h1,
+.contenedor-login .h1{
         font-size: clamp(1.42rem, 7.2vw, 1.75rem) !important;
     }
 
-    h2,
-    .h2,
-    .titulo-panel,
-    .titulo-widget,
-    .titulo-mensajes,
-    .titulo-configuracion,
-    .titulo-edicion-x {
+    .contenedor-login h2,
+.contenedor-login .h2,
+.contenedor-login .modal-login-titulo{
         font-size: clamp(1.15rem, 5.8vw, 1.45rem) !important;
     }
 
-    button,
-    .btn {
+    .contenedor-login button,
+.contenedor-login .btn{
         font-size: 0.82rem;
+    }
+}
+
+@media (max-width: 340px) {
+    .contenedor-login .w-100.mx-auto{
+        padding-right: 1rem !important;
+        padding-left: 1rem !important;
+    }
+
+    .contenedor-login .login-verificacion .icono-verificacion-login{
+        font-size: 3rem;
+    }
+
+    .contenedor-login .codigo-verificacion-contenedor{
+        gap: 0.3rem;
+    }
+
+    .contenedor-login .input-codigo-verificacion{
+        border-radius: 0.55rem;
+        font-size: 1.15rem !important;
     }
 }

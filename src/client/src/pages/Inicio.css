@@ -212,12 +212,12 @@
 }
 
 .fecha-calendario {
-    background-color: #fef8eb;
+    background-color: var(--dorado-fondo-suave);
     border-radius: 12px;
     padding: 8px 12px;
     text-align: center;
     min-width: 65px;
-    border: 1px solid rgba(203, 161, 53, 0.2);
+    border: 1px solid var(--dorado-borde-suave);
 }
 
 .mes-calendario {
@@ -874,8 +874,13 @@
 
 .btn-recargar-eventos:hover:not(:disabled) {
     color: var(--dorado-oscuro);
-    border-color: rgba(203, 161, 53, 0.4);
-    background-color: #fef8eb;
+    border-color: var(--dorado-borde-suave);
+    background-color: var(--dorado-fondo-suave);
+}
+
+.btn-recargar-eventos:focus-visible {
+    outline: 2px solid var(--dorado);
+    outline-offset: 3px;
 }
 
 .btn-recargar-eventos:disabled {
@@ -901,11 +906,6 @@
     color: #fecaca;
     background-color: rgba(127, 29, 29, 0.25);
     border-color: rgba(248, 113, 113, 0.25);
-}
-
-[data-tema="oscuro"] .btn-recargar-eventos:hover:not(:disabled) {
-    background-color: rgba(234, 179, 8, 0.12);
-    color: #fde68a;
 }
 
 
@@ -4637,3 +4637,70 @@ video.imagen-post-moderna {
         font-size: 0.82rem;
     }
 }
+
+/* =========================================================
+   ETAPAS DESTACADAS EN EL EDITOR DE PUBLICACIONES
+   ========================================================= */
+.chip-publicacion.etapa {
+  border-color: color-mix(in srgb, var(--etapa-chip-color, var(--dorado)) 46%, var(--borde-color));
+  color: var(--texto-principal);
+  background: color-mix(in srgb, var(--etapa-chip-color, var(--dorado)) 13%, var(--fondo-app));
+}
+.chip-publicacion.etapa > i { color: var(--etapa-chip-color, var(--dorado)); }
+.panel-etapas-publicacion { display: grid; gap: 13px; }
+.panel-etapas-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+.panel-etapas-cabecera > div { display: grid; gap: 2px; }
+.panel-etapas-cabecera strong { color: var(--texto-principal); font-size: .88rem; }
+.panel-etapas-cabecera small { color: var(--texto-secundario); font-size: .74rem; line-height: 1.35; }
+.panel-etapas-cabecera > button { padding: 7px 10px; border: 1px solid var(--dorado-borde-suave, var(--borde-color)); border-radius: 9px; display: inline-flex; gap: 6px; color: var(--dorado-oscuro); background: var(--dorado-fondo-suave); font-size: .76rem; font-weight: 750; }
+.lista-etapas-publicacion { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.lista-etapas-publicacion > button { min-width: 0; min-height: 54px; padding: 8px 10px; border: 1px solid var(--borde-color); border-radius: 11px; display: grid; grid-template-columns: 36px minmax(0,1fr) auto; align-items: center; gap: 9px; color: var(--texto-principal); background: var(--fondo-app); text-align: left; }
+.lista-etapas-publicacion > button.seleccionada, .lista-etapas-publicacion > button:hover { border-color: var(--dorado); background: var(--dorado-fondo-suave); }
+.lista-etapas-publicacion > button > span { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.lista-etapas-publicacion strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+.lista-etapas-publicacion > button > .bi { color: var(--dorado-oscuro); }
+.fecha-etapa-publicacion { border-color: color-mix(in srgb, var(--etapa-fecha-color, var(--dorado)) 52%, var(--borde-color)) !important; background: color-mix(in srgb, var(--etapa-fecha-color, var(--dorado)) 8%, var(--fondo-app)); }
+.fecha-etapa-publicacion label > i { color: var(--etapa-fecha-color, var(--dorado)) !important; }
+@media (max-width: 576px) { .lista-etapas-publicacion { grid-template-columns: 1fr; } .panel-etapas-cabecera { align-items: center; } }
+
+/* Etapa asociada dentro de las publicaciones del álbum de un evento. */
+.evento-publicaciones-modal-etapa {
+  min-width: 0;
+  max-width: min(42%, 190px);
+  margin-left: auto;
+  padding: 3px 0;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--texto-secundario);
+  background: transparent;
+  font-family: inherit;
+  font-size: .72rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.evento-publicaciones-modal-etapa i {
+  flex: none;
+  color: var(--evento-modal-etapa-color, var(--dorado));
+}
+.evento-publicaciones-modal-etapa span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.evento-publicaciones-modal-etapa:hover span,
+.evento-publicaciones-modal-etapa:focus-visible span {
+  color: var(--evento-modal-etapa-color, var(--dorado-oscuro));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.evento-publicaciones-modal-etapa:focus-visible {
+  outline: 2px solid var(--evento-modal-etapa-color, var(--dorado));
+  outline-offset: 2px;
+}
+@media (max-width: 576px) {
+  .evento-publicaciones-modal-etapa { max-width: 38%; font-size: .68rem; }
+}
+

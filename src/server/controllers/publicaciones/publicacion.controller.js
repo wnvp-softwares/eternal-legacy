@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
-const { Publicacion, Upload, Usuario, Arbol } = require('../../models/index.model');
+const { Publicacion, Upload, Usuario, Arbol, EtapaDestacada } = require('../../models/index.model');
 const Nodo = require('../../models/arboles/nodo.model');
 const Comentario = require('../../models/publicacion/comentario.model');
 
@@ -301,6 +301,29 @@ const normalizarFechaMomento = (valor) => {
 };
 
 const normalizarFechaRecuerdo = normalizarFechaMomento;
+
+const obtenerEtapaPropiaValida = async ({ etapaId, usuarioId }) => {
+    if (!etapaId) return null;
+
+    if (!esObjectIdValido(etapaId)) {
+        const error = new Error('La Etapa seleccionada no es válida.');
+        error.status = 400;
+        throw error;
+    }
+
+    const etapa = await EtapaDestacada.findOne({
+        _id: etapaId,
+        propietario: usuarioId
+    });
+
+    if (!etapa) {
+        const error = new Error('La Etapa no existe o no pertenece al autor de la publicación.');
+        error.status = 403;
+        throw error;
+    }
+
+    return etapa;
+};
 
 const obtenerIdsNodosRelacionados = (valor) => {
     const lista = parseJSONSeguro(valor, []);
@@ -653,7 +676,8 @@ const poblarPublicacion = async (publicacionId) => {
         .populate('personasRelacionadas.usuario', 'nombreUsuario nickname email imagenPerfil')
         .populate('eventoRelacionado.evento')
         .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
-        .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
+        .populate('arbolAudiencia', 'nombreFamilia nombre titulo')
+        .populate('etapaDestacada', 'propietario nombre color icono orden');
 };
 
 const poblarConsultaPublicaciones = (consulta) => {
@@ -672,7 +696,8 @@ const poblarConsultaPublicaciones = (consulta) => {
         .populate('personasRelacionadas.usuario', 'nombreUsuario nickname email imagenPerfil')
         .populate('eventoRelacionado.evento')
         .populate('eventoRelacionado.arbol', 'nombreFamilia nombre titulo')
-        .populate('arbolAudiencia', 'nombreFamilia nombre titulo');
+        .populate('arbolAudiencia', 'nombreFamilia nombre titulo')
+        .populate('etapaDestacada', 'propietario nombre color icono orden');
 };
 
 
@@ -753,7 +778,8 @@ const crearPublicacion = async (req, res) => {
             arbolAudienciaId,
             fechaRecuerdo,
             fechaMomento,
-            personasRelacionadas
+            personasRelacionadas,
+            etapaDestacadaId
         } = req.body || {};
 
         const contenidoLimpio = String(contenido || '').trim();
@@ -810,25 +836,44 @@ const crearPublicacion = async (req, res) => {
             arbolAudiencia = resultadoArbol.arbol;
         }
 
-        const fechaRecuerdoNormalizada = tipoSeguro === 'historico'
+        const etapaSeleccionada = await obtenerEtapaPropiaValida({
+            etapaId: etapaDestacadaId,
+            usuarioId: req.usuario.id
+        });
+
+        if (!etapaSeleccionada && (String(fechaRecuerdo || '').trim() || String(fechaMomento || '').trim())) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({
+                mensaje: 'Selecciona una Etapa antes de establecer una fecha cronológica.'
+            });
+        }
+
+        const fechaRecuerdoNormalizada = etapaSeleccionada && tipoSeguro === 'historico'
             ? normalizarFechaRecuerdo(fechaRecuerdo)
             : null;
 
         if (fechaRecuerdoNormalizada === undefined) {
             await limpiarCargaFallida({ archivos: archivosSubidos });
-            return res.status(400).json({
-                mensaje: 'La fecha del recuerdo no es válida.'
-            });
+            return res.status(400).json({ mensaje: 'La fecha de la Etapa no es válida.' });
         }
 
-        const fechaMomentoNormalizada = tipoSeguro === 'familiar'
+        const fechaMomentoNormalizada = etapaSeleccionada && tipoSeguro === 'familiar'
             ? normalizarFechaMomento(fechaMomento)
             : null;
 
         if (fechaMomentoNormalizada === undefined) {
             await limpiarCargaFallida({ archivos: archivosSubidos });
+            return res.status(400).json({ mensaje: 'La fecha de la Etapa no es válida.' });
+        }
+
+        const fechaEtapa = tipoSeguro === 'historico'
+            ? fechaRecuerdoNormalizada
+            : fechaMomentoNormalizada;
+
+        if (etapaSeleccionada && !fechaEtapa) {
+            await limpiarCargaFallida({ archivos: archivosSubidos });
             return res.status(400).json({
-                mensaje: 'La fecha del momento no es válida.'
+                mensaje: 'Selecciona la fecha que corresponde a esta Etapa.'
             });
         }
 
@@ -880,6 +925,7 @@ const crearPublicacion = async (req, res) => {
             etiquetasMultimedia: etiquetasMultimediaNormalizadas,
             personasRelacionadas: personasRelacionadasNormalizadas,
             eventoRelacionado: eventoNormalizado,
+            etapaDestacada: etapaSeleccionada?._id || null,
             reacciones: [],
             compartido: 0
         });
@@ -1385,6 +1431,15 @@ const editarPublicacion = async (req, res) => {
         asegurarAutorPublicacion(publicacion, usuarioId);
 
         const tipoSeguro = publicacion.tipo === 'familiar' ? 'familiar' : 'historico';
+        const etapaFueEnviada = tieneCampo(body, 'etapaDestacadaId');
+        let etapaFinal = publicacion.etapaDestacada || null;
+
+        if (etapaFueEnviada) {
+            etapaFinal = body.etapaDestacadaId
+                ? await obtenerEtapaPropiaValida({ etapaId: body.etapaDestacadaId, usuarioId })
+                : null;
+        }
+
         const uploadsOriginales = (Array.isArray(publicacion.multimedia) ? publicacion.multimedia : []).filter(Boolean);
         const mapaUploadsOriginales = new Map(
             uploadsOriginales.map(upload => [String(obtenerIdSeguro(upload)), upload])
@@ -1487,26 +1542,44 @@ const editarPublicacion = async (req, res) => {
             }
         }
 
-        const fechaRecuerdoFinal = tipoSeguro === 'historico'
-            ? (tieneCampo(body, 'fechaRecuerdo')
-                ? normalizarFechaRecuerdo(body.fechaRecuerdo)
-                : publicacion.fechaRecuerdo)
-            : null;
+        let fechaRecuerdoFinal = null;
+        let fechaMomentoFinal = null;
 
-        if (fechaRecuerdoFinal === undefined) {
-            await limpiarCargaFallida({ archivos: archivosSubidos });
-            return res.status(400).json({ mensaje: 'La fecha del recuerdo no es válida.' });
-        }
+        if (etapaFinal) {
+            fechaRecuerdoFinal = tipoSeguro === 'historico'
+                ? (tieneCampo(body, 'fechaRecuerdo')
+                    ? normalizarFechaRecuerdo(body.fechaRecuerdo)
+                    : publicacion.fechaRecuerdo)
+                : null;
+            fechaMomentoFinal = tipoSeguro === 'familiar'
+                ? (tieneCampo(body, 'fechaMomento')
+                    ? normalizarFechaMomento(body.fechaMomento)
+                    : publicacion.fechaMomento)
+                : null;
 
-        const fechaMomentoFinal = tipoSeguro === 'familiar'
-            ? (tieneCampo(body, 'fechaMomento')
-                ? normalizarFechaMomento(body.fechaMomento)
-                : publicacion.fechaMomento)
-            : null;
-
-        if (fechaMomentoFinal === undefined) {
-            await limpiarCargaFallida({ archivos: archivosSubidos });
-            return res.status(400).json({ mensaje: 'La fecha del momento no es válida.' });
+            const fechaEtapaFinal = tipoSeguro === 'historico' ? fechaRecuerdoFinal : fechaMomentoFinal;
+            if (fechaEtapaFinal === undefined) {
+                await limpiarCargaFallida({ archivos: archivosSubidos });
+                return res.status(400).json({ mensaje: 'La fecha de la Etapa no es válida.' });
+            }
+            if (!fechaEtapaFinal) {
+                await limpiarCargaFallida({ archivos: archivosSubidos });
+                return res.status(400).json({ mensaje: 'Selecciona la fecha que corresponde a esta Etapa.' });
+            }
+        } else if (etapaFueEnviada) {
+            // Al retirar una Etapa, su fecha cronológica también se elimina.
+            fechaRecuerdoFinal = null;
+            fechaMomentoFinal = null;
+        } else {
+            // Compatibilidad: se conservan fechas legadas mientras no se intenten modificar.
+            if (tieneCampo(body, 'fechaRecuerdo') || tieneCampo(body, 'fechaMomento')) {
+                await limpiarCargaFallida({ archivos: archivosSubidos });
+                return res.status(400).json({
+                    mensaje: 'Selecciona una Etapa antes de modificar la fecha cronológica.'
+                });
+            }
+            fechaRecuerdoFinal = tipoSeguro === 'historico' ? publicacion.fechaRecuerdo : null;
+            fechaMomentoFinal = tipoSeguro === 'familiar' ? publicacion.fechaMomento : null;
         }
 
         let mencionesFinales = publicacion.menciones;
@@ -1549,6 +1622,7 @@ const editarPublicacion = async (req, res) => {
             : publicacion.ubicacionTexto;
         publicacion.fechaRecuerdo = fechaRecuerdoFinal || null;
         publicacion.fechaMomento = fechaMomentoFinal || null;
+        publicacion.etapaDestacada = etapaFinal?._id || etapaFinal || null;
         publicacion.menciones = mencionesFinales;
         publicacion.etiquetasMultimedia = etiquetasFinales;
         publicacion.personasRelacionadas = personasRelacionadasFinales;
@@ -1953,6 +2027,85 @@ const reaccionarPublicacion = async (req, res) => {
     }
 };
 
+
+// ASIGNAR UNA ETAPA A UNA PUBLICACIÓN DEL AUTOR
+const asignarEtapaPublicacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+        const { etapaDestacadaId, fecha } = req.body || {};
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await Publicacion.findById(id);
+        if (!publicacion) return res.status(404).json({ mensaje: 'La publicación no existe.' });
+        asegurarAutorPublicacion(publicacion, usuarioId);
+
+        const etapa = await obtenerEtapaPropiaValida({ etapaId: etapaDestacadaId, usuarioId });
+        if (!etapa) return res.status(400).json({ mensaje: 'Selecciona una Etapa.' });
+
+        const fechaNormalizada = normalizarFechaMomento(fecha);
+        if (fechaNormalizada === undefined || !fechaNormalizada) {
+            return res.status(400).json({ mensaje: 'Selecciona una fecha válida para la Etapa.' });
+        }
+
+        publicacion.etapaDestacada = etapa._id;
+        if (publicacion.tipo === 'familiar') {
+            publicacion.fechaMomento = fechaNormalizada;
+            publicacion.fechaRecuerdo = null;
+        } else {
+            publicacion.fechaRecuerdo = fechaNormalizada;
+            publicacion.fechaMomento = null;
+        }
+        await publicacion.save();
+
+        const completa = await poblarPublicacion(publicacion._id) || publicacion;
+        return res.status(200).json({
+            mensaje: 'Etapa agregada correctamente.',
+            publicacion: serializarPublicacionParaUsuario(completa, usuarioId)
+        });
+    } catch (error) {
+        console.error('❌ Error al asignar Etapa a publicación:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudo agregar la Etapa.'
+        });
+    }
+};
+
+// RETIRAR LA ETAPA SIN ELIMINAR LA PUBLICACIÓN NI SU MULTIMEDIA
+const eliminarEtapaPublicacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuarioId = req.usuario.id || req.usuario._id;
+
+        if (!esObjectIdValido(id)) {
+            return res.status(400).json({ mensaje: 'El ID de la publicación no es válido.' });
+        }
+
+        const publicacion = await Publicacion.findById(id);
+        if (!publicacion) return res.status(404).json({ mensaje: 'La publicación no existe.' });
+        asegurarAutorPublicacion(publicacion, usuarioId);
+
+        publicacion.etapaDestacada = null;
+        publicacion.fechaRecuerdo = null;
+        publicacion.fechaMomento = null;
+        await publicacion.save();
+
+        const completa = await poblarPublicacion(publicacion._id) || publicacion;
+        return res.status(200).json({
+            mensaje: 'Etapa retirada. La publicación y sus archivos se conservaron.',
+            publicacion: serializarPublicacionParaUsuario(completa, usuarioId)
+        });
+    } catch (error) {
+        console.error('❌ Error al retirar Etapa de publicación:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudo retirar la Etapa.'
+        });
+    }
+};
+
 module.exports = {
     crearPublicacion,
     obtenerPublicaciones,
@@ -1970,5 +2123,7 @@ module.exports = {
     buscarTodo,
     obtenerPublicacionesPorEvento,
     obtenerMomentosFamiliaresPorNodo,
+    asignarEtapaPublicacion,
+    eliminarEtapaPublicacion,
     reaccionarPublicacion
 };

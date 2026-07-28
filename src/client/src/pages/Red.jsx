@@ -583,11 +583,11 @@ export default function Red() {
                             {tabActiva === 'amigos' ? 'Amigo' : 'Siguiendo'}
                           </button>
                         ) : (
-                          <span className="badge bg-light text-dark text-uppercase mb-2 px-3 py-1 relacion-badge">
+                          <span className="relacion-badge mb-2">
                             {contacto.relacion}
                           </span>
                         )}
-                        <p className="relacion-conexion text-muted small">{contacto.info}</p>
+                        <p className="relacion-conexion small">{contacto.info}</p>
                       </div>
                     </div>
 
@@ -596,7 +596,7 @@ export default function Red() {
                         <i className="bi bi-person-fill me-1"></i> Ver Perfil
                       </button>
                       {tabActiva === 'seguidores' && (
-                        <button className="btn btn-dorado btn-sm rounded-pill w-100" onClick={() => manejarSeguir(idUsuario)}>
+                        <button className="btn-seguir-vuelta-red rounded-pill w-100" type="button" onClick={() => manejarSeguir(idUsuario)}>
                           <i className="bi bi-arrow-return-right me-1"></i> Seguir de vuelta
                         </button>
                       )}

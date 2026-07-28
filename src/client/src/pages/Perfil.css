@@ -731,12 +731,14 @@
 }
 
 .timeline-nodo {
+    --timeline-nodo-brillo-inicial: rgba(255, 255, 255, 0.62);
+    --timeline-nodo-brillo-final: rgba(255, 255, 255, 0.92);
     position: absolute;
     top: 30px;
     left: -35px;
     width: 70px;
     height: 70px;
-    background: rgba(255, 255, 255, 0.7);
+    background: var(--fondo-elevado);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 2px solid var(--dorado);
@@ -752,16 +754,51 @@
     animation: latido-nodo 3s infinite alternate ease-in-out;
 }
 
+html[data-theme="dark"] .timeline-nodo {
+    --timeline-nodo-brillo-inicial: rgba(212, 174, 69, 0.12);
+    --timeline-nodo-brillo-final: rgba(212, 174, 69, 0.28);
+}
+
 @keyframes latido-nodo {
     0% {
         transform: scale(1);
-        box-shadow: 0 4px 15px rgba(203, 161, 53, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.7);
+        box-shadow: 0 4px 15px rgba(203, 161, 53, 0.3), inset 0 0 10px var(--timeline-nodo-brillo-inicial);
     }
 
     100% {
         transform: scale(1.08);
-        box-shadow: 0 4px 25px rgba(203, 161, 53, 0.8), inset 0 0 20px rgba(255, 255, 255, 1);
+        box-shadow: 0 4px 25px rgba(203, 161, 53, 0.8), inset 0 0 20px var(--timeline-nodo-brillo-final);
     }
+}
+
+.timeline-estado-vacio {
+    position: relative;
+    z-index: 2;
+    padding: 48px 24px;
+    border: 1px solid var(--borde-color);
+    border-radius: 16px;
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-secundario);
+    text-align: center;
+    box-shadow: var(--sombra-suave);
+}
+
+.timeline-estado-vacio i {
+    display: block;
+    margin-bottom: 14px;
+    color: var(--dorado);
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+.timeline-estado-vacio h5 {
+    margin: 0 0 8px;
+    color: var(--texto-principal);
+}
+
+.timeline-estado-vacio p {
+    margin: 0;
+    color: var(--texto-secundario);
 }
 
 /* =========================================
@@ -3736,3 +3773,148 @@
         outline-offset: 1px;
     }
 }
+
+/* =========================================================
+   ETAPAS DESTACADAS DEL PERFIL
+   ========================================================= */
+.perfil-destacados-compactos {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 4px 2px 8px;
+  scrollbar-width: thin;
+}
+.perfil-destacado-item {
+  position: relative;
+  flex: 0 0 66px;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+.perfil-destacado-seleccionar {
+  width: 66px;
+  padding: 0;
+  border: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  color: var(--texto-secundario);
+  background: transparent;
+}
+.perfil-destacado-burbuja {
+  width: 54px;
+  height: 54px;
+  border: 2px solid color-mix(in srgb, var(--borde-color) 72%, transparent);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.15rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,.35);
+  box-shadow: 0 5px 14px rgba(15,23,42,.14);
+  transition: transform .18s ease, box-shadow .18s ease, outline-color .18s ease;
+}
+.perfil-destacado-nombre {
+  width: 66px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--texto-secundario);
+  font-size: .68rem;
+  font-weight: 750;
+  text-align: center;
+}
+.perfil-destacado-seleccionar:hover .perfil-destacado-burbuja { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15,23,42,.22); }
+.perfil-destacado-item.activo .perfil-destacado-burbuja { outline: 3px solid var(--dorado); outline-offset: 3px; }
+.perfil-destacado-item.activo .perfil-destacado-nombre { color: var(--dorado-oscuro); }
+.perfil-destacado-opciones {
+  position: absolute;
+  top: -5px;
+  right: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--borde-color);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--texto-secundario);
+  background: var(--fondo-tarjeta);
+  font-size: .68rem;
+  box-shadow: 0 3px 8px rgba(15,23,42,.14);
+}
+.perfil-destacado-opciones:hover { color: var(--dorado-oscuro); border-color: var(--dorado); }
+.perfil-destacado-seleccionar:focus-visible .perfil-destacado-burbuja,
+.perfil-destacado-opciones:focus-visible,
+.perfil-destacado-nuevo:focus-visible .perfil-destacado-icono { outline: 2px solid var(--dorado); outline-offset: 2px; }
+.perfil-destacado-nuevo { flex: 0 0 66px; width: 66px; }
+.perfil-destacado-nuevo > span:last-child { width: 66px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 576px) {
+  .perfil-destacados-compactos { margin-left: -2px; margin-right: -2px; gap: 9px; }
+  .perfil-destacado-item, .perfil-destacado-nuevo, .perfil-destacado-seleccionar { flex-basis: 61px; width: 61px; }
+  .perfil-destacado-burbuja, .perfil-destacado-icono { width: 50px; height: 50px; }
+  .perfil-destacado-nombre, .perfil-destacado-nuevo > span:last-child { width: 61px; }
+}
+
+/* Agrupación real de la Línea del Tiempo por año. */
+.timeline-grupo-publicaciones { display: grid; gap: 13px; }
+.perfil-page .timeline-item.timeline-grupo-anio { margin-bottom: 42px; }
+.perfil-page .timeline-item.timeline-grupo-anio > .timeline-grupo-publicaciones { width: 100%; min-width: 0; }
+.timeline-publicacion { width: 100%; min-width: 0; border: 1px solid var(--borde-color); background: var(--fondo-tarjeta); }
+.timeline-publicacion-meta { min-width: 0; margin-bottom: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; color: var(--texto-secundario); font-size: .74rem; }
+.timeline-publicacion-meta time { font-weight: 700; }
+.timeline-publicacion-meta button { min-width: 0; max-width: min(100%, 220px); padding: 2px 0; border: 0; display: inline-flex; align-items: center; gap: 5px; color: var(--texto-secundario); background: transparent; font: inherit; }
+.timeline-publicacion-meta button i { flex: none; color: var(--timeline-etapa-color, var(--dorado)); }
+.timeline-publicacion-meta button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-publicacion-meta button:hover span { color: var(--timeline-etapa-color, var(--dorado-oscuro)); text-decoration: underline; text-underline-offset: 2px; }
+.timeline-publicacion-media { min-width: 120px; max-width: 180px; width: 100%; }
+.timeline-publicacion-media img, .timeline-publicacion-media video { max-height: 120px; width: 100%; object-fit: cover; background: #111827; }
+@media (max-width: 576px) { .timeline-publicacion-media { min-width: 0; max-width: 100%; } .timeline-publicacion-media img, .timeline-publicacion-media video { max-height: 220px; } }
+
+/* Etapa asociada dentro de las publicaciones del álbum de un evento. */
+.evento-publicaciones-modal-etapa {
+  min-width: 0;
+  max-width: min(42%, 190px);
+  margin-left: auto;
+  padding: 3px 0;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--texto-secundario);
+  background: transparent;
+  font-family: inherit;
+  font-size: .72rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.evento-publicaciones-modal-etapa i {
+  flex: none;
+  color: var(--evento-modal-etapa-color, var(--dorado));
+}
+.evento-publicaciones-modal-etapa span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.evento-publicaciones-modal-etapa:hover span,
+.evento-publicaciones-modal-etapa:focus-visible span {
+  color: var(--evento-modal-etapa-color, var(--dorado-oscuro));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.evento-publicaciones-modal-etapa:focus-visible {
+  outline: 2px solid var(--evento-modal-etapa-color, var(--dorado));
+  outline-offset: 2px;
+}
+@media (max-width: 576px) {
+  .evento-publicaciones-modal-etapa { max-width: 38%; font-size: .68rem; }
+}
+
