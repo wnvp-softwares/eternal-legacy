@@ -963,6 +963,10 @@ html[data-theme="dark"] .legacy-publicacion-tipo-popover {
   max-width: min(100%, 190px);
   overflow: hidden;
   color: var(--texto-secundario);
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
 }
 button.legacy-publicacion-contexto-item.etapa {
   margin: 0;
@@ -988,6 +992,7 @@ button.legacy-publicacion-contexto-item.etapa {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: .80em;
+  color: var(--texto-secundario);
 }
 .legacy-publicacion-contexto-item.etapa.interactivo { cursor: pointer; }
 .legacy-publicacion-contexto-item.etapa.interactivo:hover > span,

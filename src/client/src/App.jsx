@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
 import Login from './pages/Login';
 import Inicio from './pages/Inicio';
 import Arbol from './pages/ArbolGenealogico';
@@ -32,32 +32,32 @@ function RutaLogin() {
   return <Login rutaInicial={RUTA_INICIAL_APP} />;
 }
 
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <RedireccionInicial />
+  },
+  {
+    path: '/login',
+    element: <RutaLogin />
+  },
+  {
+    element: <Layout />,
+    children: [
+      { path: '/inicio', element: <Inicio /> },
+      { path: '/arbol-genealogico', element: <Arbol /> },
+      { path: '/mensajes', element: <Mensajes /> },
+      { path: '/red', element: <Red /> },
+      { path: '/notificaciones', element: <Notificaciones /> },
+      { path: '/perfil', element: <Perfil /> },
+      { path: '/perfil/:id', element: <Perfil /> },
+      { path: '/configuracion', element: <Configuracion /> }
+    ]
+  }
+]);
+
 function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<RedireccionInicial />} />
-        <Route path="/login" element={<RutaLogin />} />
-
-        {/* Cualquier ruta dentro de Layout tendrá el menú superior y lateral */}
-        <Route element={<Layout />}>
-          <Route path="/inicio" element={<Inicio />} />
-          <Route path="/arbol-genealogico" element={<Arbol />} />
-          <Route path="/mensajes" element={<Mensajes />} />
-          <Route path="/red" element={<Red />} />
-          <Route path="/notificaciones" element={<Notificaciones />} />
-
-          {/* Perfil propio */}
-          <Route path="/perfil" element={<Perfil />} />
-
-          {/* Perfil de otro usuario */}
-          <Route path="/perfil/:id" element={<Perfil />} />
-
-          <Route path="/configuracion" element={<Configuracion />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} />;
 }
 
 export default App;

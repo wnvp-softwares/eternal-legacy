@@ -50,6 +50,50 @@
     color: var(--texto-secundario);
 }
 
+/* Agrupa las acciones superiores en una retícula horizontal estable.
+   Cada control ocupa una celda del mismo tamaño para mantener equidistantes
+   sus centros, independientemente de la silueta del icono o del avatar. */
+.acciones-nav-superior {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: max-content;
+    flex: 0 0 auto;
+}
+
+.indicador-nav-superior,
+.boton-busqueda-movil,
+.contenedor-perfil-nav {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.indicador-nav-superior,
+.boton-busqueda-movil {
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.indicador-nav-superior:hover,
+.boton-busqueda-movil:hover {
+    background-color: var(--hover-menu);
+}
+
+.indicador-nav-superior:focus-visible,
+.boton-busqueda-movil:focus-visible,
+.foto-perfil-nav:focus-visible {
+    outline: 2px solid var(--dorado);
+    outline-offset: 2px;
+}
+
+.contenedor-perfil-nav {
+    display: flex;
+}
+
 .iconos-nav i {
     font-size: 1.3rem;
     color: var(--texto-secundario);
@@ -73,8 +117,8 @@
 
 .badge-notificacion {
     position: absolute;
-    top: -5px;
-    right: -8px;
+    top: 0;
+    right: -1px;
     font-size: 0.65rem;
     padding: 3px 6px;
     font-weight: bold;
@@ -532,10 +576,8 @@ html[data-vista-mensajes-activa="true"][data-teclado-mensajes="abierto"] .navega
    INDICADORES DE NAVEGACIÓN: ÁRBOL, RED Y MENSAJES
    ========================================= */
 .indicador-nav-superior {
-    align-items: center;
-    justify-content: center;
-    min-width: 28px;
-    min-height: 28px;
+    min-width: 40px;
+    min-height: 40px;
 }
 
 .badge-indicador-navegacion,
@@ -605,7 +647,30 @@ html[data-vista-mensajes-activa="true"][data-teclado-mensajes="abierto"] .navega
 }
 
 @media (max-width: 575.98px) {
-    .navbar-superior > .d-flex.align-items-center.justify-content-end {
-        gap: 0.85rem !important;
+    .acciones-nav-superior {
+        gap: 6px;
+    }
+
+    .indicador-nav-superior,
+    .boton-busqueda-movil,
+    .contenedor-perfil-nav {
+        width: 36px;
+        height: 36px;
+        flex-basis: 36px;
+    }
+
+    .indicador-nav-superior {
+        min-width: 36px;
+        min-height: 36px;
+    }
+
+    .foto-perfil-nav {
+        width: 33px;
+        height: 33px;
+    }
+
+    .badge-notificacion {
+        top: -1px;
+        right: -2px;
     }
 }

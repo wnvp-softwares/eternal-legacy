@@ -3132,7 +3132,7 @@ export default function Perfil() {
                 <div className="grupo-input-x">
                   <label className="label-input-x">Nombre de perfil (@etiqueta)</label>
                   <div className="input-group">
-                    <span className="input-group-text bg-dark text-muted border-secondary fw-bold">@</span>
+                    <span className="input-group-text prefijo-nickname-perfil fw-bold">@</span>
                     <input
                       type="text"
                       className="form-control input-x"
@@ -3183,7 +3183,7 @@ export default function Perfil() {
                 <div className="grupo-input-x">
                   <label className="label-input-x">Género</label>
                   <select
-                    className="form-control input-x"
+                    className="form-control input-x selector-nativo-perfil"
                     value={formEdicion.genero}
                     onChange={(e) => setFormEdicion({ ...formEdicion, genero: e.target.value })}
                   >
@@ -3317,7 +3317,7 @@ export default function Perfil() {
                 <label className="form-label fw-bold mb-2">¿Qué parentesco tienes con este usuario?</label>
                 <div className="selector-parentesco-controles">
                   <select
-                    className="form-select form-select-sm"
+                    className="form-select form-select-sm selector-parentesco-perfil"
                     value={parentescoSeleccionado}
                     onChange={(event) => setParentescoSeleccionado(event.target.value)}
                   >
@@ -3331,7 +3331,7 @@ export default function Perfil() {
                     <option value="Pareja">Pareja</option>
                   </select>
                   <button type="button" className="btn btn-warning btn-sm fw-bold" onClick={manejarEnviarInvitacionFamilia}>Enviar</button>
-                  <button type="button" className="btn btn-light btn-sm border" onClick={() => setMostrarSelectorFamilia(false)} aria-label="Cerrar selector">
+                  <button type="button" className="btn btn-sm boton-cerrar-parentesco" onClick={() => setMostrarSelectorFamilia(false)} aria-label="Cerrar selector">
                     <i className="bi bi-x-lg"></i>
                   </button>
                 </div>
@@ -3793,7 +3793,7 @@ export default function Perfil() {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm border border-light">
+                <div className="text-center py-5 text-muted perfil-galeria-vacia rounded-4 shadow-sm">
                   <i className="bi bi-images fs-1 mb-3 d-block text-dorado"></i>
                   <h5>Aún no tienes fotos multimedia</h5>
                   <p>Sube imágenes adjuntas en tus posts para rellenar tu baúl de recuerdos visuales.</p>

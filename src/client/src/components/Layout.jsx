@@ -688,7 +688,7 @@ export default function Layout() {
           </div>
         </div>
 
-        <div className="d-flex align-items-center justify-content-end gap-3 gap-md-4" style={{ minWidth: '150px' }}>
+        <div className="acciones-nav-superior">
           <button
             type="button"
             className="d-md-none position-relative iconos-nav boton-busqueda-movil"
@@ -713,21 +713,7 @@ export default function Layout() {
             )}
           </Link>
 
-          <Link
-            to="/red"
-            className="position-relative iconos-nav indicador-nav-superior text-decoration-none d-none d-md-flex"
-            aria-label={`Red: ${totalIndicadoresRed} novedades`}
-            title="Novedades de Mi Red"
-          >
-            <i className="bi bi-people"></i>
-            {totalIndicadoresRed > 0 && (
-              <span className="badge-notificacion badge-indicador-navegacion">
-                {formatearCantidadIndicador(totalIndicadoresRed)}
-              </span>
-            )}
-          </Link>
-
-          <Link to="/mensajes" className="position-relative iconos-nav indicador-nav-superior text-decoration-none" aria-label={`Mensajes: ${mensajesNoLeidos} no leídos`}>
+          <Link to="/mensajes" className="position-relative iconos-nav indicador-nav-superior text-decoration-none d-flex" aria-label={`Mensajes: ${mensajesNoLeidos} no leídos`}>
             <i className="bi bi-chat"></i>
             {mensajesNoLeidos > 0 && (
               <span className="badge-notificacion badge-indicador-navegacion">
@@ -736,7 +722,7 @@ export default function Layout() {
             )}
           </Link>
 
-          <Link to="/notificaciones" className="position-relative iconos-nav indicador-nav-superior text-decoration-none" title="Notificaciones" aria-label={`Notificaciones: ${totalNotificacionesNoLeidas} no leídas`}>
+          <Link to="/notificaciones" className="position-relative iconos-nav indicador-nav-superior text-decoration-none d-flex" title="Notificaciones" aria-label={`Notificaciones: ${totalNotificacionesNoLeidas} no leídas`}>
             <i className="bi bi-bell"></i>
             {totalNotificacionesNoLeidas > 0 && (
               <span className="badge-notificacion badge-indicador-navegacion">
@@ -746,7 +732,7 @@ export default function Layout() {
           </Link>
 
           {/* --- DROPDOWN DE PERFIL --- */}
-          <div className="position-relative">
+          <div className="position-relative contenedor-perfil-nav">
             <img
               src={obtenerUrlImagenPerfil(usuarioLogueado?.imagenPerfil, usuarioLogueado?.nombreUsuario)}
               alt="Perfil"
@@ -905,16 +891,6 @@ export default function Layout() {
               )}
             </span>
             <span style={{ fontSize: '0.7rem', fontWeight: esActiva('/red') ? 'bold' : 'normal' }}>Red</span>
-          </Link>
-
-          <Link to="/notificaciones" className={`${esActiva('/notificaciones') ? 'text-dark' : 'text-secondary'} nav-movil-item d-flex flex-column align-items-center text-decoration-none`}>
-            <span className="icono-nav-movil-con-indicador">
-              <i className={`bi bi-bell${esActiva('/notificaciones') ? '-fill text-warning' : ''} fs-5`}></i>
-              {totalNotificacionesNoLeidas > 0 && (
-                <span className="badge-indicador-movil">{formatearCantidadIndicador(totalNotificacionesNoLeidas)}</span>
-              )}
-            </span>
-            <span style={{ fontSize: '0.7rem', fontWeight: esActiva('/notificaciones') ? 'bold' : 'normal' }}>Avisos</span>
           </Link>
 
           <Link to="/perfil" className={`${esActiva('/perfil') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>

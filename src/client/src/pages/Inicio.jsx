@@ -3892,8 +3892,7 @@ export default function Inicio() {
                 <img
                   src={obtenerUrlImagenPerfil(obtenerImagenDeEntidad(usuarioLogueado), usuarioLogueado?.nombreUsuario)}
                   alt="Mi perfil"
-                  className="rounded-circle me-3 object-fit-cover"
-                  style={{ width: '45px', height: '45px', border: '1px solid #dee2e6' }}
+                  className="rounded-circle me-3 object-fit-cover avatar-disparador-inicio"
                   onError={(e) => {
                     e.target.onerror = null;
                     e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(usuarioLogueado?.nombreUsuario || 'Usuario')}&background=0D1B2A&color=fff`;

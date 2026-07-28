@@ -4704,3 +4704,27 @@ video.imagen-post-moderna {
   .evento-publicaciones-modal-etapa { max-width: 38%; font-size: .68rem; }
 }
 
+
+/* =========================================================
+   CONTROLES DE INICIO COMPATIBLES CON CLARO Y OSCURO
+   ========================================================= */
+.avatar-disparador-inicio {
+    width: 45px;
+    height: 45px;
+    flex: 0 0 45px;
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-tarjeta);
+}
+
+.select-audiencia-familiar {
+    color-scheme: light;
+}
+
+.select-audiencia-familiar option {
+    background-color: var(--fondo-elevado);
+    color: var(--texto-principal);
+}
+
+html[data-theme="dark"] .select-audiencia-familiar {
+    color-scheme: dark;
+}

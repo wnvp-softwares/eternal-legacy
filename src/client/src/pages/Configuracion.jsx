@@ -1,6 +1,7 @@
 // client/src/pages/Configuracion.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useBeforeUnload, useBlocker } from 'react-router-dom';
 import { usePreferencias } from '../context/PreferenciasContext';
 import { BACKEND_BASE_URL } from '../config/env';
 import 'bootstrap-icons/font/bootstrap-icons.css';
@@ -61,13 +62,46 @@ export default function Configuracion() {
     idioma, setIdioma,
     zonaHoraria, setZonaHoraria,
     formatoFecha, setFormatoFecha,
-    tema, setTema,
+    tema,
     temaAplicado,
-    reducirAnimaciones, setReducirAnimaciones,
+    reducirAnimaciones,
     actualizarPreferenciasGlobales
   } = usePreferencias();
 
   const [seccionActiva, setSeccionActiva] = useState('cuenta');
+
+  // Apariencia se edita como borrador y solo se aplica al confirmar.
+  const [temaBorrador, setTemaBorrador] = useState(tema);
+  const [reducirAnimacionesBorrador, setReducirAnimacionesBorrador] = useState(reducirAnimaciones);
+  const [seccionPendiente, setSeccionPendiente] = useState(null);
+  const temporizadorMensajeAparienciaRef = useRef(null);
+  const botonSeguirEditandoRef = useRef(null);
+  const preferenciasVisualesPreviasRef = useRef({ tema, reducirAnimaciones });
+
+  const hayCambiosApariencia =
+    temaBorrador !== tema || reducirAnimacionesBorrador !== reducirAnimaciones;
+
+  const debeBloquearNavegacion = useCallback(({ currentLocation, nextLocation }) => {
+    if (!hayCambiosApariencia) return false;
+
+    const rutaActual = `${currentLocation.pathname}${currentLocation.search}${currentLocation.hash}`;
+    const rutaSiguiente = `${nextLocation.pathname}${nextLocation.search}${nextLocation.hash}`;
+
+    return rutaActual !== rutaSiguiente;
+  }, [hayCambiosApariencia]);
+
+  const blocker = useBlocker(debeBloquearNavegacion);
+  const modalCambiosPendientesAbierto =
+    blocker.state === 'blocked' || Boolean(seccionPendiente);
+
+  const manejarAntesDeSalir = useCallback((evento) => {
+    if (!hayCambiosApariencia) return;
+
+    evento.preventDefault();
+    evento.returnValue = '';
+  }, [hayCambiosApariencia]);
+
+  useBeforeUnload(manejarAntesDeSalir);
 
   // Estados de Cuenta
   const [cargandoCuenta, setCargandoCuenta] = useState(false);
@@ -402,11 +436,127 @@ export default function Configuracion() {
     }
   };
 
+  const mostrarConfirmacionApariencia = () => {
+    if (temporizadorMensajeAparienciaRef.current) {
+      window.clearTimeout(temporizadorMensajeAparienciaRef.current);
+    }
+
+    setMensajeApariencia('¡Apariencia aplicada y guardada con éxito!');
+    temporizadorMensajeAparienciaRef.current = window.setTimeout(() => {
+      setMensajeApariencia('');
+      temporizadorMensajeAparienciaRef.current = null;
+    }, 3000);
+  };
+
+  const guardarBorradorApariencia = ({ mostrarMensaje = true } = {}) => {
+    actualizarPreferenciasGlobales({
+      tema: temaBorrador,
+      reducirAnimaciones: reducirAnimacionesBorrador
+    });
+
+    if (mostrarMensaje) mostrarConfirmacionApariencia();
+  };
+
+  const descartarBorradorApariencia = () => {
+    setTemaBorrador(tema);
+    setReducirAnimacionesBorrador(reducirAnimaciones);
+    setMensajeApariencia('');
+  };
+
   const aplicarCambiosApariencia = (e) => {
     e.preventDefault();
-    setMensajeApariencia('¡Apariencia aplicada y guardada con éxito!');
-    window.setTimeout(() => setMensajeApariencia(''), 3000);
+    if (!hayCambiosApariencia) return;
+    guardarBorradorApariencia();
   };
+
+  const solicitarCambioSeccion = (nuevaSeccion) => {
+    if (!nuevaSeccion || nuevaSeccion === seccionActiva) return;
+
+    if (seccionActiva === 'apariencia' && hayCambiosApariencia) {
+      setSeccionPendiente(nuevaSeccion);
+      return;
+    }
+
+    setSeccionActiva(nuevaSeccion);
+  };
+
+  const completarSalidaPendiente = () => {
+    const siguienteSeccion = seccionPendiente;
+    setSeccionPendiente(null);
+
+    if (siguienteSeccion) {
+      setSeccionActiva(siguienteSeccion);
+    }
+
+    if (blocker.state === 'blocked') {
+      blocker.proceed();
+    }
+  };
+
+  const guardarYContinuar = () => {
+    guardarBorradorApariencia({ mostrarMensaje: false });
+    completarSalidaPendiente();
+  };
+
+  const descartarYContinuar = () => {
+    descartarBorradorApariencia();
+    completarSalidaPendiente();
+  };
+
+  const seguirEditando = useCallback(() => {
+    setSeccionPendiente(null);
+
+    if (blocker.state === 'blocked') {
+      blocker.reset();
+    }
+  }, [blocker]);
+
+  useEffect(() => {
+    const preferenciasPrevias = preferenciasVisualesPreviasRef.current;
+    const borradorEstabaEditado =
+      temaBorrador !== preferenciasPrevias.tema ||
+      reducirAnimacionesBorrador !== preferenciasPrevias.reducirAnimaciones;
+
+    preferenciasVisualesPreviasRef.current = { tema, reducirAnimaciones };
+
+    if (!borradorEstabaEditado) {
+      setTemaBorrador(tema);
+      setReducirAnimacionesBorrador(reducirAnimaciones);
+    }
+  }, [tema, reducirAnimaciones, temaBorrador, reducirAnimacionesBorrador]);
+
+  useEffect(() => () => {
+    if (temporizadorMensajeAparienciaRef.current) {
+      window.clearTimeout(temporizadorMensajeAparienciaRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!modalCambiosPendientesAbierto) return undefined;
+
+    const focoAnterior = document.activeElement;
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const temporizadorFoco = window.setTimeout(() => {
+      botonSeguirEditandoRef.current?.focus();
+    }, 0);
+
+    const manejarTecla = (evento) => {
+      if (evento.key !== 'Escape') return;
+      evento.preventDefault();
+      seguirEditando();
+    };
+
+    document.addEventListener('keydown', manejarTecla);
+
+    return () => {
+      window.clearTimeout(temporizadorFoco);
+      document.removeEventListener('keydown', manejarTecla);
+      document.body.style.overflow = overflowAnterior;
+      focoAnterior?.focus?.();
+    };
+  }, [modalCambiosPendientesAbierto, seguirEditando]);
 
   useEffect(() => {
     cargarDatosCuenta();
@@ -616,7 +766,7 @@ export default function Configuracion() {
                 type="button"
                 onClick={manejarToggle2FA}
                 disabled={cambiando2FA || cargando2FAEstado}
-                className={`btn btn-sm rounded-pill px-3 fw-bold ${twoFactorEnabled ? 'btn-outline-danger' : 'btn-outline-dark'}`}
+                className={`boton-2fa-configuracion ${twoFactorEnabled ? 'desactivar' : 'configurar'}`}
               >
                 {cambiando2FA ? 'Procesando...' : twoFactorEnabled ? 'Desactivar 2FA' : 'Configurar 2FA'}
               </button>
@@ -711,10 +861,10 @@ export default function Configuracion() {
               <div className="selector-temas-configuracion" role="radiogroup" aria-label="Tema de la aplicación">
                 <button
                   type="button"
-                  className={`opcion-tema-configuracion ${tema === 'claro' ? 'activo' : ''}`}
-                  aria-pressed={tema === 'claro'}
+                  className={`opcion-tema-configuracion ${temaBorrador === 'claro' ? 'activo' : ''}`}
+                  aria-pressed={temaBorrador === 'claro'}
                   onClick={() => {
-                    setTema('claro');
+                    setTemaBorrador('claro');
                     setMensajeApariencia('');
                   }}
                 >
@@ -725,10 +875,10 @@ export default function Configuracion() {
 
                 <button
                   type="button"
-                  className={`opcion-tema-configuracion ${tema === 'oscuro' ? 'activo' : ''}`}
-                  aria-pressed={tema === 'oscuro'}
+                  className={`opcion-tema-configuracion ${temaBorrador === 'oscuro' ? 'activo' : ''}`}
+                  aria-pressed={temaBorrador === 'oscuro'}
                   onClick={() => {
-                    setTema('oscuro');
+                    setTemaBorrador('oscuro');
                     setMensajeApariencia('');
                   }}
                 >
@@ -739,10 +889,10 @@ export default function Configuracion() {
 
                 <button
                   type="button"
-                  className={`opcion-tema-configuracion ${tema === 'automatico' ? 'activo' : ''}`}
-                  aria-pressed={tema === 'automatico'}
+                  className={`opcion-tema-configuracion ${temaBorrador === 'automatico' ? 'activo' : ''}`}
+                  aria-pressed={temaBorrador === 'automatico'}
                   onClick={() => {
-                    setTema('automatico');
+                    setTemaBorrador('automatico');
                     setMensajeApariencia('');
                   }}
                 >
@@ -750,7 +900,10 @@ export default function Configuracion() {
                     <span></span><span></span>
                   </span>
                   <strong>Automático</strong>
-                  <small>Ahora: {temaAplicado === 'dark' ? 'oscuro' : 'claro'}.</small>
+                  <small>{temaBorrador === 'automatico' && tema !== 'automatico'
+                    ? 'Usará el tema del sistema al confirmar.'
+                    : `Ahora: ${temaAplicado === 'dark' ? 'oscuro' : 'claro'}.`}
+                  </small>
                 </button>
               </div>
 
@@ -763,15 +916,18 @@ export default function Configuracion() {
                   <input
                     className="form-check-input mt-0"
                     type="checkbox"
-                    checked={reducirAnimaciones}
-                    onChange={(e) => setReducirAnimaciones(e.target.checked)}
+                    checked={reducirAnimacionesBorrador}
+                    onChange={(e) => {
+                      setReducirAnimacionesBorrador(e.target.checked);
+                      setMensajeApariencia('');
+                    }}
                     aria-label="Reducir animaciones de la aplicación"
                   />
                 </div>
               </div>
 
               <div className="d-flex justify-content-end mt-4">
-                <button className="boton-guardar" type="submit">Confirmar Apariencia</button>
+                <button className="boton-guardar" type="submit" disabled={!hayCambiosApariencia}>Confirmar Apariencia</button>
               </div>
             </form>
           </>
@@ -846,24 +1002,72 @@ export default function Configuracion() {
   };
 
 return (
-  <div className="container-fluid max-w-custom p-0">
-    <div className="layout-configuracion">
-      <aside className="menu-configuracion">
-        <button className={`item-configuracion ${seccionActiva === 'cuenta' ? 'activo' : ''}`} onClick={() => setSeccionActiva('cuenta')}><i className="bi bi-person"></i> {t('menu_cuenta')}</button>
-        <button className={`item-configuracion ${seccionActiva === 'privacidad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('privacidad')}><i className="bi bi-shield-lock"></i> {t('menu_privacidad')}</button>
-        <button className={`item-configuracion ${seccionActiva === 'notificaciones' ? 'activo' : ''}`} onClick={() => setSeccionActiva('notificaciones')}><i className="bi bi-bell"></i> {t('menu_notificaciones')}</button>
-        <button className={`item-configuracion ${seccionActiva === 'seguridad' ? 'activo' : ''}`} onClick={() => setSeccionActiva('seguridad')}><i className="bi bi-key"></i> {t('menu_seguridad')}</button>
-        <button className={`item-configuracion ${seccionActiva === 'idioma' ? 'activo' : ''}`} onClick={() => setSeccionActiva('idioma')}><i className="bi bi-globe"></i> {t('menu_idioma')}</button>
-        <button className={`item-configuracion ${seccionActiva === 'apariencia' ? 'activo' : ''}`} onClick={() => setSeccionActiva('apariencia')}><i className="bi bi-palette"></i> {t('menu_apariencia')}</button>
-        <button
-          className={`item-configuracion ${seccionActiva === 'soporte' ? 'activo' : ''}`}
-          onClick={() => setSeccionActiva('soporte')}
-        >
-          <i className="bi bi-chat-right-heart"></i> Soporte y Sugerencias
-        </button>
-      </aside>
-      <main className="panel-configuracion">{renderContenido()}</main>
+  <>
+    <div className="container-fluid max-w-custom p-0">
+      <div className="layout-configuracion">
+        <aside className="menu-configuracion">
+          <button className={`item-configuracion ${seccionActiva === 'cuenta' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('cuenta')}><i className="bi bi-person"></i> {t('menu_cuenta')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'privacidad' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('privacidad')}><i className="bi bi-shield-lock"></i> {t('menu_privacidad')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'notificaciones' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('notificaciones')}><i className="bi bi-bell"></i> {t('menu_notificaciones')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'seguridad' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('seguridad')}><i className="bi bi-key"></i> {t('menu_seguridad')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'idioma' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('idioma')}><i className="bi bi-globe"></i> {t('menu_idioma')}</button>
+          <button className={`item-configuracion ${seccionActiva === 'apariencia' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('apariencia')}><i className="bi bi-palette"></i> {t('menu_apariencia')}</button>
+          <button
+            className={`item-configuracion ${seccionActiva === 'soporte' ? 'activo' : ''}`}
+            onClick={() => solicitarCambioSeccion('soporte')}
+          >
+            <i className="bi bi-chat-right-heart"></i> Soporte y Sugerencias
+          </button>
+        </aside>
+        <main className="panel-configuracion">{renderContenido()}</main>
+      </div>
     </div>
-  </div>
+
+    {modalCambiosPendientesAbierto && (
+      <div className="modal-cambios-apariencia-backdrop" role="presentation">
+        <section
+          className="modal-cambios-apariencia"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-cambios-apariencia"
+          aria-describedby="descripcion-cambios-apariencia"
+        >
+          <div className="modal-cambios-apariencia-icono" aria-hidden="true">
+            <i className="bi bi-palette-fill"></i>
+          </div>
+          <div className="modal-cambios-apariencia-contenido">
+            <h2 id="titulo-cambios-apariencia">Tienes cambios de apariencia sin confirmar</h2>
+            <p id="descripcion-cambios-apariencia">
+              Puedes guardar la apariencia seleccionada, descartarla o permanecer aquí para seguir editando.
+            </p>
+          </div>
+          <div className="modal-cambios-apariencia-acciones">
+            <button
+              ref={botonSeguirEditandoRef}
+              type="button"
+              className="boton-modal-apariencia secundario"
+              onClick={seguirEditando}
+            >
+              Seguir editando
+            </button>
+            <button
+              type="button"
+              className="boton-modal-apariencia descartar"
+              onClick={descartarYContinuar}
+            >
+              Descartar y continuar
+            </button>
+            <button
+              type="button"
+              className="boton-modal-apariencia guardar"
+              onClick={guardarYContinuar}
+            >
+              Guardar y continuar
+            </button>
+          </div>
+        </section>
+      </div>
+    )}
+  </>
 );
 }

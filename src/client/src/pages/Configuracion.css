@@ -376,9 +376,17 @@ html[data-theme="dark"] .alerta-configuracion.error {
     background-color: #0d1b2a;
 }
 
-html[data-theme="dark"] .input-config option {
+select.input-config {
+    color-scheme: light;
+}
+
+select.input-config option {
     background-color: var(--fondo-elevado);
     color: var(--texto-principal);
+}
+
+html[data-theme="dark"] select.input-config {
+    color-scheme: dark;
 }
 
 @media (max-width: 640px) {
@@ -547,3 +555,234 @@ html[data-theme="dark"] .input-config option {
     align-self: flex-start;
   }
 }
+
+/* =========================================================
+   CONTROLES TEMÁTICOS Y CAMBIOS PENDIENTES DE APARIENCIA
+   ========================================================= */
+.boton-2fa-configuracion {
+    min-height: 36px;
+    flex: none;
+    border: 1px solid var(--borde-fuerte);
+    border-radius: 999px;
+    padding: 7px 16px;
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-principal);
+    font-size: 0.82rem;
+    font-weight: 800;
+    line-height: 1.15;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.boton-2fa-configuracion.configurar {
+    border-color: var(--dorado);
+    background-color: var(--dorado-fondo-suave);
+    color: var(--dorado-oscuro);
+}
+
+.boton-2fa-configuracion.configurar:hover:not(:disabled) {
+    border-color: var(--dorado-oscuro);
+    background-color: var(--boton-primario-fondo);
+    color: var(--boton-primario-texto);
+    transform: translateY(-1px);
+}
+
+.boton-2fa-configuracion.desactivar {
+    border-color: rgba(239, 68, 68, 0.52);
+    background-color: var(--peligro-fondo-suave);
+    color: var(--error-texto);
+}
+
+.boton-2fa-configuracion.desactivar:hover:not(:disabled) {
+    border-color: var(--error-texto);
+    background-color: var(--error-fondo-suave);
+    transform: translateY(-1px);
+}
+
+.boton-2fa-configuracion:focus-visible {
+    outline: 3px solid var(--dorado-borde-suave);
+    outline-offset: 3px;
+}
+
+.boton-2fa-configuracion:disabled {
+    opacity: 0.68;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.modal-cambios-apariencia-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    background-color: var(--fondo-overlay);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: aparecer-modal-apariencia 0.18s ease-out;
+}
+
+.modal-cambios-apariencia {
+    width: min(100%, 560px);
+    max-height: min(88vh, 620px);
+    overflow-y: auto;
+    border: 1px solid var(--borde-color);
+    border-radius: 20px;
+    padding: 24px;
+    background-color: var(--fondo-elevado);
+    color: var(--texto-principal);
+    box-shadow: var(--sombra-elevada);
+    animation: elevar-modal-apariencia 0.22s ease-out;
+}
+
+.modal-cambios-apariencia-icono {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    border: 1px solid var(--dorado-borde-suave);
+    border-radius: 14px;
+    background-color: var(--dorado-fondo-suave);
+    color: var(--dorado-oscuro);
+    font-size: 1.35rem;
+}
+
+.modal-cambios-apariencia-contenido h2 {
+    margin: 0 0 9px;
+    color: var(--texto-principal);
+    font-size: clamp(1.22rem, 3vw, 1.55rem);
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.modal-cambios-apariencia-contenido p {
+    margin: 0;
+    color: var(--texto-secundario);
+    font-size: 0.92rem;
+    line-height: 1.55;
+}
+
+.modal-cambios-apariencia-acciones {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+.boton-modal-apariencia {
+    min-height: 42px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 9px 16px;
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.boton-modal-apariencia:hover {
+    transform: translateY(-1px);
+}
+
+.boton-modal-apariencia:focus-visible {
+    outline: 3px solid var(--dorado-borde-suave);
+    outline-offset: 2px;
+}
+
+.boton-modal-apariencia.secundario {
+    border-color: var(--borde-color);
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-principal);
+}
+
+.boton-modal-apariencia.secundario:hover {
+    border-color: var(--borde-fuerte);
+    background-color: var(--hover-menu);
+}
+
+.boton-modal-apariencia.descartar {
+    border-color: rgba(239, 68, 68, 0.38);
+    background-color: var(--peligro-fondo-suave);
+    color: var(--error-texto);
+}
+
+.boton-modal-apariencia.descartar:hover {
+    border-color: var(--error-texto);
+    background-color: var(--error-fondo-suave);
+}
+
+.boton-modal-apariencia.guardar {
+    border-color: var(--boton-primario-fondo);
+    background-color: var(--boton-primario-fondo);
+    color: var(--boton-primario-texto);
+}
+
+.boton-modal-apariencia.guardar:hover {
+    border-color: var(--boton-primario-hover);
+    background-color: var(--boton-primario-hover);
+}
+
+@keyframes aparecer-modal-apariencia {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes elevar-modal-apariencia {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (max-width: 576px) {
+    .boton-2fa-configuracion {
+        width: 100%;
+        min-height: 44px;
+    }
+
+    .modal-cambios-apariencia-backdrop {
+        align-items: flex-end;
+        padding: 12px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    }
+
+    .modal-cambios-apariencia {
+        width: 100%;
+        max-height: 86vh;
+        border-radius: 20px 20px 14px 14px;
+        padding: 20px 16px;
+    }
+
+    .modal-cambios-apariencia-acciones {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .boton-modal-apariencia {
+        width: 100%;
+        min-height: 46px;
+    }
+
+    .boton-modal-apariencia.guardar {
+        grid-row: 1;
+    }
+
+    .boton-modal-apariencia.descartar {
+        grid-row: 2;
+    }
+
+    .boton-modal-apariencia.secundario {
+        grid-row: 3;
+    }
+}
+

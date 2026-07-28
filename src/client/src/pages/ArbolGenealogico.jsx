@@ -881,7 +881,7 @@ const obtenerYPersonaEnCard = (card, nodoId) => {
 // ==========================================
 // COMPONENTES DE LA ESTRUCTURA DEL ÁRBOL
 // ==========================================
-const DURACION_PULSACION_NODO_MS = 520;
+const DURACION_PULSACION_NODO_MS = 220;
 const DISTANCIA_CANCELAR_PULSACION = 8;
 
 const FilaPersona = ({
@@ -6748,7 +6748,7 @@ La persona seguirá dentro del árbol como miembro normal.`
       )}
 
       {ayudaEdicionRapidaVisible && esUsuarioAdmin && (
-        <div className="modal-accion-arbol-overlay" role="presentation">
+        <div className="modal-accion-arbol-overlay modal-ayuda-edicion-overlay" role="presentation">
           <section className="modal-accion-arbol ayuda-edicion-rapida" role="dialog" aria-modal="true" aria-labelledby="titulo-ayuda-arbol">
             <button
               type="button"

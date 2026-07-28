@@ -81,7 +81,7 @@
     border-radius: 50%;
     border: 4px solid var(--fondo-tarjeta);
     object-fit: cover;
-    background-color: white;
+    background-color: var(--fondo-tarjeta);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
@@ -3990,3 +3990,77 @@ html[data-theme="dark"] .timeline-nodo {
 .perfil-visor-guardados-original .publicacion-compartida {
   margin: 0;
 }
+
+/* =========================================================
+   CONTROLES DE PERFIL COMPATIBLES CON CLARO Y OSCURO
+   ========================================================= */
+.prefijo-nickname-perfil {
+    min-width: 42px;
+    justify-content: center;
+    background-color: var(--fondo-input) !important;
+    color: var(--texto-secundario) !important;
+    border-color: var(--borde-color) !important;
+}
+
+select.selector-nativo-perfil,
+select.selector-parentesco-perfil {
+    color-scheme: light;
+}
+
+select.selector-nativo-perfil option,
+select.selector-parentesco-perfil option {
+    background-color: var(--fondo-elevado);
+    color: var(--texto-principal);
+}
+
+html[data-theme="dark"] select.selector-nativo-perfil,
+html[data-theme="dark"] select.selector-parentesco-perfil {
+    color-scheme: dark;
+}
+
+.selector-parentesco-perfil {
+    background-color: var(--fondo-input);
+    color: var(--texto-principal);
+    border-color: var(--borde-color);
+}
+
+.selector-parentesco-perfil:focus {
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-principal);
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 0.2rem var(--dorado-borde-suave);
+}
+
+.boton-cerrar-parentesco {
+    min-width: 34px;
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-secundario);
+}
+
+.boton-cerrar-parentesco:hover,
+.boton-cerrar-parentesco:focus-visible {
+    border-color: var(--borde-fuerte);
+    background-color: var(--hover-menu);
+    color: var(--texto-principal);
+}
+
+.boton-cerrar-parentesco:focus-visible {
+    outline: 3px solid var(--dorado-borde-suave);
+    outline-offset: 2px;
+}
+
+.perfil-galeria-vacia {
+    border: 1px solid var(--borde-color);
+    background-color: var(--fondo-tarjeta);
+    color: var(--texto-secundario);
+}
+
+.perfil-galeria-vacia h5 {
+    color: var(--texto-principal);
+}
+
+.perfil-galeria-vacia p {
+    color: var(--texto-secundario);
+}
+
