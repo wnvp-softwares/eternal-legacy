@@ -565,6 +565,7 @@ const derivarEtapasVisibles = (publicaciones = []) => {
 
 export default function Perfil() {
   const [sonAmigos, setSonAmigos] = useState(false);
+  const [puedeInvitarFamilia, setPuedeInvitarFamilia] = useState(false);
   const [estadoFamilia, setEstadoFamilia] = useState(null);
   const [esInvitadoPorMi, setEsInvitadoPorMi] = useState(false);
 
@@ -923,6 +924,9 @@ export default function Perfil() {
           setEstaSiguiendo(datosPerfil.siguiendo || false);
           // 🌟 Nuevos mapeos:
           setSonAmigos(datosPerfil.sonAmigos || false);
+          setPuedeInvitarFamilia(Boolean(
+            datosPerfil.puedeInvitarFamilia ?? datosPerfil.sonAmigos
+          ));
           setEstadoFamilia(datosPerfil.estadoFamilia || null);
           setEsInvitadoPorMi(datosPerfil.esInvitadoPorMi || false);
         }
@@ -2116,24 +2120,39 @@ export default function Perfil() {
     if (!token || !id) return;
 
     try {
-      if (estaSiguiendo) {
-        // Si ya lo sigue, actúa como "uncheck" (Dejar de seguir)
-        const res = await fetch(`${API_BASE_URL}/seguidores/dejar-de-seguir/${id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) setEstaSiguiendo(false);
-      } else {
-        // Si no lo sigue, actúa como "check" (Seguir)
-        const res = await fetch(`${API_BASE_URL}/seguidores/seguir`, {
-          method: 'POST',
+      const dejandoDeSeguir = estaSiguiendo;
+      const res = await fetch(
+        dejandoDeSeguir
+          ? `${API_BASE_URL}/seguidores/dejar-de-seguir/${id}`
+          : `${API_BASE_URL}/seguidores/seguir`,
+        {
+          method: dejandoDeSeguir ? 'DELETE' : 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ seguidoId: id })
-        });
-        if (res.ok) setEstaSiguiendo(true);
+          ...(!dejandoDeSeguir ? { body: JSON.stringify({ seguidoId: id }) } : {})
+        }
+      );
+
+      const datos = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(datos.mensaje || 'No se pudo actualizar el seguimiento.');
+      }
+
+      const nuevoEstadoSeguimiento = typeof datos.siguiendo === 'boolean'
+        ? datos.siguiendo
+        : !dejandoDeSeguir;
+      const nuevaDisponibilidadFamilia = typeof datos.puedeInvitarFamilia === 'boolean'
+        ? datos.puedeInvitarFamilia
+        : Boolean(sonAmigos || (nuevoEstadoSeguimiento && datos.seguimientoMutuo));
+
+      setEstaSiguiendo(nuevoEstadoSeguimiento);
+      setPuedeInvitarFamilia(nuevaDisponibilidadFamilia);
+
+      if (!nuevaDisponibilidadFamilia && estadoFamilia === null) {
+        setMostrarSelectorFamilia(false);
+        setParentescoSeleccionado('');
       }
     } catch (error) {
       console.error('❌ Error al procesar el seguimiento:', error);
@@ -3250,9 +3269,13 @@ export default function Perfil() {
                   </button>
                 )}
 
-                {!esMiPerfil && sonAmigos && (
+                {!esMiPerfil && (
+                  puedeInvitarFamilia ||
+                  estadoFamilia === 'Pendiente' ||
+                  estadoFamilia === 'Aceptado'
+                ) && (
                   <div className="acciones-familia-perfil">
-                    {estadoFamilia === null && (
+                    {estadoFamilia === null && puedeInvitarFamilia && (
                       <button
                         type="button"
                         className="perfil-boton-accion familia"

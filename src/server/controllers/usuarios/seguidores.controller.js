@@ -1,4 +1,4 @@
-const { Seguidor } = require('../../models/index.model');
+const { Seguidor, Amigo } = require('../../models/index.model');
 const {
     crearNotificacion,
     crearNotificacionesMultiples,
@@ -6,6 +6,27 @@ const {
     eliminarNotificacionPorClave,
     eliminarNotificaciones
 } = require('../../services/notificacion.service');
+
+
+const obtenerEstadoConexion = async ({ usuarioId, otroUsuarioId, siguiendo, meSigue }) => {
+    const amistadAceptada = await Amigo.exists({
+        estado: 'Aceptado',
+        $or: [
+            { usuarioSolicitante: usuarioId, usuarioReceptor: otroUsuarioId },
+            { usuarioSolicitante: otroUsuarioId, usuarioReceptor: usuarioId }
+        ]
+    });
+
+    const seguimientoMutuo = Boolean(siguiendo && meSigue);
+
+    return {
+        siguiendo: Boolean(siguiendo),
+        meSigue: Boolean(meSigue),
+        seguimientoMutuo,
+        sonAmigos: Boolean(amistadAceptada),
+        puedeInvitarFamilia: Boolean(amistadAceptada || seguimientoMutuo)
+    };
+};
 
 const seguirUsuario = async (req, res) => {
     try {
@@ -25,7 +46,21 @@ const seguirUsuario = async (req, res) => {
         });
 
         if (yaExiste) {
-            return res.status(200).json({ mensaje: 'Ya sigues a este usuario' });
+            const seguimientoReciprocoExistente = await Seguidor.exists({
+                seguidor: seguidoId,
+                seguido: req.usuario.id
+            });
+            const estadoConexion = await obtenerEstadoConexion({
+                usuarioId: req.usuario.id,
+                otroUsuarioId: seguidoId,
+                siguiendo: true,
+                meSigue: Boolean(seguimientoReciprocoExistente)
+            });
+
+            return res.status(200).json({
+                mensaje: 'Ya sigues a este usuario',
+                ...estadoConexion
+            });
         }
 
         const seguimientoReciproco = await Seguidor.findOne({
@@ -68,7 +103,17 @@ const seguirUsuario = async (req, res) => {
             ]);
         }
 
-        res.status(201).json({ mensaje: '¡Ahora sigues a este usuario!' });
+        const estadoConexion = await obtenerEstadoConexion({
+            usuarioId: req.usuario.id,
+            otroUsuarioId: seguidoId,
+            siguiendo: true,
+            meSigue: Boolean(seguimientoReciproco)
+        });
+
+        res.status(201).json({
+            mensaje: '¡Ahora sigues a este usuario!',
+            ...estadoConexion
+        });
     } catch (error) {
         console.error('❌ Error al seguir usuario:', error);
         res.status(500).json({ mensaje: 'Error interno del servidor' });
@@ -208,7 +253,21 @@ const dejarDeSeguirUsuario = async (req, res) => {
             })
         ]);
 
-        res.status(200).json({ mensaje: 'Has dejado de seguir a este usuario' });
+        const seguimientoReciproco = await Seguidor.exists({
+            seguidor: seguidoId,
+            seguido: req.usuario.id
+        });
+        const estadoConexion = await obtenerEstadoConexion({
+            usuarioId: req.usuario.id,
+            otroUsuarioId: seguidoId,
+            siguiendo: false,
+            meSigue: Boolean(seguimientoReciproco)
+        });
+
+        res.status(200).json({
+            mensaje: 'Has dejado de seguir a este usuario',
+            ...estadoConexion
+        });
     } catch (error) {
         console.error('❌ Error al dejar de seguir usuario:', error);
         res.status(500).json({ mensaje: 'Error interno del servidor' });

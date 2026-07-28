@@ -417,6 +417,8 @@ const obtenerPerfilPorId = async (req, res) => {
 
         const privacidadPerfil = normalizarPrivacidadPerfil(usuario.informacionPerfil?.privacidadPerfil);
         const sonAmigos = Boolean(amistadAceptada);
+        const seguimientoMutuo = Boolean(loSigo && meSigue);
+        const puedeInvitarFamilia = Boolean(sonAmigos || seguimientoMutuo);
         const esInvitadoPorMi = Boolean(
             relacionFamilia && String(relacionFamilia.usuarioPrincipal) === String(visitanteId)
         );
@@ -435,7 +437,9 @@ const obtenerPerfilPorId = async (req, res) => {
             privacidadPerfil,
             puedeVerPerfilCompleto: Boolean(accesoCompleto),
             siguiendo: Boolean(loSigo),
+            seguimientoMutuo,
             sonAmigos,
+            puedeInvitarFamilia,
             estadoFamilia: relacionFamilia ? relacionFamilia.estado : null,
             esInvitadoPorMi
         });
