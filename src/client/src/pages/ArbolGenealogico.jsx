@@ -49,6 +49,11 @@ const resolverUrlImagen = (url) => {
 };
 
 const ESPACIADO_Y = 122;
+const ALTURA_VISUAL_TARJETA_INDIVIDUAL = 86;
+const ALTURA_VISUAL_TARJETA_PAREJA = 150;
+const ESPACIO_VERTICAL_ENTRE_TARJETAS = 28;
+const MARGEN_SUPERIOR_CONTENIDO_GENERACION = 24;
+const MARGEN_INFERIOR_CONTENIDO_GENERACION = 72;
 // Desplazamiento vertical aproximado desde el centro de una tarjeta de pareja
 // hasta el centro visual de cada persona dentro de esa misma tarjeta.
 const DESPLAZAMIENTO_PERSONA_PAREJA_Y = 31;
@@ -870,18 +875,35 @@ const obtenerDesplazamientoPersonaEnCard = (card, nodoId) => {
   return 0;
 };
 
-const obtenerYPersonaEnCard = (card, nodoId) => {
+const obtenerAlturaVisualCard = (card) => (
+  card?.tipo === 'pareja'
+    ? ALTURA_VISUAL_TARJETA_PAREJA
+    : ALTURA_VISUAL_TARJETA_INDIVIDUAL
+);
+
+const obtenerTopVisualCard = (card) => {
+  const topVisual = Number(card?.topVisual);
+  if (Number.isFinite(topVisual)) return topVisual;
+
+  const alturaVisual = obtenerAlturaVisualCard(card);
   const filaBase = Number(card?.fila || 0);
 
-  return (filaBase * ESPACIADO_Y) +
-    (ESPACIADO_Y / 2) +
-    obtenerDesplazamientoPersonaEnCard(card, nodoId);
+  return MARGEN_SUPERIOR_CONTENIDO_GENERACION +
+    (filaBase * ESPACIADO_Y) +
+    Math.max(0, (ESPACIADO_Y - alturaVisual) / 2);
+};
+
+const obtenerYPersonaEnCard = (card, nodoId) => {
+  const alturaVisual = Number(card?.alturaVisual) || obtenerAlturaVisualCard(card);
+  const centroCard = obtenerTopVisualCard(card) + (alturaVisual / 2);
+
+  return centroCard + obtenerDesplazamientoPersonaEnCard(card, nodoId);
 };
 
 // ==========================================
 // COMPONENTES DE LA ESTRUCTURA DEL ÁRBOL
 // ==========================================
-const DURACION_PULSACION_NODO_MS = 220;
+const DURACION_PULSACION_NODO_MS = 320;
 const DISTANCIA_CANCELAR_PULSACION = 8;
 
 const FilaPersona = ({
@@ -1003,19 +1025,31 @@ const FilaPersona = ({
   );
 };
 
-const Celda = ({ fila, children }) => (
-  <div style={{
-    position: 'absolute',
-    top: `${fila * ESPACIADO_Y}px`,
-    height: `${ESPACIADO_Y}px`,
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  }}>
-    {children}
-  </div>
-);
+const Celda = ({ fila = 0, top = null, altura = ESPACIADO_Y, children }) => {
+  const hayTopExplicito = (
+    top !== null &&
+    top !== undefined &&
+    top !== '' &&
+    Number.isFinite(Number(top))
+  );
+  const topCalculado = hayTopExplicito
+    ? Number(top)
+    : (Number(fila) * ESPACIADO_Y);
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: `${topCalculado}px`,
+      minHeight: `${Number(altura) || ESPACIADO_Y}px`,
+      width: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      {children}
+    </div>
+  );
+};
 
 const IconoUnion = ({ tipoUnion }) => {
   const config = obtenerConfigUnion(tipoUnion);
@@ -1275,8 +1309,6 @@ const ConectorDinamico = ({
   yIn,
   salidas,
   puedeEditar = false,
-  nodoOrigenId = null,
-  alRelacionarDesdeLinea,
   alEliminarLinea
 }) => {
   const salidasActivas = salidas || [];
@@ -1291,22 +1323,6 @@ const ConectorDinamico = ({
       <div className="punto-inicio" style={{ top: `${yIn}px` }}></div>
       <div className="linea-horizontal" style={{ top: `${yIn}px`, width: '50%', left: 0 }}></div>
       <div className="linea-vertical" style={{ top: `${minY}px`, height: `${maxY - minY}px`, left: '50%' }}></div>
-
-      {puedeEditar && nodoOrigenId && (
-        <button
-          type="button"
-          className="accion-conector accion-conector-agregar"
-          style={{ top: `${Number(yIn) - 14}px` }}
-          onClick={(evento) => {
-            evento.stopPropagation();
-            alRelacionarDesdeLinea?.(nodoOrigenId);
-          }}
-          title="Crear otra relación desde esta rama"
-          aria-label="Crear relación desde esta rama"
-        >
-          <i className="bi bi-plus-lg"></i>
-        </button>
-      )}
 
       {salidasActivas.map((salida) => {
         const y = Number(salida.y);
@@ -4276,6 +4292,20 @@ export default function ArbolGenealogico() {
       });
 
       lista.sort((a, b) => Number(a.fila) - Number(b.fila));
+
+      let siguienteTopDisponible = MARGEN_SUPERIOR_CONTENIDO_GENERACION;
+
+      lista.forEach((card) => {
+        const alturaVisual = obtenerAlturaVisualCard(card);
+        const topPreferido = MARGEN_SUPERIOR_CONTENIDO_GENERACION +
+          (Number(card.fila) * ESPACIADO_Y) +
+          Math.max(0, (ESPACIADO_Y - alturaVisual) / 2);
+        const topVisual = Math.max(topPreferido, siguienteTopDisponible);
+
+        card.alturaVisual = alturaVisual;
+        card.topVisual = topVisual;
+        siguienteTopDisponible = topVisual + alturaVisual + ESPACIO_VERTICAL_ENTRE_TARJETAS;
+      });
     });
 
     return agrupadas;
@@ -4292,18 +4322,25 @@ export default function ArbolGenealogico() {
   }, [cardsPorGeneracion]);
 
   const generacionesExistentes = useMemo(() => {
-    const generaciones = Array.from(cardsPorGeneracion.keys());
-
-    if (generaciones.length === 0) {
-      const generacionFiltro = filtrosAplicados.generacion !== 'Todas'
-        ? Number(filtrosAplicados.generacion)
-        : 0;
-
+    if (filtrosAplicados.generacion !== 'Todas') {
+      const generacionFiltro = Number(filtrosAplicados.generacion);
       return [Number.isFinite(generacionFiltro) ? generacionFiltro : 0];
     }
 
-    return generaciones.sort((a, b) => a - b);
-  }, [cardsPorGeneracion, filtrosAplicados.generacion]);
+    const generacionesEstructurales = nodos
+      .map(nodo => Number(nodo.generacion))
+      .filter(generacion => Number.isInteger(generacion) && generacion >= 0);
+
+    if (generacionesEstructurales.length === 0) return [0];
+
+    const generacionMinima = Math.min(...generacionesEstructurales);
+    const generacionMaxima = Math.max(...generacionesEstructurales);
+
+    return Array.from(
+      { length: (generacionMaxima - generacionMinima) + 1 },
+      (_, indice) => generacionMinima + indice
+    );
+  }, [nodos, filtrosAplicados.generacion]);
 
   const relacionesPadreHijo = useMemo(() => {
     return hilosActivosFiltrados
@@ -4316,6 +4353,7 @@ export default function ArbolGenealogico() {
         return {
           hiloId: hilo.id,
           genIn: Number(cardOrigen.generacion),
+          genOut: Number(cardDestino.generacion),
           yIn: obtenerYPersonaEnCard(cardOrigen, hilo.nodoOrigenId),
           yOut: obtenerYPersonaEnCard(cardDestino, hilo.nodoDestinoId),
           nodoOrigenId: hilo.nodoOrigenId,
@@ -4325,13 +4363,24 @@ export default function ArbolGenealogico() {
       .filter(Boolean);
   }, [hilosActivosFiltrados, cardPorNodoId]);
 
-  const maxFilaActual = useMemo(() => {
-    const filas = [];
-    cardsPorGeneracion.forEach(cards => cards.forEach(card => filas.push(Number(card.fila))));
-    return filas.length ? Math.max(...filas, 5) : 5;
+  const alturaContenidoActual = useMemo(() => {
+    let limiteInferior = 0;
+
+    cardsPorGeneracion.forEach((cards) => {
+      cards.forEach((card) => {
+        const topVisual = obtenerTopVisualCard(card);
+        const alturaVisual = Number(card.alturaVisual) || obtenerAlturaVisualCard(card);
+        limiteInferior = Math.max(limiteInferior, topVisual + alturaVisual);
+      });
+    });
+
+    return limiteInferior;
   }, [cardsPorGeneracion]);
 
-  const ALTURA_LIENZO = (Math.max(5, maxFilaActual) + 1.5) * ESPACIADO_Y;
+  const ALTURA_LIENZO = Math.max(
+    6 * ESPACIADO_Y,
+    alturaContenidoActual + MARGEN_INFERIOR_CONTENIDO_GENERACION
+  );
 
   const amigosFiltrados = useMemo(() => {
     const termino = busquedaInvitaciones.trim().toLowerCase();
@@ -5596,6 +5645,7 @@ La persona seguirá dentro del árbol como miembro normal.`
 
   const iniciarModoMover = () => {
     if (!esUsuarioAdmin) return;
+    if (hayFiltrosAplicados) restablecerFiltrosArbol();
     establecerModoMover(true);
     establecerNodoEnMovimiento(null);
     establecerModoRelacionar(false);
@@ -5617,6 +5667,7 @@ La persona seguirá dentro del árbol como miembro normal.`
   const seleccionarNodoParaMover = (persona) => {
     if (!persona?.id || !esUsuarioAdmin) return;
 
+    if (hayFiltrosAplicados) restablecerFiltrosArbol();
     establecerModoMover(true);
     establecerNodoEnMovimiento(persona);
     establecerNodoSeleccionado(null);
@@ -5626,10 +5677,10 @@ La persona seguirá dentro del árbol como miembro normal.`
     establecerMostrarInvitar(false);
     establecerMostrarFiltros(false);
     establecerMostrarEventos(false);
-    establecerMensajeSistema(`Selecciona una generación o toca otra persona para mover a ${persona.nombre} como pareja.`);
+    establecerMensajeSistema(`Selecciona una posición dentro de una generación o toca otra persona para mover a ${persona.nombre} como pareja.`);
   };
 
-  const moverNodoAGeneracion = async (generacionDestino) => {
+  const moverNodoAGeneracion = async (generacionDestino, filaDestino = null) => {
     if (!nodoEnMovimiento || !arbol?._id || procesandoAccionEstructural) return;
 
     const unionActual = obtenerUnionDeNodo(nodoEnMovimiento.id);
@@ -5640,17 +5691,35 @@ La persona seguirá dentro del árbol como miembro normal.`
     const etiquetaGeneracion = Number(generacionDestino) < 0
       ? 'una nueva generación de antepasados'
       : `la Generación ${romano(Number(generacionDestino))}`;
+    const hayFilaDestino = (
+      filaDestino !== null &&
+      filaDestino !== undefined &&
+      filaDestino !== '' &&
+      Number.isInteger(Number(filaDestino)) &&
+      Number(filaDestino) >= 0
+    );
+    const textoPosicion = hayFilaDestino
+      ? ` en la posición ${Number(filaDestino) + 1}`
+      : '';
 
     const confirmado = window.confirm(
-      `¿Deseas mover a ${nodoEnMovimiento.nombre} a ${etiquetaGeneracion}?${textoUnion}`
+      `¿Deseas mover a ${nodoEnMovimiento.nombre} a ${etiquetaGeneracion}${textoPosicion}?${textoUnion}`
     );
     if (!confirmado) return;
+
+    const payload = {
+      generacionDestino: Number(generacionDestino)
+    };
+
+    if (hayFilaDestino) {
+      payload.filaDestino = Number(filaDestino);
+    }
 
     try {
       establecerProcesandoAccionEstructural(true);
       const data = await apiFetch(`/api/nodos/arbol/${arbol._id}/${nodoEnMovimiento.id}/mover`, {
         method: 'PATCH',
-        body: JSON.stringify({ generacionDestino: Number(generacionDestino) })
+        body: JSON.stringify(payload)
       });
 
       establecerMensajeSistema(data.mensaje || `${nodoEnMovimiento.nombre} fue movido correctamente.`);
@@ -6078,37 +6147,85 @@ La persona seguirá dentro del árbol como miembro normal.`
     }
   };
 
-  const renderLineasGeneracion = (genOrigen) => {
-    const rels = relacionesPadreHijo.filter(r => Number(r.genIn) === Number(genOrigen));
-    if (rels.length === 0) return null;
+  const renderLineasGeneracion = (generacionConector) => {
+    const relacionesQueCruzan = relacionesPadreHijo.filter((relacion) => (
+      Number(relacion.genIn) <= Number(generacionConector) &&
+      Number(relacion.genOut) > Number(generacionConector)
+    ));
+
+    if (relacionesQueCruzan.length === 0) return null;
+
+    const relacionesQueTerminan = relacionesQueCruzan.filter(
+      relacion => Number(relacion.genOut) === Number(generacionConector) + 1
+    );
+    const relacionesQueContinuan = relacionesQueCruzan.filter(
+      relacion => Number(relacion.genOut) > Number(generacionConector) + 1
+    );
 
     const agrupadas = {};
-    rels.forEach((rel) => {
-      const key = `${String(rel.nodoOrigenId)}-${String(Math.round(rel.yIn))}`;
+
+    relacionesQueTerminan.forEach((relacion) => {
+      const key = `${String(relacion.nodoOrigenId)}-${String(Math.round(relacion.yIn))}`;
+
       if (!agrupadas[key]) {
         agrupadas[key] = {
-          yIn: rel.yIn,
-          nodoOrigenId: rel.nodoOrigenId,
+          yIn: relacion.yIn,
           salidas: []
         };
       }
+
       agrupadas[key].salidas.push({
-        y: rel.yOut,
-        hiloId: rel.hiloId,
-        nodoDestinoId: rel.nodoDestinoId
+        y: relacion.yOut,
+        hiloId: relacion.hiloId,
+        nodoDestinoId: relacion.nodoDestinoId
       });
     });
 
-    return Object.keys(agrupadas).map(key => (
+    const lineasFinales = Object.keys(agrupadas).map(key => (
       <ConectorDinamico
-        key={`linea-${genOrigen}-${key}`}
+        key={`linea-${generacionConector}-${key}`}
         yIn={agrupadas[key].yIn}
         salidas={agrupadas[key].salidas}
-        nodoOrigenId={agrupadas[key].nodoOrigenId}
         puedeEditar={esUsuarioAdmin}
-        alRelacionarDesdeLinea={iniciarRelacionDesdeNodo}
         alEliminarLinea={manejarEliminacionLinea}
       />
+    ));
+
+    const alturasContinuacion = Array.from(
+      new Set(relacionesQueContinuan.map(relacion => Math.round(Number(relacion.yIn))))
+    );
+
+    const lineasContinuacion = alturasContinuacion.map((altura) => (
+      <div
+        key={`continuacion-conector-${generacionConector}-${altura}`}
+        className="linea-continuacion-conector"
+        style={{ top: `${altura}px` }}
+        aria-hidden="true"
+      ></div>
+    ));
+
+    return [...lineasFinales, ...lineasContinuacion];
+  };
+
+  const renderContinuacionesGeneracion = (generacion) => {
+    const alturas = Array.from(
+      new Set(
+        relacionesPadreHijo
+          .filter((relacion) => (
+            Number(relacion.genIn) < Number(generacion) &&
+            Number(relacion.genOut) > Number(generacion)
+          ))
+          .map(relacion => Math.round(Number(relacion.yIn)))
+      )
+    );
+
+    return alturas.map((altura) => (
+      <div
+        key={`continuacion-generacion-${generacion}-${altura}`}
+        className="linea-continuacion-generacion"
+        style={{ top: `${altura}px` }}
+        aria-hidden="true"
+      ></div>
     ));
   };
 
@@ -6179,8 +6296,75 @@ La persona seguirá dentro del árbol como miembro normal.`
 
   const renderColumnaGeneracion = (generacion, etiquetaExtra = '', { soloAgregar = false } = {}) => {
     const cards = soloAgregar ? [] : (cardsPorGeneracion.get(Number(generacion)) || []);
-    const puedeMoverAqui = modoMover && nodoEnMovimiento;
+    const puedeMoverAqui = Boolean(modoMover && nodoEnMovimiento);
     const textoGeneracion = etiquetaExtra || `GENERACIÓN ${romano(generacion)}`;
+    const nodoMovimientoId = String(nodoEnMovimiento?.id || '');
+
+    const cardsDestinoMovimiento = puedeMoverAqui
+      ? cards.flatMap((card) => {
+        const contieneNodoMovimiento = card.nodosIds.some(id => String(id) === nodoMovimientoId);
+
+        if (!contieneNodoMovimiento) return [card];
+
+        if (card.tipo === 'pareja') {
+          const personaRestante = [card.pareja1, card.pareja2]
+            .find(persona => persona && String(persona.id) !== nodoMovimientoId);
+
+          if (personaRestante) {
+            return [{
+              ...card,
+              id: `${card.id}-restante-${personaRestante.id}`,
+              tipo: 'individual',
+              persona: personaRestante,
+              nodosIds: [personaRestante.id],
+              nodoPrincipalId: personaRestante.id,
+              alturaVisual: ALTURA_VISUAL_TARJETA_INDIVIDUAL
+            }];
+          }
+        }
+
+        return [];
+      }).sort((a, b) => obtenerTopVisualCard(a) - obtenerTopVisualCard(b))
+      : [];
+
+    const posicionesInsercion = puedeMoverAqui && !soloAgregar
+      ? Array.from({ length: cardsDestinoMovimiento.length + 1 }, (_, indice) => {
+        let top;
+
+        if (cardsDestinoMovimiento.length === 0) {
+          top = MARGEN_SUPERIOR_CONTENIDO_GENERACION + 20;
+        } else if (indice === 0) {
+          top = Math.max(
+            16,
+            obtenerTopVisualCard(cardsDestinoMovimiento[0]) - 14
+          );
+        } else if (indice === cardsDestinoMovimiento.length) {
+          const ultimaCard = cardsDestinoMovimiento[cardsDestinoMovimiento.length - 1];
+          top = obtenerTopVisualCard(ultimaCard) +
+            (Number(ultimaCard.alturaVisual) || obtenerAlturaVisualCard(ultimaCard)) +
+            16;
+        } else {
+          const cardAnterior = cardsDestinoMovimiento[indice - 1];
+          const cardSiguiente = cardsDestinoMovimiento[indice];
+          const limiteAnterior = obtenerTopVisualCard(cardAnterior) +
+            (Number(cardAnterior.alturaVisual) || obtenerAlturaVisualCard(cardAnterior));
+          const limiteSiguiente = obtenerTopVisualCard(cardSiguiente);
+          top = limiteAnterior + ((limiteSiguiente - limiteAnterior) / 2);
+        }
+
+        return {
+          indice,
+          top,
+          etiqueta: indice === 0
+            ? 'Mover al inicio'
+            : indice === cardsDestinoMovimiento.length
+              ? 'Mover al final'
+              : 'Mover aquí'
+        };
+      })
+      : [];
+
+    const filaFinalMovimiento = cardsDestinoMovimiento.length;
 
     return (
       <div
@@ -6196,7 +6380,7 @@ La persona seguirá dentro del árbol como miembro normal.`
               onClick={(evento) => {
                 evento.stopPropagation();
                 if (puedeMoverAqui) {
-                  moverNodoAGeneracion(generacion);
+                  moverNodoAGeneracion(generacion, soloAgregar ? 0 : filaFinalMovimiento);
                 } else {
                   abrirPanelAnadirFamiliar(generacion);
                 }
@@ -6210,10 +6394,35 @@ La persona seguirá dentro del árbol como miembro normal.`
           )}
         </div>
 
+        {renderContinuacionesGeneracion(generacion)}
+
         {cards.map(card => (
-          <Celda key={card.id} fila={card.fila}>
+          <Celda
+            key={card.id}
+            top={card.topVisual}
+            altura={card.alturaVisual}
+          >
             {renderCard(card)}
           </Celda>
+        ))}
+
+        {posicionesInsercion.map((posicion) => (
+          <button
+            key={`mover-${generacion}-${posicion.indice}`}
+            type="button"
+            className="posicion-insercion-movimiento"
+            style={{ top: `${posicion.top}px` }}
+            onClick={(evento) => {
+              evento.stopPropagation();
+              moverNodoAGeneracion(generacion, posicion.indice);
+            }}
+            disabled={procesandoAccionEstructural}
+            title={`${posicion.etiqueta} en ${textoGeneracion.toLowerCase()}`}
+            aria-label={`${posicion.etiqueta} en ${textoGeneracion}`}
+          >
+            <i className="bi bi-arrow-bar-down" aria-hidden="true"></i>
+            <span>{posicion.etiqueta}</span>
+          </button>
         ))}
 
         {soloAgregar && esUsuarioAdmin && (
@@ -6223,13 +6432,27 @@ La persona seguirá dentro del árbol como miembro normal.`
               className="placeholder-añadir placeholder-generacion-nueva"
               onClick={() => (
                 puedeMoverAqui
-                  ? moverNodoAGeneracion(generacion)
+                  ? moverNodoAGeneracion(generacion, 0)
                   : abrirPanelAnadirFamiliar(generacion)
               )}
               disabled={procesandoAccionEstructural}
             >
               <i className={`bi ${puedeMoverAqui ? 'bi-arrows-move' : 'bi-plus-circle'}`}></i>
               {puedeMoverAqui ? 'Mover aquí' : 'Agregar generación'}
+            </button>
+          </Celda>
+        )}
+
+        {!soloAgregar && cards.length === 0 && esUsuarioAdmin && !puedeMoverAqui && (
+          <Celda fila={0}>
+            <button
+              type="button"
+              className="placeholder-añadir placeholder-generacion-vacia"
+              onClick={() => abrirPanelAnadirFamiliar(generacion)}
+              disabled={procesandoAccionEstructural}
+            >
+              <i className="bi bi-person-plus"></i>
+              Agregar familiar
             </button>
           </Celda>
         )}
@@ -6748,7 +6971,7 @@ La persona seguirá dentro del árbol como miembro normal.`
       )}
 
       {ayudaEdicionRapidaVisible && esUsuarioAdmin && (
-        <div className="modal-accion-arbol-overlay modal-ayuda-edicion-overlay" role="presentation">
+        <div className="modal-accion-arbol-overlay" role="presentation">
           <section className="modal-accion-arbol ayuda-edicion-rapida" role="dialog" aria-modal="true" aria-labelledby="titulo-ayuda-arbol">
             <button
               type="button"

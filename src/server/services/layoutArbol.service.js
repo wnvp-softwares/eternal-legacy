@@ -138,6 +138,146 @@ const obtenerSiguienteFila = async ({ arbolId, generacion, excluirNodoId = null,
     return Number.isFinite(fila) ? fila + 1 : 0;
 };
 
+const obtenerBloquesGeneracion = async ({ arbolId, generacion, session = null }) => {
+    const consultaNodos = Nodo.find({
+        arbol: arbolId,
+        generacion,
+        visible: true
+    })
+        .sort({ fila: 1, createdAt: 1, _id: 1 })
+        .select('_id fila createdAt')
+        .lean();
+
+    if (session) consultaNodos.session(session);
+    const nodos = await consultaNodos;
+
+    if (nodos.length === 0) return [];
+
+    const nodosPorId = new Map(nodos.map((nodo) => [String(nodo._id), nodo]));
+    const idsNodos = nodos.map(nodo => nodo._id);
+
+    const consultaUniones = Hilo.find({
+        arbol: arbolId,
+        estado: { $ne: 'Eliminada' },
+        tipoRelacion: { $in: TIPOS_RELACION_PAREJA },
+        nodoOrigen: { $in: idsNodos },
+        nodoDestino: { $in: idsNodos }
+    })
+        .sort({ createdAt: 1, _id: 1 })
+        .select('_id nodoOrigen nodoDestino createdAt')
+        .lean();
+
+    if (session) consultaUniones.session(session);
+    const uniones = await consultaUniones;
+
+    const idsAgrupados = new Set();
+    const bloques = [];
+
+    uniones.forEach((union) => {
+        const origenId = String(union.nodoOrigen);
+        const destinoId = String(union.nodoDestino);
+        const origen = nodosPorId.get(origenId);
+        const destino = nodosPorId.get(destinoId);
+
+        if (!origen || !destino) return;
+        if (idsAgrupados.has(origenId) || idsAgrupados.has(destinoId)) return;
+
+        idsAgrupados.add(origenId);
+        idsAgrupados.add(destinoId);
+
+        const creadoOrigen = new Date(origen.createdAt || 0).getTime();
+        const creadoDestino = new Date(destino.createdAt || 0).getTime();
+
+        bloques.push({
+            id: `union-${union._id}`,
+            nodos: [origen, destino],
+            fila: Math.min(Number(origen.fila), Number(destino.fila)),
+            creadoEn: Math.min(
+                Number.isFinite(creadoOrigen) ? creadoOrigen : 0,
+                Number.isFinite(creadoDestino) ? creadoDestino : 0
+            )
+        });
+    });
+
+    nodos.forEach((nodo) => {
+        const nodoId = String(nodo._id);
+        if (idsAgrupados.has(nodoId)) return;
+
+        bloques.push({
+            id: `nodo-${nodoId}`,
+            nodos: [nodo],
+            fila: Number(nodo.fila),
+            creadoEn: new Date(nodo.createdAt || 0).getTime()
+        });
+    });
+
+    return bloques.sort((a, b) => {
+        const diferenciaFila = Number(a.fila) - Number(b.fila);
+        if (diferenciaFila !== 0) return diferenciaFila;
+
+        const diferenciaCreacion = Number(a.creadoEn) - Number(b.creadoEn);
+        if (diferenciaCreacion !== 0) return diferenciaCreacion;
+
+        return String(a.id).localeCompare(String(b.id));
+    });
+};
+
+const normalizarFilasGeneracion = async ({
+    arbolId,
+    generacion,
+    nodoPrioritarioId = null,
+    indiceDestino = null,
+    session = null
+}) => {
+    const bloques = await obtenerBloquesGeneracion({
+        arbolId,
+        generacion,
+        session
+    });
+
+    if (bloques.length === 0) return [];
+
+    const indiceNormalizado = convertirEntero(indiceDestino);
+
+    if (nodoPrioritarioId && indiceNormalizado !== null && indiceNormalizado >= 0) {
+        const indiceBloque = bloques.findIndex((bloque) =>
+            bloque.nodos.some(nodo => sonMismoId(nodo._id, nodoPrioritarioId))
+        );
+
+        if (indiceBloque >= 0) {
+            const [bloquePrioritario] = bloques.splice(indiceBloque, 1);
+            const posicion = Math.min(indiceNormalizado, bloques.length);
+            bloques.splice(posicion, 0, bloquePrioritario);
+        }
+    }
+
+    const operaciones = [];
+
+    bloques.forEach((bloque, fila) => {
+        bloque.nodos.forEach((nodo) => {
+            if (Number(nodo.fila) === fila) return;
+
+            operaciones.push({
+                updateOne: {
+                    filter: { _id: nodo._id },
+                    update: { $set: { fila } }
+                }
+            });
+        });
+    });
+
+    if (operaciones.length > 0) {
+        await Nodo.bulkWrite(
+            operaciones,
+            session
+                ? { ordered: true, session }
+                : { ordered: true }
+        );
+    }
+
+    return bloques;
+};
+
 const buscarUnionActivaNodo = async ({ arbolId, nodoId, session = null }) => {
     const consulta = Hilo.findOne({
         arbol: arbolId,
@@ -214,6 +354,7 @@ const moverNodoAtomico = async ({
         arbol: arbolId,
         visible: true
     });
+
     if (session) consultaNodo.session(session);
     const nodo = await consultaNodo;
 
@@ -223,10 +364,16 @@ const moverNodoAtomico = async ({
         throw error;
     }
 
+    let generacionOrigen = Number(nodo.generacion);
     let parejaDestino = null;
     let generacionFinal;
-    let filaFinal;
     let unionFinal = null;
+
+    const unionActual = await buscarUnionActivaNodo({
+        arbolId,
+        nodoId,
+        session
+    });
 
     if (parejaDestinoId) {
         if (sonMismoId(nodoId, parejaDestinoId)) {
@@ -240,6 +387,7 @@ const moverNodoAtomico = async ({
             arbol: arbolId,
             visible: true
         });
+
         if (session) consultaPareja.session(session);
         parejaDestino = await consultaPareja;
 
@@ -265,47 +413,24 @@ const moverNodoAtomico = async ({
             throw error;
         }
 
+        const yaEsParejaDestino = Boolean(
+            unionActual &&
+            (
+                sonMismoId(unionActual.nodoOrigen, parejaDestinoId) ||
+                sonMismoId(unionActual.nodoDestino, parejaDestinoId)
+            )
+        );
+
+        if (unionActual && !yaEsParejaDestino) {
+            unionActual.estado = 'Eliminada';
+            await unionActual.save(opcionesSesion(session));
+        }
+
         generacionFinal = Number(parejaDestino.generacion);
-        filaFinal = Number(parejaDestino.fila);
-    } else {
-        const destino = await prepararGeneracionObjetivo({
-            arbolId,
-            generacion: generacionDestino,
-            session
-        });
-        generacionFinal = destino.generacion;
+        nodo.generacion = generacionFinal;
+        nodo.fila = Number(parejaDestino.fila);
+        await nodo.save(opcionesSesion(session));
 
-        const filaSolicitada = convertirEntero(filaDestino);
-        filaFinal = filaSolicitada !== null && filaSolicitada >= 0
-            ? filaSolicitada
-            : await obtenerSiguienteFila({
-                arbolId,
-                generacion: generacionFinal,
-                excluirNodoId: nodoId,
-                session
-            });
-    }
-
-    const unionActual = await buscarUnionActivaNodo({ arbolId, nodoId, session });
-    const yaEsParejaDestino = Boolean(
-        parejaDestinoId &&
-        unionActual &&
-        (
-            sonMismoId(unionActual.nodoOrigen, parejaDestinoId) ||
-            sonMismoId(unionActual.nodoDestino, parejaDestinoId)
-        )
-    );
-
-    if (unionActual && !yaEsParejaDestino) {
-        unionActual.estado = 'Eliminada';
-        await unionActual.save(opcionesSesion(session));
-    }
-
-    nodo.generacion = generacionFinal;
-    nodo.fila = filaFinal;
-    await nodo.save(opcionesSesion(session));
-
-    if (parejaDestinoId) {
         if (yaEsParejaDestino) {
             unionActual.estado = 'Activa';
             unionFinal = await unionActual.save(opcionesSesion(session));
@@ -337,10 +462,74 @@ const moverNodoAtomico = async ({
                     estado: 'Activa',
                     creadoPor
                 }], opcionesSesion(session));
+
                 unionFinal = documentos[0];
             }
         }
+
+        const generacionesAfectadas = [...new Set([
+            generacionOrigen,
+            generacionFinal
+        ])];
+
+        for (const generacion of generacionesAfectadas) {
+            await normalizarFilasGeneracion({
+                arbolId,
+                generacion,
+                session
+            });
+        }
+    } else {
+        const destino = await prepararGeneracionObjetivo({
+            arbolId,
+            generacion: generacionDestino,
+            session
+        });
+
+        if (destino.desplazamiento > 0) {
+            generacionOrigen += destino.desplazamiento;
+        }
+
+        generacionFinal = destino.generacion;
+        const indiceDestino = convertirEntero(filaDestino);
+
+        if (indiceDestino !== null && indiceDestino < 0) {
+            const error = new Error('La posición de destino debe ser un número entero mayor o igual a cero.');
+            error.status = 400;
+            throw error;
+        }
+
+        if (unionActual) {
+            unionActual.estado = 'Eliminada';
+            await unionActual.save(opcionesSesion(session));
+        }
+
+        nodo.generacion = generacionFinal;
+        // Se coloca temporalmente al final. La normalización posterior abre la posición solicitada
+        // y reenumera todos los bloques de la generación sin dejar huecos.
+        nodo.fila = Number.MAX_SAFE_INTEGER;
+        await nodo.save(opcionesSesion(session));
+
+        if (generacionOrigen !== generacionFinal) {
+            await normalizarFilasGeneracion({
+                arbolId,
+                generacion: generacionOrigen,
+                session
+            });
+        }
+
+        await normalizarFilasGeneracion({
+            arbolId,
+            generacion: generacionFinal,
+            nodoPrioritarioId: nodoId,
+            indiceDestino,
+            session
+        });
     }
+
+    const consultaNodoActualizado = Nodo.findById(nodoId);
+    if (session) consultaNodoActualizado.session(session);
+    const nodoActualizado = await consultaNodoActualizado;
 
     const relacionesEliminadas = await eliminarRelacionesPadreHijoInvalidas({
         arbolId,
@@ -348,7 +537,7 @@ const moverNodoAtomico = async ({
     });
 
     return {
-        nodo,
+        nodo: nodoActualizado,
         union: unionFinal,
         relacionesEliminadas,
         movidoComoPareja: Boolean(parejaDestinoId)
