@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 
-
 const autorPausadoFeedSchema = new mongoose.Schema({
     autor: {
         type: mongoose.Schema.Types.ObjectId,
@@ -39,14 +38,17 @@ const usuarioSchema = new mongoose.Schema({
     nombreUsuario: {
         type: String,
         required: true,
-        unique: true
+        trim: true
     },
     nickname: {
         type: String,
         unique: true,
         sparse: true,
         trim: true,
-        lowercase: true
+        lowercase: true,
+        minlength: [3, 'El nombre de usuario debe tener al menos 3 caracteres.'],
+        maxlength: [30, 'El nombre de usuario no puede superar los 30 caracteres.'],
+        match: [/^[a-z0-9_.-]+$/, 'El nombre de usuario contiene caracteres no permitidos.']
     },
     email: {
         type: String,
@@ -77,6 +79,50 @@ const usuarioSchema = new mongoose.Schema({
         default: null
     },
     twoFactorCodeExpires: {
+        type: Date,
+        default: null
+    },
+
+    // Recuperación segura de contraseña por correo.
+    passwordResetCodeHash: {
+        type: String,
+        default: null
+    },
+    passwordResetCodeExpires: {
+        type: Date,
+        default: null
+    },
+    passwordResetAttempts: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    passwordResetLastSentAt: {
+        type: Date,
+        default: null
+    },
+    passwordResetTokenHash: {
+        type: String,
+        default: null
+    },
+    passwordResetTokenExpires: {
+        type: Date,
+        default: null
+    },
+
+    // Permite invalidar sesiones previas cuando se recupera la contraseña.
+    sessionVersion: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+
+    // Distinción pública otorgada a quienes se registran durante la etapa Beta.
+    esBetaTester: {
+        type: Boolean,
+        default: false
+    },
+    betaTesterDesde: {
         type: Date,
         default: null
     },
@@ -131,8 +177,7 @@ const usuarioSchema = new mongoose.Schema({
     e2eConfigUpdatedAt: {
         type: Date,
         default: null
-    }
-,
+    },
 
     // Fechas privadas usadas para calcular novedades de Red entre dispositivos.
     indicadoresVistos: {

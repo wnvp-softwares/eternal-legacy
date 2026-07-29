@@ -4003,7 +4003,8 @@ html[data-theme="dark"] .timeline-nodo {
 }
 
 select.selector-nativo-perfil,
-select.selector-parentesco-perfil {
+select.selector-parentesco-perfil,
+input.selector-fecha-perfil {
     color-scheme: light;
 }
 
@@ -4014,8 +4015,24 @@ select.selector-parentesco-perfil option {
 }
 
 html[data-theme="dark"] select.selector-nativo-perfil,
-html[data-theme="dark"] select.selector-parentesco-perfil {
+html[data-theme="dark"] select.selector-parentesco-perfil,
+html[data-theme="dark"] input.selector-fecha-perfil {
     color-scheme: dark;
+}
+
+input.selector-fecha-perfil {
+    display: block;
+    width: 100%;
+    min-height: 28px;
+}
+
+input.selector-fecha-perfil::-webkit-date-and-time-value {
+    text-align: left;
+}
+
+input.selector-fecha-perfil::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.82;
 }
 
 .selector-parentesco-perfil {
@@ -4064,3 +4081,76 @@ html[data-theme="dark"] select.selector-parentesco-perfil {
     color: var(--texto-secundario);
 }
 
+/* =========================================================
+   INSIGNIA BETA TESTER DE LEGACY
+   Presentación integrada con la metadata del perfil.
+   ========================================================= */
+.insignia-beta-tester {
+    flex: 0 0 auto !important;
+    width: auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    overflow: visible;
+    color: var(--texto-secundario);
+    background: none;
+    box-shadow: none;
+    white-space: nowrap;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.insignia-beta-tester::before {
+    content: none;
+}
+
+.insignia-beta-tester-logo {
+    position: static;
+    flex: 0 0 auto;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+    background: none;
+    box-shadow: none;
+}
+
+.datos-extra-perfil .insignia-beta-tester-logo > i {
+    margin: 0 5px 0 0 !important;
+    font-size: 1em;
+    line-height: 1;
+    color: transparent !important;
+    background: linear-gradient(135deg, #4254b8 0%, #7c77d8 34%, #d9e2ff 62%, #d2a92f 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    filter: none;
+}
+
+.insignia-beta-tester > strong {
+    color: var(--texto-principal);
+    font-size: inherit;
+    font-weight: 700;
+    letter-spacing: normal;
+    line-height: inherit;
+}
+
+@media (max-width: 576px) {
+    .datos-extra-perfil .insignia-beta-tester {
+        flex: 1 1 100% !important;
+        align-self: auto;
+    }
+
+    .datos-extra-perfil .insignia-beta-tester-logo {
+        flex: 0 0 auto;
+        width: auto;
+        min-width: 0;
+    }
+}

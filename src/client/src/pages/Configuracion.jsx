@@ -49,13 +49,6 @@ const obtenerZonasHorariasDesdeAPINativa = (idioma = 'es-MX') => {
   }
 };
 
-const formatearFechaParaInput = (fecha) => {
-  if (!fecha) return '';
-  const date = new Date(fecha);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toISOString().split('T')[0];
-};
-
 export default function Configuracion() {
   const { t } = useTranslation();
   const {
@@ -111,7 +104,6 @@ export default function Configuracion() {
   const [formCuenta, setFormCuenta] = useState({
     nombreUsuario: '',
     email: '',
-    fechaNacimiento: '',
     biografia: ''
   });
 
@@ -195,7 +187,6 @@ export default function Configuracion() {
       setFormCuenta({
         nombreUsuario: usuario.nombreUsuario || '',
         email: usuario.email || '',
-        fechaNacimiento: formatearFechaParaInput(perfil.fechaNacimiento),
         biografia: perfil.biografia || ''
       });
 
@@ -312,7 +303,6 @@ export default function Configuracion() {
         body: JSON.stringify({
           nombreUsuario: formCuenta.nombreUsuario.trim(),
           email: formCuenta.email.trim(),
-          fechaNacimiento: formCuenta.fechaNacimiento || null,
           biografia: formCuenta.biografia
         })
       });
@@ -323,7 +313,6 @@ export default function Configuracion() {
       setFormCuenta({
         nombreUsuario: usuario.nombreUsuario || formCuenta.nombreUsuario,
         email: usuario.email || formCuenta.email,
-        fechaNacimiento: formatearFechaParaInput(perfil.fechaNacimiento),
         biografia: perfil.biografia || ''
       });
 
@@ -595,16 +584,9 @@ export default function Configuracion() {
         {errorCuenta && <div className="alerta-configuracion error"><i className="bi bi-exclamation-triangle-fill"></i><span>{errorCuenta}</span></div>}
 
         <form onSubmit={guardarCuenta}>
-          <div className="row">
-            <div className="col-12 col-md-6 grupo-form">
-              <label className="label-form">Nombre de usuario</label>
-              <input type="text" className="input-config" value={formCuenta.nombreUsuario} onChange={(e) => actualizarCampoCuenta('nombreUsuario', e.target.value)} placeholder="Tu nombre de usuario" />
-            </div>
-            <div className="col-12 col-md-6 grupo-form">
-              <label className="label-form">Fecha de nacimiento</label>
-              <input type="date" className="input-config" value={formCuenta.fechaNacimiento} onChange={(e) => actualizarCampoCuenta('fechaNacimiento', e.target.value)} />
-              <small className="ayuda-configuracion">Esta fecha se usará para mostrar tu edad en el árbol genealógico.</small>
-            </div>
+          <div className="grupo-form">
+            <label className="label-form">Nombre de usuario</label>
+            <input type="text" className="input-config" value={formCuenta.nombreUsuario} onChange={(e) => actualizarCampoCuenta('nombreUsuario', e.target.value)} placeholder="Tu nombre de usuario" />
           </div>
           <div className="grupo-form">
             <label className="label-form">Correo Electrónico</label>

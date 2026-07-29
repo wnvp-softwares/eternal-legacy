@@ -11,6 +11,25 @@ const INDICADORES_RED_INICIALES = {
   amigosNuevos: 0
 };
 
+const PAGINACION_EXPLORAR_INICIAL = {
+  pagina: 1,
+  limite: 24,
+  total: 0,
+  totalPaginas: 0,
+  hayMas: false
+};
+
+const combinarUsuariosSinDuplicados = (anteriores, nuevos) => {
+  const usuariosPorId = new Map();
+
+  [...anteriores, ...nuevos].forEach((usuario) => {
+    const idUsuario = usuario?.idConexion || usuario?._id || usuario?.id;
+    if (idUsuario) usuariosPorId.set(String(idUsuario), usuario);
+  });
+
+  return Array.from(usuariosPorId.values());
+};
+
 const formatearCantidadIndicador = (cantidad) => {
   const total = Number(cantidad) || 0;
   return total > 99 ? '99+' : String(total);
@@ -31,6 +50,13 @@ export default function Red() {
   // ESTADOS PARA BÚSQUEDA
   const [busqueda, setBusqueda] = useState('');
   const [resultadosBusqueda, setResultadosBusqueda] = useState([]);
+
+  // ESTADOS PARA EL DIRECTORIO DE PERSONAS
+  const [usuariosExplorar, setUsuariosExplorar] = useState([]);
+  const [paginacionExplorar, setPaginacionExplorar] = useState(PAGINACION_EXPLORAR_INICIAL);
+  const [cargandoMasExplorar, setCargandoMasExplorar] = useState(false);
+  const [usuariosProcesando, setUsuariosProcesando] = useState({});
+  const [mensajeAccion, setMensajeAccion] = useState(null);
 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -97,11 +123,26 @@ export default function Red() {
   };
 
   const cambiarTab = (nuevaTab) => {
+    if (nuevaTab !== tabActiva) {
+      setBusqueda('');
+      setResultadosBusqueda([]);
+      setError('');
+      setMensajeAccion(null);
+    }
+
     setTabActiva(nuevaTab);
 
     if (nuevaTab === 'seguidores' || nuevaTab === 'amigos') {
       marcarSeccionRedComoVista(nuevaTab);
     }
+
+    window.requestAnimationFrame(() => {
+      document.querySelector(`[data-tab-red="${nuevaTab}"]`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center'
+      });
+    });
   };
 
   // 🌟 FUNCIÓN CENTRALIZADA PARA CARGAR FAMILIA
@@ -129,8 +170,88 @@ export default function Red() {
     }
   };
 
+  const cargarUsuariosExplorar = async ({
+    pagina = 1,
+    anexar = false,
+    consulta = '',
+    signal
+  } = {}) => {
+    if (!token) return;
+
+    if (anexar) {
+      setCargandoMasExplorar(true);
+    } else {
+      setCargando(true);
+      setError('');
+    }
+
+    try {
+      const parametros = new URLSearchParams({
+        page: String(pagina),
+        limit: String(PAGINACION_EXPLORAR_INICIAL.limite)
+      });
+
+      const consultaNormalizada = consulta.trim();
+      if (consultaNormalizada) parametros.set('q', consultaNormalizada);
+
+      const respuesta = await fetch(
+        `${URL_BASE_BACKEND}/api/seguidores/explorar?${parametros.toString()}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          signal
+        }
+      );
+
+      const datos = await respuesta.json().catch(() => ({}));
+
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || 'No se pudieron cargar las personas de Legacy.');
+      }
+
+      const nuevosUsuarios = Array.isArray(datos.usuarios) ? datos.usuarios : [];
+      setUsuariosExplorar((prev) => (
+        anexar
+          ? combinarUsuariosSinDuplicados(prev, nuevosUsuarios)
+          : nuevosUsuarios
+      ));
+
+      setPaginacionExplorar({
+        pagina: Number(datos?.paginacion?.pagina) || pagina,
+        limite: Number(datos?.paginacion?.limite) || PAGINACION_EXPLORAR_INICIAL.limite,
+        total: Number(datos?.paginacion?.total) || 0,
+        totalPaginas: Number(datos?.paginacion?.totalPaginas) || 0,
+        hayMas: Boolean(datos?.paginacion?.hayMas)
+      });
+    } catch (errorCarga) {
+      if (errorCarga.name === 'AbortError') return;
+
+      console.error('Error al cargar usuarios para Explorar:', errorCarga);
+      if (anexar) {
+        setMensajeAccion({
+          tipo: 'error',
+          texto: errorCarga.message || 'No se pudo cargar la siguiente página.'
+        });
+      } else {
+        setUsuariosExplorar([]);
+        setPaginacionExplorar(PAGINACION_EXPLORAR_INICIAL);
+        setError(errorCarga.message || 'No se pudieron cargar las personas de Legacy.');
+      }
+    } finally {
+      if (anexar) {
+        setCargandoMasExplorar(false);
+      } else if (!signal?.aborted) {
+        setCargando(false);
+      }
+    }
+  };
+
   // EFECTO: CARGAR LA PESTAÑA ACTIVA
   const fetchConexiones = async () => {
+    if (tabActiva === 'explorar') return;
+
     setCargando(true);
     setError('');
 
@@ -173,8 +294,36 @@ export default function Red() {
       setCargando(false);
       return;
     }
-    fetchConexiones();
+
+    if (tabActiva !== 'explorar') {
+      fetchConexiones();
+    }
   }, [tabActiva, token]);
+
+  useEffect(() => {
+    if (!token || tabActiva !== 'explorar') return undefined;
+
+    const controlador = new AbortController();
+    const consulta = busqueda.trim();
+    const espera = consulta ? 400 : 0;
+
+    setCargando(true);
+    setError('');
+
+    const temporizador = window.setTimeout(() => {
+      cargarUsuariosExplorar({
+        pagina: 1,
+        anexar: false,
+        consulta,
+        signal: controlador.signal
+      });
+    }, espera);
+
+    return () => {
+      window.clearTimeout(temporizador);
+      controlador.abort();
+    };
+  }, [tabActiva, busqueda, token]);
 
   useEffect(() => {
     if (!token) {
@@ -194,30 +343,54 @@ export default function Red() {
 
   // EFECTO: BUSCADOR GLOBAL
   useEffect(() => {
-    if (!busqueda.trim()) {
+    if (tabActiva === 'explorar') {
       setResultadosBusqueda([]);
-      return;
+      return undefined;
     }
 
-    const timer = setTimeout(async () => {
+    const consulta = busqueda.trim();
+    if (!consulta) {
+      setResultadosBusqueda([]);
+      return undefined;
+    }
+
+    const controlador = new AbortController();
+    const timer = window.setTimeout(async () => {
       setCargando(true);
       try {
-        const respuesta = await fetch(`${URL_BASE_BACKEND}/api/publicaciones/buscar?q=${encodeURIComponent(busqueda)}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const respuesta = await fetch(
+          `${URL_BASE_BACKEND}/api/publicaciones/buscar?q=${encodeURIComponent(consulta)}`,
+          {
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal: controlador.signal
+          }
+        );
+
         if (respuesta.ok) {
           const datos = await respuesta.json();
-          setResultadosBusqueda(datos.personas || []);
+          setResultadosBusqueda(Array.isArray(datos.personas) ? datos.personas : []);
         }
       } catch (err) {
-        console.error('Error al realizar la búsqueda:', err);
+        if (err.name !== 'AbortError') {
+          console.error('Error al realizar la búsqueda:', err);
+        }
       } finally {
-        setCargando(false);
+        if (!controlador.signal.aborted) setCargando(false);
       }
     }, 400);
 
-    return () => clearTimeout(timer);
-  }, [busqueda, token]);
+    return () => {
+      window.clearTimeout(timer);
+      controlador.abort();
+    };
+  }, [busqueda, tabActiva, token]);
+
+  useEffect(() => {
+    if (!mensajeAccion) return undefined;
+
+    const temporizador = window.setTimeout(() => setMensajeAccion(null), 3600);
+    return () => window.clearTimeout(temporizador);
+  }, [mensajeAccion]);
 
   useEffect(() => {
     if (!confirmacionEliminar) return undefined;
@@ -244,23 +417,89 @@ export default function Red() {
   // FUNCIONES DE INTERACCIÓN
   // ==========================================
 
+  const actualizarEstadoUsuarioExplorar = (usuarioId, estadoConexion) => {
+    setUsuariosExplorar((prev) => prev.map((usuario) => {
+      if (String(usuario.idConexion) !== String(usuarioId)) return usuario;
+
+      const amistadFormal = Boolean(
+        estadoConexion.amistadFormal
+        ?? estadoConexion.sonAmigos
+        ?? usuario.amistadFormal
+      );
+      const seguimientoMutuo = Boolean(estadoConexion.seguimientoMutuo);
+
+      return {
+        ...usuario,
+        siguiendo: Boolean(estadoConexion.siguiendo),
+        meSigue: Boolean(estadoConexion.meSigue),
+        seguimientoMutuo,
+        amistadFormal,
+        sonAmigos: Boolean(amistadFormal || seguimientoMutuo),
+        puedeInvitarFamilia: Boolean(
+          estadoConexion.puedeInvitarFamilia
+          ?? (amistadFormal || seguimientoMutuo)
+        )
+      };
+    }));
+  };
+
+  const marcarUsuarioProcesando = (usuarioId, procesando) => {
+    setUsuariosProcesando((prev) => {
+      const siguiente = { ...prev };
+
+      if (procesando) siguiente[String(usuarioId)] = true;
+      else delete siguiente[String(usuarioId)];
+
+      return siguiente;
+    });
+  };
+
   const manejarSeguir = async (usuarioId) => {
-    if (!usuarioId) return;
+    if (!usuarioId || usuariosProcesando[String(usuarioId)]) return;
+
     try {
+      marcarUsuarioProcesando(usuarioId, true);
+      setMensajeAccion(null);
+
       const res = await fetch(`${URL_BASE_BACKEND}/api/seguidores/seguir`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ seguidoId: usuarioId })
       });
-      if (res.ok) {
-        alert("¡Ahora sigues a este usuario!");
-        manejarEliminarSugerencia(usuarioId);
-        if (tabActiva === 'seguidores' || tabActiva === 'siguiendo') await fetchConexiones();
-        await cargarIndicadoresRed();
-        notificarActualizacionIndicadores();
+      const datos = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(datos.mensaje || 'No se pudo seguir a esta persona.');
       }
-    } catch (error) {
-      console.error(error);
+
+      if (tabActiva === 'explorar') {
+        actualizarEstadoUsuarioExplorar(usuarioId, datos);
+      } else if (busqueda.trim()) {
+        manejarEliminarSugerencia(usuarioId);
+      }
+
+      if (tabActiva === 'seguidores' || tabActiva === 'siguiendo') {
+        await fetchConexiones();
+      }
+
+      setMensajeAccion({
+        tipo: 'exito',
+        texto: datos.mensaje || 'Ahora sigues a esta persona.'
+      });
+
+      await cargarIndicadoresRed();
+      notificarActualizacionIndicadores();
+    } catch (errorSeguimiento) {
+      console.error('Error al seguir usuario:', errorSeguimiento);
+      setMensajeAccion({
+        tipo: 'error',
+        texto: errorSeguimiento.message || 'No se pudo seguir a esta persona.'
+      });
+    } finally {
+      marcarUsuarioProcesando(usuarioId, false);
     }
   };
 
@@ -304,6 +543,12 @@ export default function Red() {
 
       if (esFamilia) {
         setFamiliares(prev => prev.filter(familiar => String(familiar.id) !== String(relacionId)));
+      } else if (tipo === 'explorar') {
+        actualizarEstadoUsuarioExplorar(usuarioId, datos);
+        setMensajeAccion({
+          tipo: 'exito',
+          texto: datos.mensaje || 'Dejaste de seguir a esta persona.'
+        });
       } else {
         setConexiones(prev => prev.filter(contacto => String(contacto.idConexion) !== String(usuarioId)));
       }
@@ -323,7 +568,7 @@ export default function Red() {
   const manejarEliminarSugerencia = (usuarioId) => {
     setResultadosBusqueda(prev => prev.filter(contacto => {
       const id = contacto._id || contacto.id;
-      return id !== usuarioId;
+      return String(id) !== String(usuarioId);
     }));
   };
 
@@ -357,24 +602,77 @@ export default function Red() {
     if (tabActiva === 'seguidores') return 'Aún no tienes seguidores por ahora.';
     if (tabActiva === 'siguiendo') return 'Aún no sigues a nadie.';
     if (tabActiva === 'familia') return 'Aún no tienes familiares agregados.';
+    if (tabActiva === 'explorar') {
+      return busqueda.trim()
+        ? 'No encontramos personas con ese nombre.'
+        : 'No hay otras cuentas verificadas disponibles por ahora.';
+    }
     return 'No se encontraron conexiones activas en esta sección.';
   };
 
-  const mostrandoBusqueda = busqueda.trim().length > 0;
+  const cargarMasUsuariosExplorar = () => {
+    if (!paginacionExplorar.hayMas || cargandoMasExplorar) return;
+
+    cargarUsuariosExplorar({
+      pagina: paginacionExplorar.pagina + 1,
+      anexar: true,
+      consulta: busqueda.trim()
+    });
+  };
+
+  const obtenerEstadoVisualExplorar = (usuario) => {
+    const sonAmigos = Boolean(usuario.sonAmigos || usuario.seguimientoMutuo || usuario.amistadFormal);
+
+    if (sonAmigos) {
+      return {
+        etiqueta: 'Amigos',
+        icono: 'bi-people-fill',
+        clase: 'amigos',
+        info: usuario.seguimientoMutuo ? 'Se siguen mutuamente' : 'Amistad aceptada'
+      };
+    }
+
+    if (usuario.siguiendo) {
+      return {
+        etiqueta: 'Siguiendo',
+        icono: 'bi-person-check-fill',
+        clase: 'siguiendo',
+        info: 'Lo sigues'
+      };
+    }
+
+    if (usuario.meSigue) {
+      return {
+        etiqueta: 'Te sigue',
+        icono: 'bi-person-plus-fill',
+        clase: 'te-sigue',
+        info: 'Puedes seguirle de vuelta'
+      };
+    }
+
+    return {
+      etiqueta: 'Persona en Legacy',
+      icono: 'bi-globe-americas',
+      clase: 'sin-conexion',
+      info: 'Descubre su historia'
+    };
+  };
+
+  const mostrandoBusquedaGlobal = tabActiva !== 'explorar' && busqueda.trim().length > 0;
 
   return (
     <div className="container-fluid max-w-custom p-0">
       <div className="cabecera-red">
         <div>
           <h2 className="titulo-seccion fuente-elegante fw-bold fs-2">Mi Red</h2>
-          <p className="text-muted mb-0 small">Gestiona tus lazos familiares, amigos y seguidores.</p>
+          <p className="text-muted mb-0 small">Gestiona tus lazos y descubre nuevas personas en Legacy.</p>
         </div>
         <div className="buscador-red">
           <i className="bi bi-search"></i>
           <input
             type="text"
             className="input-buscar-red"
-            placeholder="Buscar personas en Legacy..."
+            placeholder={tabActiva === 'explorar' ? 'Buscar en todos los usuarios...' : 'Buscar personas en Legacy...'}
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -382,35 +680,52 @@ export default function Red() {
       </div>
 
       {/* TABS DE NAVEGACIÓN */}
-      {!mostrandoBusqueda && (
+      {!mostrandoBusquedaGlobal && (
         <div className="tabs-red-container">
           <div className="tabs-red">
-            <button className={`tab-red ${tabActiva === 'familia' ? 'activo' : ''}`} onClick={() => cambiarTab('familia')}>
+            <button data-tab-red="familia" className={`tab-red ${tabActiva === 'familia' ? 'activo' : ''}`} onClick={() => cambiarTab('familia')}>
               <i className="bi bi-diagram-3"></i>
               <span>Familiares</span>
               {indicadoresRed.invitacionesFamiliares > 0 && (
                 <span className="contador-tab-red">{formatearCantidadIndicador(indicadoresRed.invitacionesFamiliares)}</span>
               )}
             </button>
-            <button className={`tab-red ${tabActiva === 'amigos' ? 'activo' : ''}`} onClick={() => cambiarTab('amigos')}>
+            <button data-tab-red="amigos" className={`tab-red ${tabActiva === 'amigos' ? 'activo' : ''}`} onClick={() => cambiarTab('amigos')}>
               <i className="bi bi-people"></i>
               <span>Amigos</span>
               {indicadoresRed.amigosNuevos > 0 && (
                 <span className="contador-tab-red">{formatearCantidadIndicador(indicadoresRed.amigosNuevos)}</span>
               )}
             </button>
-            <button className={`tab-red ${tabActiva === 'seguidores' ? 'activo' : ''}`} onClick={() => cambiarTab('seguidores')}>
+            <button data-tab-red="seguidores" className={`tab-red ${tabActiva === 'seguidores' ? 'activo' : ''}`} onClick={() => cambiarTab('seguidores')}>
               <i className="bi bi-person-lines-fill"></i>
               <span>Seguidores</span>
               {indicadoresRed.seguidoresNuevos > 0 && (
                 <span className="contador-tab-red">{formatearCantidadIndicador(indicadoresRed.seguidoresNuevos)}</span>
               )}
             </button>
-            <button className={`tab-red ${tabActiva === 'siguiendo' ? 'activo' : ''}`} onClick={() => cambiarTab('siguiendo')}>
+            <button data-tab-red="siguiendo" className={`tab-red ${tabActiva === 'siguiendo' ? 'activo' : ''}`} onClick={() => cambiarTab('siguiendo')}>
               <i className="bi bi-person-check"></i>
               <span>Siguiendo</span>
             </button>
+            <button data-tab-red="explorar" className={`tab-red ${tabActiva === 'explorar' ? 'activo' : ''}`} onClick={() => cambiarTab('explorar')}>
+              <i className="bi bi-compass"></i>
+              <span>Explorar</span>
+            </button>
           </div>
+        </div>
+      )}
+
+      {mensajeAccion && (
+        <div
+          className={`mensaje-accion-red ${mensajeAccion.tipo === 'error' ? 'error' : 'exito'}`}
+          role={mensajeAccion.tipo === 'error' ? 'alert' : 'status'}
+        >
+          <i className={`bi ${mensajeAccion.tipo === 'error' ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill'}`}></i>
+          <span>{mensajeAccion.texto}</span>
+          <button type="button" aria-label="Cerrar mensaje" onClick={() => setMensajeAccion(null)}>
+            <i className="bi bi-x-lg"></i>
+          </button>
         </div>
       )}
 
@@ -428,7 +743,7 @@ export default function Red() {
         <div className="row g-4 grid-red">
 
           {/* RENDERING 1: RESULTADOS DE BÚSQUEDA */}
-          {mostrandoBusqueda ? (
+          {mostrandoBusquedaGlobal ? (
             resultadosBusqueda.length > 0 ? (
               resultadosBusqueda.map((contacto, index) => {
                 const idUsuario = contacto._id || contacto.id;
@@ -445,7 +760,13 @@ export default function Red() {
                       <div className="info-sugerencia">
                         <h5 className="nombre-sugerencia">{nombreVisible}</h5>
                         <div className="acciones-sugerencia mt-1">
-                          <button className="btn-accion-txt" onClick={() => manejarSeguir(idUsuario)}>Seguir</button>
+                          <button
+                            className="btn-accion-txt"
+                            onClick={() => manejarSeguir(idUsuario)}
+                            disabled={Boolean(usuariosProcesando[String(idUsuario)])}
+                          >
+                            {usuariosProcesando[String(idUsuario)] ? 'Siguiendo...' : 'Seguir'}
+                          </button>
                           <button className="btn-accion-txt" onClick={() => manejarEliminarSugerencia(idUsuario)}>Eliminar</button>
                         </div>
                       </div>
@@ -551,7 +872,124 @@ export default function Red() {
 
             </div>
 
-            // RENDERING 3: OTRAS CONEXIONES TRADICIONALES (Amigos, Seguidores, Siguiendo)
+            // RENDERING 3: DIRECTORIO DE PERSONAS
+          ) : tabActiva === 'explorar' ? (
+            <>
+              {usuariosExplorar.length > 0 ? (
+                usuariosExplorar.map((usuario, index) => {
+                  const idUsuario = usuario.idConexion || usuario._id || usuario.id;
+                  const nombreVisible = usuario.nombre || usuario.nombreUsuario || 'Usuario';
+                  const rutaImg = usuario.img || usuario.imagenPerfil?.urlArchivo;
+                  const srcImagen = rutaImg
+                    ? (rutaImg.startsWith('http') ? rutaImg : `${URL_BASE_BACKEND}${rutaImg}`)
+                    : `https://ui-avatars.com/api/?name=${encodeURIComponent(nombreVisible)}&background=f1f5f9`;
+                  const estadoVisual = obtenerEstadoVisualExplorar(usuario);
+                  const procesando = Boolean(usuariosProcesando[String(idUsuario)]);
+
+                  return (
+                    <div key={`explorar-${idUsuario}-${index}`} className="col-12 col-sm-6 col-md-4 col-xl-3 columna-tarjeta-red">
+                      <div className="tarjeta-conexion tarjeta-explorar-red h-100">
+                        <div className="contenido-principal-conexion">
+                          <img src={srcImagen} alt={nombreVisible} className="foto-conexion" />
+                          <div className="datos-conexion-red">
+                            <h5 className="nombre-conexion fw-bold">{nombreVisible}</h5>
+                            {usuario.nickname && (
+                              <p className="nickname-explorar-red">@{String(usuario.nickname).replace(/^@/, '')}</p>
+                            )}
+
+                            {usuario.siguiendo ? (
+                              <button
+                                type="button"
+                                className="badge-siguiendo-click mb-2"
+                                onClick={() => abrirConfirmacionEliminar({
+                                  tipo: 'explorar',
+                                  usuarioId: idUsuario,
+                                  nombre: nombreVisible
+                                })}
+                                title="Dejar de seguir"
+                              >
+                                <i className={`bi ${estadoVisual.icono} me-1`}></i>
+                                {estadoVisual.etiqueta}
+                              </button>
+                            ) : (
+                              <span className={`relacion-badge estado-explorar-red ${estadoVisual.clase} mb-2`}>
+                                <i className={`bi ${estadoVisual.icono}`}></i>
+                                {estadoVisual.etiqueta}
+                              </span>
+                            )}
+
+                            <p className="relacion-conexion small">{estadoVisual.info}</p>
+                          </div>
+                        </div>
+
+                        <div className="acciones-conexion-red">
+                          {!usuario.siguiendo && (
+                            <button
+                              className="btn-seguir-vuelta-red rounded-pill w-100"
+                              type="button"
+                              onClick={() => manejarSeguir(idUsuario)}
+                              disabled={procesando}
+                            >
+                              {procesando ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                                  Siguiendo...
+                                </>
+                              ) : (
+                                <>
+                                  <i className={`bi ${usuario.meSigue ? 'bi-arrow-return-right' : 'bi-person-plus-fill'} me-1`}></i>
+                                  {usuario.meSigue ? 'Seguir de vuelta' : 'Seguir'}
+                                </>
+                              )}
+                            </button>
+                          )}
+                          <button
+                            className="btn-ver-perfil rounded-pill w-100"
+                            type="button"
+                            onClick={() => navigate(`/perfil/${idUsuario}`)}
+                          >
+                            <i className="bi bi-person-fill me-1"></i> Ver Perfil
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="col-12 estado-vacio-explorar-red">
+                  <i className="bi bi-compass"></i>
+                  <p>{obtenerMensajeVacio()}</p>
+                </div>
+              )}
+
+              {paginacionExplorar.hayMas && (
+                <div className="col-12 paginacion-explorar-red">
+                  <button
+                    type="button"
+                    className="btn-cargar-mas-red"
+                    onClick={cargarMasUsuariosExplorar}
+                    disabled={cargandoMasExplorar}
+                  >
+                    {cargandoMasExplorar ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                        Cargando personas...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-people-fill"></i>
+                        Cargar más personas
+                      </>
+                    )}
+                  </button>
+                  <span>
+                    Mostrando {usuariosExplorar.length} de {paginacionExplorar.total}
+                  </span>
+                </div>
+              )}
+            </>
+
+            // RENDERING 4: OTRAS CONEXIONES TRADICIONALES (Amigos, Seguidores, Siguiendo)
           ) : conexiones.length > 0 ? (
             conexiones.map((contacto, index) => {
               const idUsuario = contacto.idConexion;
@@ -596,8 +1034,22 @@ export default function Red() {
                         <i className="bi bi-person-fill me-1"></i> Ver Perfil
                       </button>
                       {tabActiva === 'seguidores' && (
-                        <button className="btn-seguir-vuelta-red rounded-pill w-100" type="button" onClick={() => manejarSeguir(idUsuario)}>
-                          <i className="bi bi-arrow-return-right me-1"></i> Seguir de vuelta
+                        <button
+                          className="btn-seguir-vuelta-red rounded-pill w-100"
+                          type="button"
+                          onClick={() => manejarSeguir(idUsuario)}
+                          disabled={Boolean(usuariosProcesando[String(idUsuario)])}
+                        >
+                          {usuariosProcesando[String(idUsuario)] ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                              Siguiendo...
+                            </>
+                          ) : (
+                            <>
+                              <i className="bi bi-arrow-return-right me-1"></i> Seguir de vuelta
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
@@ -635,7 +1087,9 @@ export default function Red() {
                   : 'Dejar de seguir'}
             </h3>
             <p>
-              ¿Confirmas que deseas eliminar a <strong>{confirmacionEliminar.nombre}</strong> de esta sección?
+              {confirmacionEliminar.tipo === 'explorar'
+                ? <>¿Confirmas que deseas dejar de seguir a <strong>{confirmacionEliminar.nombre}</strong>?</>
+                : <>¿Confirmas que deseas eliminar a <strong>{confirmacionEliminar.nombre}</strong> de esta sección?</>}
             </p>
             <div className="aviso-confirmacion-red">
               <i className="bi bi-info-circle-fill"></i>
@@ -644,7 +1098,9 @@ export default function Red() {
                   ? 'Esto elimina la relación de Mi Red, pero no borra personas, nodos ni recuerdos de tus árboles genealógicos.'
                   : confirmacionEliminar.tipo === 'amigos'
                     ? 'Dejarás de seguir a esta persona y la amistad mutua dejará de mostrarse.'
-                    : 'La persona dejará de aparecer en Siguiendo. Podrás seguirla nuevamente después.'}
+                    : confirmacionEliminar.tipo === 'explorar'
+                      ? 'La persona seguirá visible en Explorar, pero dejarás de seguirla. Podrás seguirla nuevamente después.'
+                      : 'La persona dejará de aparecer en Siguiendo. Podrás seguirla nuevamente después.'}
               </span>
             </div>
             <label className="doble-check-red">

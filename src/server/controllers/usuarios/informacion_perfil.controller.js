@@ -4,6 +4,73 @@ const {
     normalizarPrivacidadPerfil
 } = require('../../services/privacidadPerfil.service');
 
+const LONGITUD_MINIMA_NICKNAME = 3;
+const LONGITUD_MAXIMA_NICKNAME = 30;
+const REGEX_NICKNAME = /^[a-z0-9_.-]+$/;
+
+const normalizarNickname = (nickname = '') => String(nickname || '')
+    .trim()
+    .replace(/^@+/, '')
+    .toLowerCase();
+
+const obtenerErrorNickname = (nickname = '') => {
+    const nicknameLimpio = normalizarNickname(nickname);
+
+    if (!nicknameLimpio) return 'El nombre de usuario no puede estar vacío.';
+
+    if (
+        nicknameLimpio.length < LONGITUD_MINIMA_NICKNAME ||
+        nicknameLimpio.length > LONGITUD_MAXIMA_NICKNAME
+    ) {
+        return `El nombre de usuario debe tener entre ${LONGITUD_MINIMA_NICKNAME} y ${LONGITUD_MAXIMA_NICKNAME} caracteres.`;
+    }
+
+    if (!REGEX_NICKNAME.test(nicknameLimpio)) {
+        return 'El nombre de usuario solo puede contener letras, números, punto, guion y guion bajo, sin espacios.';
+    }
+
+    return '';
+};
+
+const normalizarFechaNacimiento = (valor) => {
+    const texto = String(valor || '').trim();
+    if (!texto) return { error: '', fecha: null };
+
+    const coincidencia = texto.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+    if (!coincidencia) {
+        return { error: 'La fecha de nacimiento no es válida.', fecha: null };
+    }
+
+    const year = Number(coincidencia[1]);
+    const month = Number(coincidencia[2]);
+    const day = Number(coincidencia[3]);
+    const fecha = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+    if (
+        fecha.getUTCFullYear() !== year ||
+        fecha.getUTCMonth() !== month - 1 ||
+        fecha.getUTCDate() !== day
+    ) {
+        return { error: 'La fecha de nacimiento no es válida.', fecha: null };
+    }
+
+    const ahora = new Date();
+    const hoy = new Date(Date.UTC(
+        ahora.getUTCFullYear(),
+        ahora.getUTCMonth(),
+        ahora.getUTCDate(),
+        12,
+        0,
+        0
+    ));
+
+    if (fecha > hoy) {
+        return { error: 'La fecha de nacimiento no puede ser futura.', fecha: null };
+    }
+
+    return { error: '', fecha };
+};
+
 const quitarBarraFinal = (valor = '') => String(valor || '').replace(/\/+$/, '');
 
 const obtenerBaseUrlBackend = (req) => {
@@ -71,6 +138,8 @@ const formatearUsuarioCuenta = (usuario, req) => ({
     imagenPerfil: resolverUrlArchivo(usuario.imagenPerfil, req),
     imagenPortada: resolverUrlArchivo(usuario.imagenPortada, req),
     informacionPerfil: usuario.informacionPerfil || null,
+    esBetaTester: Boolean(usuario.esBetaTester),
+    betaTesterDesde: usuario.betaTesterDesde || null,
     twoFactorEnabled: Boolean(usuario.twoFactorEnabled),
     idioma: usuario.idioma || 'es-MX',
     zonaHoraria: usuario.zonaHoraria || 'America/Mexico_City',
@@ -85,6 +154,8 @@ const formatearUsuarioPublico = (usuario, req) => ({
     nickname: usuario.nickname || null,
     imagenPerfil: resolverUrlArchivo(usuario.imagenPerfil, req),
     imagenPortada: resolverUrlArchivo(usuario.imagenPortada, req),
+    esBetaTester: Boolean(usuario.esBetaTester),
+    betaTesterDesde: usuario.betaTesterDesde || null,
     createdAt: usuario.createdAt
 });
 
@@ -184,32 +255,23 @@ const actualizarMiPerfil = async (req, res) => {
             intereses
         } = req.body;
 
-        // 🌟 Validación de unicidad para Nickname (@user-nickname)
+        // Validación del identificador público único (@nickname).
         if (nickname !== undefined) {
-            const nicknameLimpio = nickname.trim().replace(/^@/, '').toLowerCase();
+            const nicknameLimpio = normalizarNickname(nickname);
+            const errorNickname = obtenerErrorNickname(nicknameLimpio);
 
-            if (!nicknameLimpio) {
-                return res.status(400).json({
-                    mensaje: 'El nombre de perfil (@nickname) no puede estar vacío.'
-                });
-            }
-
-            // Validar formato (solo letras, números, guiones y guiones bajos)
-            const regexNickname = /^[a-zA-Z0-9_.-]+$/;
-            if (!regexNickname.test(nicknameLimpio)) {
-                return res.status(400).json({
-                    mensaje: 'El nombre de perfil solo puede contener letras, números, guiones y guiones bajos.'
-                });
+            if (errorNickname) {
+                return res.status(400).json({ mensaje: errorNickname });
             }
 
             const nicknameExistente = await Usuario.findOne({
                 nickname: nicknameLimpio,
                 _id: { $ne: usuario._id }
-            });
+            }).select('_id').lean();
 
             if (nicknameExistente) {
                 return res.status(400).json({
-                    mensaje: `El nombre de perfil @${nicknameLimpio} ya está en uso por otro usuario.`
+                    mensaje: `El nombre de usuario @${nicknameLimpio} ya está en uso por otra persona.`
                 });
             }
 
@@ -221,18 +283,7 @@ const actualizarMiPerfil = async (req, res) => {
 
             if (!nombreLimpio) {
                 return res.status(400).json({
-                    mensaje: 'El nombre de usuario no puede estar vacío.'
-                });
-            }
-
-            const usuarioExistente = await Usuario.findOne({
-                nombreUsuario: nombreLimpio,
-                _id: { $ne: usuario._id }
-            });
-
-            if (usuarioExistente) {
-                return res.status(400).json({
-                    mensaje: 'Ese nombre de usuario ya está en uso.'
+                    mensaje: 'El nombre completo no puede estar vacío.'
                 });
             }
 
@@ -265,25 +316,13 @@ const actualizarMiPerfil = async (req, res) => {
         let fechaNacimientoFinal = undefined;
 
         if (fechaNacimiento !== undefined) {
-            if (!fechaNacimiento) {
-                fechaNacimientoFinal = null;
-            } else {
-                const fecha = new Date(fechaNacimiento);
+            const fechaNormalizada = normalizarFechaNacimiento(fechaNacimiento);
 
-                if (Number.isNaN(fecha.getTime())) {
-                    return res.status(400).json({
-                        mensaje: 'La fecha de nacimiento no es válida.'
-                    });
-                }
-
-                if (fecha > new Date()) {
-                    return res.status(400).json({
-                        mensaje: 'La fecha de nacimiento no puede ser futura.'
-                    });
-                }
-
-                fechaNacimientoFinal = fecha;
+            if (fechaNormalizada.error) {
+                return res.status(400).json({ mensaje: fechaNormalizada.error });
             }
+
+            fechaNacimientoFinal = fechaNormalizada.fecha;
         }
 
         const datosPerfil = {};
@@ -325,7 +364,14 @@ const actualizarMiPerfil = async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error al actualizar perfil:', error);
-        res.status(500).json({ mensaje: 'Error interno del servidor' });
+
+        if (error?.code === 11000 && (error.keyPattern?.nickname || error.keyValue?.nickname)) {
+            return res.status(400).json({
+                mensaje: 'Ese nombre de usuario ya está en uso por otra persona.'
+            });
+        }
+
+        return res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 };
 

@@ -1,31 +1,56 @@
 const jwt = require('jsonwebtoken');
+const { Usuario } = require('../models/index.model');
 
-const verificarToken = (req, res, next) => {
-    // 1. Buscamos el token en las cabeceras (Headers) de la petición
-    // El estándar es mandarlo como: "Authorization: Bearer eyJhbG..."
+const verificarToken = async (req, res, next) => {
     const authHeader = req.header('Authorization');
 
-    // Si no trae gafete o no tiene el formato correcto, lo rebotamos
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ mensaje: 'Acceso denegado: Token no proporcionado o formato inválido.' });
+        return res.status(401).json({
+            mensaje: 'Acceso denegado: Token no proporcionado o formato inválido.'
+        });
     }
 
-    // Separamos la palabra "Bearer" del token real
     const token = authHeader.split(' ')[1];
 
     try {
-        // 2. Verificamos que el token sea auténtico usando nuestra firma secreta
         const verificado = jwt.verify(token, process.env.JWT_SECRET);
 
-        // 3. Si es válido, guardamos los datos del usuario (su ID) en la petición actual
-        // Esto es oro puro, porque los siguientes controladores sabrán exactamente quién está haciendo la petición
-        req.usuario = verificado;
+        if (!verificado?.id) {
+            return res.status(401).json({
+                mensaje: 'Acceso denegado: Token no válido o expirado.'
+            });
+        }
 
-        // 4. ¡Le abrimos la puerta! "next()" le dice a Express que pase al siguiente controlador
+        const usuario = await Usuario.findById(verificado.id)
+            .select('_id sessionVersion');
+
+        if (!usuario) {
+            return res.status(401).json({
+                mensaje: 'Acceso denegado: La cuenta ya no está disponible.'
+            });
+        }
+
+        const versionToken = Number(verificado.sessionVersion || 0);
+        const versionActual = Number(usuario.sessionVersion || 0);
+
+        if (versionToken !== versionActual) {
+            return res.status(401).json({
+                mensaje: 'Tu sesión dejó de ser válida. Inicia sesión nuevamente.'
+            });
+        }
+
+        req.usuario = {
+            ...verificado,
+            id: String(usuario._id),
+            sessionVersion: versionActual
+        };
+
         next();
     } catch (error) {
-        // Si el token fue modificado, inventado o ya expiró (pasaron los 30 días)
-        res.status(401).json({ mensaje: 'Acceso denegado: Token no válido o expirado.' });
+        console.error('❌ Error al verificar token:', error.message);
+        return res.status(401).json({
+            mensaje: 'Acceso denegado: Token no válido o expirado.'
+        });
     }
 };
 

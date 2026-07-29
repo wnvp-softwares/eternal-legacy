@@ -364,6 +364,42 @@ const extraerPartesFechaSoloDia = (fecha) => {
   };
 };
 
+const formatearFechaParaInputSoloDia = (fecha) => {
+  const partes = extraerPartesFechaSoloDia(fecha);
+  if (!partes) return '';
+
+  const year = String(partes.year).padStart(4, '0');
+  const month = String(partes.month).padStart(2, '0');
+  const day = String(partes.day).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+const obtenerFechaActualParaInput = () => {
+  const hoy = new Date();
+  const year = String(hoy.getFullYear()).padStart(4, '0');
+  const month = String(hoy.getMonth() + 1).padStart(2, '0');
+  const day = String(hoy.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+const esFechaInputValida = (fecha) => {
+  const coincidencia = String(fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!coincidencia) return false;
+
+  const year = Number(coincidencia[1]);
+  const month = Number(coincidencia[2]);
+  const day = Number(coincidencia[3]);
+  const fechaUTC = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    fechaUTC.getUTCFullYear() === year &&
+    fechaUTC.getUTCMonth() === month - 1 &&
+    fechaUTC.getUTCDate() === day
+  );
+};
+
 const formatearFechaSoloDia = (fecha, preferencias = {}, opciones = {}) => {
   const partes = extraerPartesFechaSoloDia(fecha);
 
@@ -477,6 +513,19 @@ const normalizarUsuarioPerfil = (usuario = {}, usuarioFallback = {}) => {
       null
   };
 };
+
+const InsigniaBetaTester = () => (
+  <span
+    className="insignia-beta-tester"
+    title="Participante de la etapa Beta de Legacy"
+    aria-label="Beta Tester de Legacy"
+  >
+    <span className="insignia-beta-tester-logo" aria-hidden="true">
+      <i className="bi bi-infinity"></i>
+    </span>
+    <strong>Beta Tester</strong>
+  </span>
+);
 
 const sincronizarUsuarioSesion = (usuario) => {
   if (!usuario || typeof usuario !== 'object' || typeof window === 'undefined') return;
@@ -1015,9 +1064,7 @@ export default function Perfil() {
         ? perfilBd.intereses.join(', ')
         : '';
 
-      const fechaFormateada = perfilBd?.fechaNacimiento
-        ? new Date(perfilBd.fechaNacimiento).toISOString().split('T')[0]
-        : '';
+      const fechaFormateada = formatearFechaParaInputSoloDia(perfilBd?.fechaNacimiento);
 
       const usuarioBaseEdicion = usuarioPerfil || usuarioLogueado || {};
 
@@ -1111,6 +1158,23 @@ export default function Perfil() {
 
   const guardarPerfil = async () => {
     if (guardandoPerfil) return;
+
+    const fechaNacimientoLimpia = String(formEdicion.fechaNacimiento || '').trim();
+
+    if (!fechaNacimientoLimpia) {
+      alert('La fecha de nacimiento es obligatoria.');
+      return;
+    }
+
+    if (!esFechaInputValida(fechaNacimientoLimpia)) {
+      alert('La fecha de nacimiento no es válida.');
+      return;
+    }
+
+    if (fechaNacimientoLimpia > obtenerFechaActualParaInput()) {
+      alert('La fecha de nacimiento no puede ser futura.');
+      return;
+    }
 
     setGuardandoPerfil(true);
 
@@ -3148,6 +3212,19 @@ export default function Perfil() {
                 </div>
 
                 <div className="grupo-input-x">
+                  <label className="label-input-x">Fecha de nacimiento</label>
+                  <input
+                    type="date"
+                    className="form-control input-x selector-fecha-perfil"
+                    value={formEdicion.fechaNacimiento}
+                    max={obtenerFechaActualParaInput()}
+                    onChange={(e) => setFormEdicion({ ...formEdicion, fechaNacimiento: e.target.value })}
+                    autoComplete="bday"
+                    required
+                  />
+                </div>
+
+                <div className="grupo-input-x">
                   <label className="label-input-x">Biografía</label>
                   <textarea
                     className="form-control textarea-x"
@@ -3360,6 +3437,7 @@ export default function Perfil() {
 
             {puedeVerPerfilCompleto && (
             <div className="datos-extra-perfil">
+              {usuarioPerfil?.esBetaTester && <InsigniaBetaTester />}
               {perfilBd?.ubicacionActual && (
                 <span><i className="bi bi-geo-alt-fill"></i> Vive en <strong>{perfilBd.ubicacionActual}</strong></span>
               )}
@@ -3381,6 +3459,7 @@ export default function Perfil() {
 
             {!puedeVerPerfilCompleto && (
               <div className="datos-extra-perfil perfil-fecha-unica">
+                {usuarioPerfil?.esBetaTester && <InsigniaBetaTester />}
                 <span><i className="bi bi-calendar3"></i> Miembro desde <strong>{formatearFecha(perfilBd?.createdAt || usuarioPerfil?.createdAt, 'completo')}</strong></span>
               </div>
             )}

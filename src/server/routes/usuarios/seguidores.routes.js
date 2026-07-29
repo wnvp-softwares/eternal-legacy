@@ -7,6 +7,7 @@ const {
     obtenerSeguidores,
     obtenerSiguiendo,
     obtenerAmigos,
+    obtenerUsuariosExplorar,
     dejarDeSeguirUsuario
 } = require('../../controllers/usuarios/seguidores.controller');
 
@@ -19,5 +20,7 @@ router.get('/mis-amigos', verificarToken, obtenerAmigos);
 router.get('/mis-seguidores', verificarToken, obtenerSeguidores);
 
 router.get('/a-quienes-sigo', verificarToken, obtenerSiguiendo);
+
+router.get('/explorar', verificarToken, obtenerUsuariosExplorar);
 
 module.exports = router;

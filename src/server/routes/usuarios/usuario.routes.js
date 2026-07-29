@@ -2,12 +2,16 @@ const express = require('express');
 const router = express.Router();
 
 const {
+    obtenerDisponibilidadNickname,
     crearUsuario,
     loginUsuario,
     actualizarFotoPerfil,
     actualizarImagenesPerfil,
     verificarCodigo,
     verificarCodigo2FALogin,
+    solicitarRestablecimiento,
+    verificarCodigoRestablecimiento,
+    restablecerContrasena,
     actualizarContrasena,
     toggle2FA,
     actualizarPreferencias,
@@ -21,10 +25,14 @@ const {
 const { verificarToken } = require('../../middlewares/auth.middleware');
 
 // Rutas públicas
+router.get('/disponibilidad-nickname', obtenerDisponibilidadNickname);
 router.post('/registro', crearUsuario);
 router.post('/login', loginUsuario);
 router.post('/verificar-codigo', verificarCodigo);
 router.post('/verificar-2fa-login', verificarCodigo2FALogin);
+router.post('/solicitar-restablecimiento', solicitarRestablecimiento);
+router.post('/verificar-restablecimiento', verificarCodigoRestablecimiento);
+router.post('/restablecer-contrasena', restablecerContrasena);
 
 // Rutas protegidas
 router.put('/foto-perfil', verificarToken, actualizarFotoPerfil);

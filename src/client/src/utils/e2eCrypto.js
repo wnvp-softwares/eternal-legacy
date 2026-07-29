@@ -315,6 +315,88 @@ export const sincronizarLlavesE2EConCuenta = async ({ token, apiBaseUrl, passwor
     return obtenerOGenerarLlavesE2E({ token, apiBaseUrl, password, userId });
 };
 
+const obtenerLlavesLocalesEspecificas = (userId = null) => {
+    if (!userId) return null;
+
+    const privateKeyJWK = localStorage.getItem(claveStorageE2E('e2e_private_key', userId));
+    const publicKeyJWK = localStorage.getItem(claveStorageE2E('e2e_public_key', userId));
+
+    if (!privateKeyJWK || !publicKeyJWK) return null;
+    if (!clavesCoinciden(publicKeyJWK, privateKeyJWK)) return null;
+
+    return { publicKeyJWK, privateKeyJWK };
+};
+
+export const puedePreservarLlaveE2ELocal = ({ publicKeyRemota = null, userId = null } = {}) => {
+    if (!publicKeyRemota) return false;
+
+    try {
+        const llavesLocales = obtenerLlavesLocales(userId);
+        return Boolean(
+            llavesLocales &&
+            clavesCoinciden(publicKeyRemota, llavesLocales.privateKeyJWK)
+        );
+    } catch (error) {
+        console.error('No se pudo revisar la llave E2E local:', error);
+        return false;
+    }
+};
+
+export const prepararConfiguracionE2EParaRestablecimiento = async ({
+    nuevaContrasena,
+    publicKeyRemota = null,
+    userId = null
+} = {}) => {
+    if (!nuevaContrasena) {
+        throw new Error('La nueva contraseña es obligatoria para proteger el cifrado.');
+    }
+
+    try {
+        const llavesLocales = publicKeyRemota
+            ? obtenerLlavesLocales(userId)
+            : obtenerLlavesLocalesEspecificas(userId);
+
+        const puedePreservar = Boolean(
+            publicKeyRemota &&
+            llavesLocales &&
+            clavesCoinciden(publicKeyRemota, llavesLocales.privateKeyJWK)
+        );
+
+        const llavesFinales = puedePreservar
+            ? llavesLocales
+            : await generarParDeLlavesE2E();
+
+        const respaldo = await cifrarPrivateKeyConPassword(
+            llavesFinales.privateKeyJWK,
+            nuevaContrasena
+        );
+
+        return {
+            configuracionRemota: {
+                publicKey: llavesFinales.publicKeyJWK,
+                ...respaldo
+            },
+            llavesLocales: llavesFinales,
+            reemplazoLlave: !puedePreservar
+        };
+    } catch (error) {
+        console.error('No se pudo preparar el cifrado E2E para la recuperación:', error);
+        throw new Error('No se pudo preparar el cifrado de tus mensajes. Usa un navegador compatible e intenta nuevamente.');
+    }
+};
+
+export const guardarLlavesE2EDespuesRestablecimiento = ({
+    llavesLocales,
+    userId = null
+} = {}) => {
+    if (!llavesLocales?.publicKeyJWK || !llavesLocales?.privateKeyJWK) {
+        return false;
+    }
+
+    guardarLlavesLocales(llavesLocales, userId);
+    return true;
+};
+
 // 2. Cifrar Mensaje directo (E2E)
 const importarLlavePublicaE2E = async (publicKeyJWK) => {
     const llave = typeof publicKeyJWK === 'string'

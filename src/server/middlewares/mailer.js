@@ -376,7 +376,79 @@ const enviarCorreoNotificacion = async ({
     }
 };
 
+
+/**
+ * Confirma que la contraseña de una cuenta fue actualizada.
+ * Nunca incluye contraseñas, códigos ni contenido privado del usuario.
+ */
+const enviarConfirmacionCambioContrasena = async (email) => {
+    if (!email) return false;
+
+    const asunto = 'Tu contraseña de Legacy fue actualizada';
+    const textContent =
+        'La contraseña de tu cuenta Legacy fue actualizada correctamente.\n\n' +
+        'Todas las sesiones anteriores fueron cerradas por seguridad. ' +
+        'Si no realizaste este cambio, contacta de inmediato a soporte en LegacyDesarrollo@gmail.com.';
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${asunto}</title>
+    </head>
+    <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:30px 10px;">
+            <tr><td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 10px 25px rgba(0,0,0,.06);">
+                    <tr>
+                        <td align="center" style="background:#0D1B2A;padding:30px 20px;border-bottom:3px solid #CBA135;">
+                            <h1 style="margin:0;color:#ffffff;font-family:Georgia,serif;font-size:26px;letter-spacing:2px;">LEGACY</h1>
+                            <p style="margin:4px 0 0;color:#CBA135;font-size:11px;text-transform:uppercase;letter-spacing:3px;font-weight:700;">Seguridad de tu cuenta</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:36px 32px;text-align:center;">
+                            <div style="width:58px;height:58px;margin:0 auto 18px;border-radius:50%;background:#ecfdf5;border:1px solid #a7f3d0;line-height:58px;font-size:26px;">✓</div>
+                            <h2 style="margin:0 0 12px;color:#0D1B2A;font-family:Georgia,serif;font-size:22px;">Contraseña actualizada</h2>
+                            <p style="margin:0;color:#475569;font-size:15px;line-height:1.65;">
+                                La contraseña de tu cuenta Legacy fue actualizada correctamente.
+                            </p>
+                            <div style="margin-top:24px;padding:16px 18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px;line-height:1.6;text-align:left;">
+                                Todas las sesiones anteriores fueron cerradas por seguridad. Si no realizaste este cambio, contacta de inmediato a
+                                <a href="mailto:LegacyDesarrollo@gmail.com" style="color:#8c6b18;font-weight:700;">LegacyDesarrollo@gmail.com</a>.
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background:#f8fafc;padding:18px;text-align:center;border-top:1px solid #f1f5f9;color:#94a3b8;font-size:12px;">
+                            &copy; ${new Date().getFullYear()} Legacy. Todos los derechos reservados.
+                        </td>
+                    </tr>
+                </table>
+            </td></tr>
+        </table>
+    </body>
+    </html>`;
+
+    try {
+        await enviarCorreoGmailAPI({
+            to: email,
+            subject: asunto,
+            htmlContent,
+            textContent,
+            senderName: 'Legacy'
+        });
+        return true;
+    } catch (error) {
+        console.error('Error al enviar confirmación de cambio de contraseña:', error.message);
+        return false;
+    }
+};
+
 module.exports = enviarCodigoVerificacion;
 module.exports.enviarCodigoVerificacion = enviarCodigoVerificacion;
 module.exports.enviarReporteFeedback = enviarReporteFeedback;
+module.exports.enviarConfirmacionCambioContrasena = enviarConfirmacionCambioContrasena;
 module.exports.enviarCorreoNotificacion = enviarCorreoNotificacion;

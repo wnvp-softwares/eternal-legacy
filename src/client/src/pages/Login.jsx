@@ -1,11 +1,81 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Login.css';
 import { API_BASE_URL } from '../config/env';
-import { sincronizarLlavesE2EConCuenta } from '../utils/e2eCrypto';
+import {
+  guardarLlavesE2EDespuesRestablecimiento,
+  puedePreservarLlaveE2ELocal,
+  prepararConfiguracionE2EParaRestablecimiento,
+  sincronizarLlavesE2EConCuenta
+} from '../utils/e2eCrypto';
 
 const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
+const DURACION_CODIGO_SEGUNDOS = 300;
+const ESPERA_REENVIO_SEGUNDOS = 60;
+const ESPERA_VALIDACION_NICKNAME_MS = 450;
+const LONGITUD_MINIMA_NICKNAME = 3;
+const LONGITUD_MAXIMA_NICKNAME = 30;
+const REGEX_NICKNAME = /^[a-z0-9_.-]+$/;
+
+const ESTADO_NICKNAME_INICIAL = {
+  estado: 'inactivo',
+  mensaje: '',
+  nickname: ''
+};
+
+const normalizarNickname = (valor = '') => String(valor || '')
+  .trim()
+  .replace(/^@+/, '')
+  .toLowerCase();
+
+const obtenerErrorFormatoNickname = (valor = '') => {
+  const nickname = normalizarNickname(valor);
+
+  if (!nickname) return 'El nombre de usuario es obligatorio.';
+
+  if (nickname.length < LONGITUD_MINIMA_NICKNAME || nickname.length > LONGITUD_MAXIMA_NICKNAME) {
+    return `Usa entre ${LONGITUD_MINIMA_NICKNAME} y ${LONGITUD_MAXIMA_NICKNAME} caracteres.`;
+  }
+
+  if (!REGEX_NICKNAME.test(nickname)) {
+    return 'Usa letras, números, punto, guion o guion bajo, sin espacios.';
+  }
+
+  return '';
+};
+
+const obtenerFechaActualLocal = () => {
+  const ahora = new Date();
+  const year = ahora.getFullYear();
+  const month = String(ahora.getMonth() + 1).padStart(2, '0');
+  const day = String(ahora.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const esFechaCalendarioValida = (valor = '') => {
+  const coincidencia = String(valor || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!coincidencia) return false;
+
+  const year = Number(coincidencia[1]);
+  const month = Number(coincidencia[2]);
+  const day = Number(coincidencia[3]);
+  const fecha = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  return (
+    fecha.getUTCFullYear() === year &&
+    fecha.getUTCMonth() === month - 1 &&
+    fecha.getUTCDate() === day
+  );
+};
+
+const ESTADO_RECUPERACION_INICIAL = {
+  resetToken: '',
+  usuarioId: null,
+  publicKey: null,
+  tieneConfiguracionE2E: false,
+  puedePreservarE2E: false
+};
 
 export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   const [esLogin, setEsLogin] = useState(true);
@@ -15,12 +85,15 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   const [paso, setPaso] = useState('formulario');
   const [formulario, setFormulario] = useState({
     nombre: '',
+    nickname: '',
+    fechaNacimiento: '',
     email: '',
     password: '',
     confirmarPassword: ''
   });
+  const [estadoNickname, setEstadoNickname] = useState({ ...ESTADO_NICKNAME_INICIAL });
 
-  // --- ESTADOS PARA EL MODAL DE ADVERTENCIA Y REGLAS ---
+  // ESTADOS PARA EL MODAL DE ADVERTENCIA Y REGLAS
   const [mostrarModalReglas, setMostrarModalReglas] = useState(false);
   const [aceptoMayorEdad, setAceptoMayorEdad] = useState(false);
   const [aceptoPrivacidad, setAceptoPrivacidad] = useState(false);
@@ -28,36 +101,114 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   const [codigo, setCodigo] = useState(['', '', '', '', '', '']);
   const [tipoVerificacion, setTipoVerificacion] = useState('registro');
   const [twoFactorLoginToken, setTwoFactorLoginToken] = useState('');
+  const [recuperacion, setRecuperacion] = useState(ESTADO_RECUPERACION_INICIAL);
   const [error, setError] = useState('');
+  const [mensajeExito, setMensajeExito] = useState('');
 
-  // --- NUEVO: ESTADO Y EFECTO DEL TEMPORIZADOR ---
-  const [tiempoRestante, setTiempoRestante] = useState(300); // 300 segundos = 5 minutos
+  const [tiempoRestante, setTiempoRestante] = useState(DURACION_CODIGO_SEGUNDOS);
+  const [tiempoReenvio, setTiempoReenvio] = useState(0);
 
-  // 📝 NUEVOS ESTADOS PARA DOCUMENTOS LEGALES ADICIONALES:
+  // ESTADOS PARA DOCUMENTOS LEGALES ADICIONALES
   const [mostrarModalTerminos, setMostrarModalTerminos] = useState(false);
   const [mostrarModalPrivacidad, setMostrarModalPrivacidad] = useState(false);
 
   useEffect(() => {
-    let intervalo;
-    // Solo inicia la cuenta regresiva si estamos en la pantalla de verificación y queda tiempo
-    if (paso === 'verificacion' && tiempoRestante > 0) {
-      intervalo = setInterval(() => {
-        setTiempoRestante((prev) => prev - 1);
-      }, 1000);
-    } else if (tiempoRestante === 0) {
-      clearInterval(intervalo); // Detenemos el reloj cuando llega a 0
-    }
-    // Limpieza del intervalo cuando el componente se desmonta o cambia
-    return () => clearInterval(intervalo);
+    if (paso !== 'verificacion' || tiempoRestante <= 0) return undefined;
+
+    const intervalo = window.setInterval(() => {
+      setTiempoRestante((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => window.clearInterval(intervalo);
   }, [paso, tiempoRestante]);
 
-  // Función para formatear los segundos a MM:SS
+  useEffect(() => {
+    if (tiempoReenvio <= 0) return undefined;
+
+    const intervalo = window.setInterval(() => {
+      setTiempoReenvio((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => window.clearInterval(intervalo);
+  }, [tiempoReenvio]);
+
+
+  useEffect(() => {
+    if (esLogin || paso !== 'formulario') {
+      setEstadoNickname({ ...ESTADO_NICKNAME_INICIAL });
+      return undefined;
+    }
+
+    const nickname = normalizarNickname(formulario.nickname);
+
+    if (!nickname) {
+      setEstadoNickname({ ...ESTADO_NICKNAME_INICIAL });
+      return undefined;
+    }
+
+    const errorFormato = obtenerErrorFormatoNickname(nickname);
+    if (errorFormato) {
+      setEstadoNickname({
+        estado: 'invalido',
+        mensaje: errorFormato,
+        nickname
+      });
+      return undefined;
+    }
+
+    const controlador = new AbortController();
+    let efectoActivo = true;
+
+    setEstadoNickname({
+      estado: 'consultando',
+      mensaje: 'Comprobando disponibilidad...',
+      nickname
+    });
+
+    const temporizador = window.setTimeout(async () => {
+      try {
+        const respuesta = await fetch(
+          `${API_BASE_URL}/usuarios/disponibilidad-nickname?nickname=${encodeURIComponent(nickname)}`,
+          { signal: controlador.signal }
+        );
+        const datos = await respuesta.json().catch(() => ({}));
+
+        if (!respuesta.ok) {
+          throw new Error(datos.mensaje || 'No se pudo comprobar el nombre de usuario.');
+        }
+
+        if (!efectoActivo) return;
+
+        setEstadoNickname({
+          estado: datos.disponible ? 'disponible' : 'ocupado',
+          mensaje: datos.disponible
+            ? 'Este nombre de usuario está disponible.'
+            : 'Este nombre de usuario ya está en uso. Prueba con otro.',
+          nickname
+        });
+      } catch (errorDisponibilidad) {
+        if (errorDisponibilidad.name === 'AbortError' || !efectoActivo) return;
+
+        setEstadoNickname({
+          estado: 'error',
+          mensaje: errorDisponibilidad.message || 'No se pudo comprobar el nombre de usuario.',
+          nickname
+        });
+      }
+    }, ESPERA_VALIDACION_NICKNAME_MS);
+
+    return () => {
+      efectoActivo = false;
+      window.clearTimeout(temporizador);
+      controlador.abort();
+    };
+  }, [esLogin, formulario.nickname, paso]);
+
   const formatoTiempo = (segundos) => {
     const min = Math.floor(segundos / 60);
     const seg = segundos % 60;
     return `${min}:${seg < 10 ? '0' : ''}${seg}`;
   };
-  // ----------------------------------------------
 
   const prepararAnimacionEntradaArbol = () => {
     sessionStorage.removeItem(CLAVE_ANIMACION_CONEXIONES_ARBOL);
@@ -73,40 +224,97 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         password: formulario.password,
         userId: usuarioSesion?.id || usuarioSesion?._id || null
       });
-    } catch (error) {
-      console.error('No se pudo sincronizar el cifrado E2E:', error);
-      // No bloqueamos el login. Si falla, Mensajes pedirá volver a iniciar sesión para sincronizar.
+    } catch (errorCifrado) {
+      console.error('No se pudo sincronizar el cifrado E2E:', errorCifrado);
+      // El login continúa. Mensajes pedirá volver a iniciar sesión si necesita sincronizar llaves.
     }
   };
 
   const manejarCambio = (e) => {
-    setFormulario({
-      ...formulario,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    const valorFinal = name === 'nickname'
+      ? value.replace(/^@+/, '').toLowerCase()
+      : value;
+
+    setFormulario((prev) => ({ ...prev, [name]: valorFinal }));
+    setError('');
+    setMensajeExito('');
   };
 
   const manejarCambioCodigo = (elemento, index) => {
-    if (isNaN(elemento.value)) return;
-
+    const valor = String(elemento.value || '').replace(/\D/g, '').slice(-1);
     const nuevoCodigo = [...codigo];
-    nuevoCodigo[index] = elemento.value;
+    nuevoCodigo[index] = valor;
     setCodigo(nuevoCodigo);
+    setError('');
 
-    if (elemento.nextSibling && elemento.value !== "") {
+    if (elemento.nextSibling && valor) {
       elemento.nextSibling.focus();
     }
   };
 
+  const manejarPegadoCodigo = (e) => {
+    const digitos = e.clipboardData
+      .getData('text')
+      .replace(/\D/g, '')
+      .slice(0, 6);
+
+    if (!digitos) return;
+
+    e.preventDefault();
+    setCodigo(Array.from({ length: 6 }, (_, index) => digitos[index] || ''));
+    setError('');
+  };
+
   const manejarRetroceso = (e, index) => {
-    if (e.key === "Backspace" && !codigo[index] && e.target.previousSibling) {
+    if (e.key === 'Backspace' && !codigo[index] && e.target.previousSibling) {
       e.target.previousSibling.focus();
     }
+  };
+
+  const limpiarFlujoRecuperacion = () => {
+    setCodigo(['', '', '', '', '', '']);
+    setTipoVerificacion('registro');
+    setTwoFactorLoginToken('');
+    setRecuperacion(ESTADO_RECUPERACION_INICIAL);
+    setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
+    setTiempoReenvio(0);
+  };
+
+  const volverAlFormularioLogin = (mensaje = '') => {
+    limpiarFlujoRecuperacion();
+    setEsLogin(true);
+    setPaso('formulario');
+    setError('');
+    setMensajeExito(mensaje);
+    setFormulario((prev) => ({
+      ...prev,
+      nombre: '',
+      nickname: '',
+      fechaNacimiento: '',
+      password: '',
+      confirmarPassword: ''
+    }));
+    setEstadoNickname({ ...ESTADO_NICKNAME_INICIAL });
+  };
+
+  const abrirRecuperacion = () => {
+    setEsLogin(true);
+    setPaso('recuperacion_correo');
+    setError('');
+    setMensajeExito('');
+    limpiarFlujoRecuperacion();
+    setFormulario((prev) => ({
+      ...prev,
+      password: '',
+      confirmarPassword: ''
+    }));
   };
 
   const manejarEnvio = async (e) => {
     e.preventDefault();
     setError('');
+    setMensajeExito('');
 
     const API_URL = `${API_BASE_URL}/usuarios`;
 
@@ -138,7 +346,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
           setTipoVerificacion('2fa_login');
           setTwoFactorLoginToken(datos.twoFactorLoginToken || '');
           setCodigo(['', '', '', '', '', '']);
-          setTiempoRestante(300);
+          setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
           setPaso('verificacion');
           return;
         }
@@ -147,7 +355,6 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
           throw new Error('Respuesta de login incompleta. Intenta nuevamente.');
         }
 
-        // Guardamos el token y los datos esenciales del usuario en el navegador
         localStorage.setItem('token', datos.token);
         localStorage.setItem('usuario', JSON.stringify(datos.usuario));
 
@@ -160,46 +367,135 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         setPaso('formulario');
       }
 
-    } else {
-      if (!formulario.nombre || !formulario.email || !formulario.password || !formulario.confirmarPassword) {
-        setError('Por favor, completa todos los campos.');
-        return;
-      }
-      if (formulario.password !== formulario.confirmarPassword) {
-        setError('Las contraseñas no coinciden.');
-        return;
-      }
-
-      setPaso('espera_correo');
-
-      try {
-        const respuesta = await fetch(`${API_URL}/registro`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nombre: formulario.nombre,
-            email: formulario.email,
-            password: formulario.password
-          })
-        });
-
-        const datos = await respuesta.json();
-
-        if (!respuesta.ok) {
-          throw new Error(datos.mensaje || 'Error en el registro.');
-        }
-
-        // Si todo sale bien, pasamos a la pantalla del código de 6 dígitos
-        setTipoVerificacion('registro');
-        setTwoFactorLoginToken('');
-        setCodigo(['', '', '', '', '', '']);
-        setPaso('verificacion');
-        setTiempoRestante(300); // Reiniciamos el temporizador a 5 minutos exactos
-      } catch (err) {
-        setError(err.message);
-        setPaso('formulario');
-      }
+      return;
     }
+
+    const nombreLimpio = formulario.nombre.trim();
+    const nicknameLimpio = normalizarNickname(formulario.nickname);
+    const fechaNacimientoLimpia = formulario.fechaNacimiento.trim();
+    const emailLimpio = formulario.email.trim();
+
+    if (
+      !nombreLimpio ||
+      !nicknameLimpio ||
+      !fechaNacimientoLimpia ||
+      !emailLimpio ||
+      !formulario.password ||
+      !formulario.confirmarPassword
+    ) {
+      setError('Por favor, completa todos los campos.');
+      return;
+    }
+
+    const errorFormatoNickname = obtenerErrorFormatoNickname(nicknameLimpio);
+    if (errorFormatoNickname) {
+      setError(errorFormatoNickname);
+      return;
+    }
+
+    if (
+      estadoNickname.estado !== 'disponible' ||
+      estadoNickname.nickname !== nicknameLimpio
+    ) {
+      setError('Elige un nombre de usuario disponible antes de crear la cuenta.');
+      return;
+    }
+
+    if (!esFechaCalendarioValida(fechaNacimientoLimpia)) {
+      setError('Ingresa una fecha de nacimiento válida.');
+      return;
+    }
+
+    if (fechaNacimientoLimpia > obtenerFechaActualLocal()) {
+      setError('La fecha de nacimiento no puede ser futura.');
+      return;
+    }
+
+    if (formulario.password !== formulario.confirmarPassword) {
+      setError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setPaso('espera_correo');
+
+    try {
+      const respuesta = await fetch(`${API_URL}/registro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: nombreLimpio,
+          nickname: nicknameLimpio,
+          fechaNacimiento: fechaNacimientoLimpia,
+          email: emailLimpio,
+          password: formulario.password
+        })
+      });
+
+      const datos = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || 'Error en el registro.');
+      }
+
+      setTipoVerificacion('registro');
+      setTwoFactorLoginToken('');
+      setCodigo(['', '', '', '', '', '']);
+      setPaso('verificacion');
+      setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
+    } catch (err) {
+      setError(err.message);
+      setPaso('formulario');
+    }
+  };
+
+  const solicitarRestablecimiento = async (e = null) => {
+    e?.preventDefault?.();
+    setError('');
+    setMensajeExito('');
+
+    const emailLimpio = formulario.email.trim();
+    if (!emailLimpio) {
+      setError('Ingresa el correo asociado a tu cuenta.');
+      return;
+    }
+
+    setPaso('espera_recuperacion');
+
+    try {
+      const respuesta = await fetch(`${API_BASE_URL}/usuarios/solicitar-restablecimiento`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailLimpio })
+      });
+
+      const datos = await respuesta.json();
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || 'No se pudo solicitar el código de seguridad.');
+      }
+
+      setFormulario((prev) => ({ ...prev, email: emailLimpio }));
+      setTipoVerificacion('recuperacion');
+      setCodigo(['', '', '', '', '', '']);
+      setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
+      setTiempoReenvio(ESPERA_REENVIO_SEGUNDOS);
+      setPaso('verificacion');
+    } catch (err) {
+      setError(err.message);
+      setPaso('recuperacion_correo');
+    }
+  };
+
+  const reenviarCodigo = async () => {
+    if (tipoVerificacion === 'recuperacion') {
+      if (tiempoReenvio > 0) return;
+      await solicitarRestablecimiento();
+      return;
+    }
+
+    // Se conserva el comportamiento existente de registro y 2FA.
+    setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
+    setCodigo(['', '', '', '', '', '']);
+    setError('');
   };
 
   const verificarCuenta = async (e) => {
@@ -221,9 +517,13 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
 
     try {
       const esVerificacion2FA = tipoVerificacion === '2fa_login';
+      const esRecuperacion = tipoVerificacion === 'recuperacion';
+
       const endpoint = esVerificacion2FA
         ? `${API_BASE_URL}/usuarios/verificar-2fa-login`
-        : `${API_BASE_URL}/usuarios/verificar-codigo`;
+        : esRecuperacion
+          ? `${API_BASE_URL}/usuarios/verificar-restablecimiento`
+          : `${API_BASE_URL}/usuarios/verificar-codigo`;
 
       const body = esVerificacion2FA
         ? {
@@ -247,11 +547,37 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         throw new Error(datos.mensaje || 'Error de verificación.');
       }
 
+      if (esRecuperacion) {
+        if (!datos.resetToken || !datos.usuarioId) {
+          throw new Error('La verificación quedó incompleta. Solicita un código nuevo.');
+        }
+
+        const puedePreservarE2E = puedePreservarLlaveE2ELocal({
+          publicKeyRemota: datos.publicKey || null,
+          userId: datos.usuarioId
+        });
+
+        setRecuperacion({
+          resetToken: datos.resetToken,
+          usuarioId: datos.usuarioId,
+          publicKey: datos.publicKey || null,
+          tieneConfiguracionE2E: Boolean(datos.tieneConfiguracionE2E),
+          puedePreservarE2E
+        });
+        setFormulario((prev) => ({
+          ...prev,
+          password: '',
+          confirmarPassword: ''
+        }));
+        setCodigo(['', '', '', '', '', '']);
+        setPaso('nueva_contrasena');
+        return;
+      }
+
       if (!datos.token || !datos.usuario) {
         throw new Error('No se pudo completar el inicio de sesión. Intenta nuevamente.');
       }
 
-      // Guardamos la sesión iniciada después de validar el código
       localStorage.setItem('token', datos.token);
       localStorage.setItem('usuario', JSON.stringify(datos.usuario));
 
@@ -265,36 +591,135 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
     }
   };
 
+  const restablecerContrasena = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!recuperacion.resetToken) {
+      setError('La autorización de recuperación no está disponible. Solicita un código nuevo.');
+      return;
+    }
+
+    if (!formulario.password || !formulario.confirmarPassword) {
+      setError('Completa los dos campos de contraseña.');
+      return;
+    }
+
+    if (!formulario.password.trim()) {
+      setError('La nueva contraseña no puede estar vacía.');
+      return;
+    }
+
+    if (formulario.password.length < 6) {
+      setError('La nueva contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+
+    if (formulario.password !== formulario.confirmarPassword) {
+      setError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setPaso('espera_restablecimiento');
+
+    try {
+      const preparacionE2E = await prepararConfiguracionE2EParaRestablecimiento({
+        nuevaContrasena: formulario.password,
+        publicKeyRemota: recuperacion.publicKey,
+        userId: recuperacion.usuarioId
+      });
+
+      const respuesta = await fetch(`${API_BASE_URL}/usuarios/restablecer-contrasena`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resetToken: recuperacion.resetToken,
+          nuevaContrasena: formulario.password,
+          confirmarContrasena: formulario.confirmarPassword,
+          e2eConfig: preparacionE2E.configuracionRemota
+        })
+      });
+
+      const datos = await respuesta.json();
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || 'No se pudo actualizar la contraseña.');
+      }
+
+      try {
+        guardarLlavesE2EDespuesRestablecimiento({
+          llavesLocales: preparacionE2E.llavesLocales,
+          userId: recuperacion.usuarioId
+        });
+      } catch (errorLocal) {
+        console.error('La contraseña se actualizó, pero no se pudieron guardar las llaves E2E localmente:', errorLocal);
+      }
+
+      localStorage.removeItem('token');
+      localStorage.removeItem('usuario');
+      volverAlFormularioLogin(datos.mensaje || 'Tu contraseña se actualizó correctamente. Ya puedes iniciar sesión.');
+    } catch (err) {
+      setError(err.message);
+      setPaso('nueva_contrasena');
+    }
+  };
 
   const tituloVerificacion = tipoVerificacion === '2fa_login'
     ? 'Verifica tu inicio de sesión'
-    : 'Revisa tu correo';
+    : tipoVerificacion === 'recuperacion'
+      ? 'Verifica tu identidad'
+      : 'Revisa tu correo';
 
   const descripcionVerificacion = tipoVerificacion === '2fa_login'
     ? 'Te enviamos un código de seguridad a'
-    : 'Hemos enviado un código de 6 dígitos a';
+    : tipoVerificacion === 'recuperacion'
+      ? 'Enviamos un código de seguridad de 6 dígitos a'
+      : 'Hemos enviado un código de 6 dígitos a';
 
   const textoBotonVerificacion = tipoVerificacion === '2fa_login'
     ? 'Verificar e iniciar sesión'
-    : 'Verificar y continuar';
+    : tipoVerificacion === 'recuperacion'
+      ? 'Validar código'
+      : 'Verificar y continuar';
 
-  // --- RENDERIZADO CONDICIONAL DE LA COLUMNA DERECHA ---
+  const tituloEspera = (() => {
+    if (paso === 'espera_correo') return 'Enviando código de seguridad...';
+    if (paso === 'espera_recuperacion') return 'Enviando código de recuperación...';
+    if (paso === 'espera_restablecimiento') return 'Actualizando tu contraseña...';
+    if (tipoVerificacion === '2fa_login') return 'Verificando acceso...';
+    if (tipoVerificacion === 'recuperacion') return 'Verificando tu identidad...';
+    return 'Verificando cuenta...';
+  })();
+
+  const esRegistroVisible = !esLogin && paso === 'formulario';
+  const nicknameActual = normalizarNickname(formulario.nickname);
+  const nicknameConfirmadoDisponible = (
+    estadoNickname.estado === 'disponible' &&
+    estadoNickname.nickname === nicknameActual
+  );
+  const registroBloqueadoPorNickname = esRegistroVisible && !nicknameConfirmadoDisponible;
+  const fechaMaximaRegistro = obtenerFechaActualLocal();
+
+  // RENDERIZADO CONDICIONAL DE LA COLUMNA DERECHA
   let contenidoDerecha;
 
-  if (paso === 'espera_correo' || paso === 'espera_verificacion') {
+  if (
+    paso === 'espera_correo' ||
+    paso === 'espera_verificacion' ||
+    paso === 'espera_recuperacion' ||
+    paso === 'espera_restablecimiento'
+  ) {
     contenidoDerecha = (
       <div className="text-center animacion-formulario estado-espera-login d-flex flex-column align-items-center justify-content-center">
         <div className="spinner-border mb-4 spinner-login" role="status">
           <span className="visually-hidden">Cargando...</span>
         </div>
-        <h3 className="fuente-elegante fw-bold titulo-login">
-          {paso === 'espera_correo' ? 'Enviando código de seguridad...' : tipoVerificacion === '2fa_login' ? 'Verificando acceso...' : 'Verificando cuenta...'}
-        </h3>
+        <h3 className="fuente-elegante fw-bold titulo-login">{tituloEspera}</h3>
         <p className="small texto-login-secundario">Por favor, no cierres esta ventana.</p>
       </div>
     );
-
   } else if (paso === 'verificacion') {
+    const reenvioBloqueado = tipoVerificacion === 'recuperacion' && tiempoReenvio > 0;
+
     contenidoDerecha = (
       <div className="animacion-formulario login-verificacion">
         <div className="text-center mb-4">
@@ -304,16 +729,21 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
             {descripcionVerificacion} <br />
             <strong className="texto-login-destacado">{formulario.email}</strong>
           </p>
+          {tipoVerificacion === 'recuperacion' && (
+            <p className="small texto-login-secundario mt-2 mb-0">
+              Si el correo está registrado, el mensaje llegará en unos momentos.
+            </p>
+          )}
         </div>
 
         <form onSubmit={verificarCuenta}>
           {error && (
-            <div className="alerta-login-error py-2 small text-center rounded-3">
+            <div className="alerta-login-error py-2 small text-center rounded-3" role="alert">
               {error}
             </div>
           )}
 
-          <div className="codigo-verificacion-contenedor mb-4 mt-4">
+          <div className="codigo-verificacion-contenedor mb-4 mt-4" onPaste={manejarPegadoCodigo}>
             {codigo.map((dato, index) => (
               <input
                 key={index}
@@ -327,12 +757,17 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
                 onChange={(e) => manejarCambioCodigo(e.target, index)}
                 onKeyDown={(e) => manejarRetroceso(e, index)}
                 onFocus={(e) => e.target.select()}
-                disabled={tiempoRestante === 0} // Bloquea los inputs si el tiempo se acabó
+                disabled={tiempoRestante === 0}
+                aria-label={`Dígito ${index + 1} del código`}
               />
             ))}
           </div>
 
-          <button type="submit" className="boton-oscuro w-100 d-flex justify-content-center align-items-center gap-2 mt-4" disabled={tiempoRestante === 0}>
+          <button
+            type="submit"
+            className="boton-oscuro w-100 d-flex justify-content-center align-items-center gap-2 mt-4"
+            disabled={tiempoRestante === 0}
+          >
             {textoBotonVerificacion} <i className="bi bi-check-circle"></i>
           </button>
         </form>
@@ -343,68 +778,58 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
             <button
               type="button"
               className="btn btn-link texto-dorado p-0 small fw-bold text-decoration-none"
-              onClick={() => {
-                // Al darle clic a Reenviar, limpiamos los campos y reiniciamos el reloj
-                setTiempoRestante(300);
-                setCodigo(['', '', '', '', '', '']);
-                setError('');
-                // Aquí iría el llamado a tu API para mandar otro correo
-              }}
+              onClick={reenviarCodigo}
+              disabled={reenvioBloqueado}
             >
-              Reenviar
+              {reenvioBloqueado ? `Reenviar en ${formatoTiempo(tiempoReenvio)}` : 'Reenviar'}
             </button>
           </p>
-          {/* NUEVO: Muestra el temporizador o el mensaje de expiración */}
-          <p className="small mt-2 fw-bold">
+
+          <p className="small mt-2 fw-bold mb-2">
             {tiempoRestante > 0 ? (
-              <span className="temporizador-verificacion">El código expira en: <span className="texto-dorado">{formatoTiempo(tiempoRestante)}</span></span>
+              <span className="temporizador-verificacion">
+                El código expira en: <span className="texto-dorado">{formatoTiempo(tiempoRestante)}</span>
+              </span>
             ) : (
-              <span className="text-danger">El código ha expirado. Por favor, solicita uno nuevo.</span>
+              <span className="text-danger">El código ha expirado. Solicita uno nuevo.</span>
             )}
           </p>
+
+          {tipoVerificacion === 'recuperacion' && (
+            <button
+              type="button"
+              className="btn btn-link texto-dorado p-0 small fw-semibold text-decoration-none"
+              onClick={() => {
+                setError('');
+                setPaso('recuperacion_correo');
+                setCodigo(['', '', '', '', '', '']);
+              }}
+            >
+              Usar otro correo
+            </button>
+          )}
         </div>
       </div>
     );
-
-  } else {
+  } else if (paso === 'recuperacion_correo') {
     contenidoDerecha = (
-      <div key={esLogin ? 'login' : 'registro'} className="animacion-formulario">
-        <div className="mb-4 text-center text-sm-start">
-          <h2 className="fuente-elegante fw-bold fs-2 mb-2 titulo-login">
-            {esLogin ? 'Bienvenido de nuevo' : 'Crea tu legado'}
-          </h2>
-          <p className="small texto-login-secundario">
-            {esLogin
-              ? 'Ingresa a tu cuenta para continuar la historia.'
-              : 'Únete para empezar a documentar tus raíces familiares.'}
+      <div className="animacion-formulario panel-recuperacion-login">
+        <div className="text-center mb-4">
+          <i className="bi bi-shield-lock mb-3 d-block icono-verificacion-login" aria-hidden="true"></i>
+          <h2 className="fuente-elegante fw-bold fs-2 mb-2 titulo-login">Recupera tu cuenta</h2>
+          <p className="small texto-login-secundario mb-0">
+            Ingresa el correo asociado a tu cuenta y te enviaremos un código de seguridad.
           </p>
         </div>
 
-        <form onSubmit={manejarEnvio}>
+        <form onSubmit={solicitarRestablecimiento}>
           {error && (
-            <div className="alerta-login-error py-2 small text-center rounded-3">
+            <div className="alerta-login-error py-2 small text-center rounded-3" role="alert">
               {error}
             </div>
           )}
 
-          {!esLogin && (
-            <div className="mb-3">
-              <label className="form-label small fw-medium etiqueta-login ms-1 mb-1">Nombre completo</label>
-              <div className="grupo-input-personalizado">
-                <i className="bi bi-person icono-input"></i>
-                <input
-                  type="text"
-                  name="nombre"
-                  className="input-personalizado"
-                  placeholder="Ej. Elena Morales"
-                  value={formulario.nombre}
-                  onChange={manejarCambio}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="mb-3">
+          <div className="mb-4">
             <label className="form-label small fw-medium etiqueta-login ms-1 mb-1">Correo electrónico</label>
             <div className="grupo-input-personalizado">
               <i className="bi bi-envelope icono-input"></i>
@@ -415,15 +840,47 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
                 placeholder="correo@familia.com"
                 value={formulario.email}
                 onChange={manejarCambio}
-                />
+                autoComplete="email"
+              />
             </div>
           </div>
 
-          <div className="mb-3">
-            <div className="d-flex justify-content-between align-items-center ms-1 mb-1">
-              <label className="form-label small fw-medium etiqueta-login m-0">Contraseña</label>
-              {esLogin && <a href="#" className="texto-dorado small fw-medium text-decoration-none">¿Olvidaste tu contraseña?</a>}
+          <button type="submit" className="boton-oscuro w-100">
+            Enviar código <i className="bi bi-send"></i>
+          </button>
+        </form>
+
+        <div className="text-center mt-4">
+          <button
+            type="button"
+            className="btn btn-link texto-dorado p-0 small fw-semibold text-decoration-none"
+            onClick={() => volverAlFormularioLogin()}
+          >
+            <i className="bi bi-arrow-left me-1"></i> Volver al inicio de sesión
+          </button>
+        </div>
+      </div>
+    );
+  } else if (paso === 'nueva_contrasena') {
+    contenidoDerecha = (
+      <div className="animacion-formulario panel-recuperacion-login">
+        <div className="text-center mb-4">
+          <i className="bi bi-key mb-3 d-block icono-verificacion-login" aria-hidden="true"></i>
+          <h2 className="fuente-elegante fw-bold fs-2 mb-2 titulo-login">Crea una nueva contraseña</h2>
+          <p className="small texto-login-secundario mb-0">
+            Escríbela dos veces para confirmar que no haya errores.
+          </p>
+        </div>
+
+        <form onSubmit={restablecerContrasena}>
+          {error && (
+            <div className="alerta-login-error py-2 small text-center rounded-3" role="alert">
+              {error}
             </div>
+          )}
+
+          <div className="mb-3">
+            <label className="form-label small fw-medium etiqueta-login ms-1 mb-1">Nueva contraseña</label>
             <div className="grupo-input-personalizado">
               <i className="bi bi-lock icono-input"></i>
               <input
@@ -433,30 +890,308 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
                 placeholder="••••••••"
                 value={formulario.password}
                 onChange={manejarCambio}
-                />
+                autoComplete="new-password"
+              />
             </div>
           </div>
 
-          {!esLogin && (
-            <div className="mb-4">
-              <label className="form-label small fw-medium etiqueta-login ms-1 mb-1">Confirmar contraseña</label>
-              <div className="grupo-input-personalizado">
-                <i className="bi bi-check2-circle icono-input"></i>
-                <input
-                  type="password"
-                  name="confirmarPassword"
-                  className="input-personalizado"
-                  placeholder="••••••••"
-                  value={formulario.confirmarPassword}
-                  onChange={manejarCambio}
-                />
+          <div className="mb-4">
+            <label className="form-label small fw-medium etiqueta-login ms-1 mb-1">Confirmar nueva contraseña</label>
+            <div className="grupo-input-personalizado">
+              <i className="bi bi-check2-circle icono-input"></i>
+              <input
+                type="password"
+                name="confirmarPassword"
+                className="input-personalizado"
+                placeholder="••••••••"
+                value={formulario.confirmarPassword}
+                onChange={manejarCambio}
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+
+          {recuperacion.tieneConfiguracionE2E && (
+            <div
+              className={`aviso-e2e-recuperacion ${recuperacion.puedePreservarE2E ? 'preservable' : 'rotacion'}`}
+              role="status"
+            >
+              <i className={`bi ${recuperacion.puedePreservarE2E ? 'bi-shield-check' : 'bi-exclamation-triangle'}`}></i>
+              <div>
+                <strong>
+                  {recuperacion.puedePreservarE2E
+                    ? 'Tus mensajes cifrados se conservarán'
+                    : 'Aviso sobre tus mensajes cifrados'}
+                </strong>
+                <span>
+                  {recuperacion.puedePreservarE2E
+                    ? 'Encontramos la llave privada de esta cuenta en el dispositivo y la protegeremos con tu nueva contraseña.'
+                    : 'Este dispositivo no tiene la llave privada anterior. Se creará una nueva y algunos mensajes históricos podrían no poder descifrarse.'}
+                </span>
               </div>
             </div>
           )}
 
-          <button type="submit" className="boton-oscuro w-100 d-flex justify-content-center align-items-center gap-2 mt-4">
+          <button type="submit" className="boton-oscuro w-100 mt-4">
+            Actualizar contraseña <i className="bi bi-check-circle"></i>
+          </button>
+        </form>
+
+        <div className="text-center mt-4">
+          <button
+            type="button"
+            className="btn btn-link texto-dorado p-0 small fw-semibold text-decoration-none"
+            onClick={() => volverAlFormularioLogin()}
+          >
+            Cancelar y volver al inicio de sesión
+          </button>
+        </div>
+      </div>
+    );
+  } else {
+    contenidoDerecha = (
+      <div
+        key={esLogin ? 'login' : 'registro'}
+        className={`animacion-formulario ${esRegistroVisible ? 'formulario-registro-compacto' : ''}`}
+      >
+        <div className={`text-center text-sm-start encabezado-formulario-login ${esRegistroVisible ? 'encabezado-registro-login' : 'mb-4'}`}>
+          <h2 className="fuente-elegante fw-bold fs-2 mb-2 titulo-login">
+            {esLogin ? 'Bienvenido de nuevo' : 'Crea tu legado'}
+          </h2>
+          <p className="small texto-login-secundario mb-0">
+            {esLogin
+              ? 'Ingresa a tu cuenta para continuar la historia.'
+              : 'Únete para empezar a documentar tus raíces familiares.'}
+          </p>
+        </div>
+
+        <form onSubmit={manejarEnvio} className={esRegistroVisible ? 'formulario-registro-login' : ''}>
+          {mensajeExito && (
+            <div className="alerta-login-exito py-2 small text-center rounded-3" role="status">
+              <i className="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
+              {mensajeExito}
+            </div>
+          )}
+
+          {error && (
+            <div className="alerta-login-error py-2 small text-center rounded-3" role="alert">
+              {error}
+            </div>
+          )}
+
+          {esRegistroVisible ? (
+            <>
+              <div className="campo-registro-login campo-registro-completo">
+                <label className="form-label small fw-medium etiqueta-login ms-1 mb-1" htmlFor="registro-nombre">
+                  Nombre completo
+                </label>
+                <div className="grupo-input-personalizado">
+                  <i className="bi bi-person icono-input" aria-hidden="true"></i>
+                  <input
+                    id="registro-nombre"
+                    type="text"
+                    name="nombre"
+                    className="input-personalizado"
+                    placeholder="Ej. Elena Morales"
+                    value={formulario.nombre}
+                    onChange={manejarCambio}
+                    autoComplete="name"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="fila-registro-doble">
+                <div className="campo-registro-login campo-nickname-registro">
+                  <label className="form-label small fw-medium etiqueta-login ms-1 mb-1" htmlFor="registro-nickname">
+                    Nombre de usuario
+                  </label>
+                  <div className={`grupo-input-personalizado grupo-nickname-registro estado-nickname-${estadoNickname.estado}`}>
+                    <i className="bi bi-at icono-input" aria-hidden="true"></i>
+                    <input
+                      id="registro-nickname"
+                      type="text"
+                      name="nickname"
+                      className="input-personalizado input-nickname-registro"
+                      placeholder="elena.morales"
+                      value={formulario.nickname}
+                      onChange={manejarCambio}
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      minLength={LONGITUD_MINIMA_NICKNAME}
+                      maxLength={LONGITUD_MAXIMA_NICKNAME}
+                      aria-describedby="mensaje-disponibilidad-nickname"
+                      aria-invalid={['invalido', 'ocupado', 'error'].includes(estadoNickname.estado)}
+                      required
+                    />
+                    {estadoNickname.estado !== 'inactivo' && (
+                      <span className="estado-nickname-icono" aria-hidden="true">
+                        {estadoNickname.estado === 'consultando' ? (
+                          <i className="bi bi-arrow-repeat"></i>
+                        ) : estadoNickname.estado === 'disponible' ? (
+                          <i className="bi bi-check-circle-fill"></i>
+                        ) : (
+                          <i className="bi bi-x-circle-fill"></i>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    id="mensaje-disponibilidad-nickname"
+                    className={`mensaje-disponibilidad-nickname mensaje-nickname-${estadoNickname.estado}`}
+                    aria-live="polite"
+                  >
+                    {estadoNickname.mensaje}
+                  </div>
+                </div>
+
+                <div className="campo-registro-login">
+                  <label className="form-label small fw-medium etiqueta-login ms-1 mb-1" htmlFor="registro-fecha-nacimiento">
+                    Fecha de nacimiento
+                  </label>
+                  <div className="grupo-input-personalizado grupo-fecha-registro">
+                    <i className="bi bi-calendar3 icono-input" aria-hidden="true"></i>
+                    <input
+                      id="registro-fecha-nacimiento"
+                      type="date"
+                      name="fechaNacimiento"
+                      className="input-personalizado input-fecha-registro"
+                      value={formulario.fechaNacimiento}
+                      onChange={manejarCambio}
+                      max={fechaMaximaRegistro}
+                      autoComplete="bday"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="campo-registro-login campo-registro-completo">
+                <label className="form-label small fw-medium etiqueta-login ms-1 mb-1" htmlFor="registro-email">
+                  Correo electrónico
+                </label>
+                <div className="grupo-input-personalizado">
+                  <i className="bi bi-envelope icono-input" aria-hidden="true"></i>
+                  <input
+                    id="registro-email"
+                    type="email"
+                    name="email"
+                    className="input-personalizado"
+                    placeholder="correo@familia.com"
+                    value={formulario.email}
+                    onChange={manejarCambio}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="fila-registro-doble">
+                <div className="campo-registro-login">
+                  <label className="form-label small fw-medium etiqueta-login ms-1 mb-1" htmlFor="registro-password">
+                    Contraseña
+                  </label>
+                  <div className="grupo-input-personalizado">
+                    <i className="bi bi-lock icono-input" aria-hidden="true"></i>
+                    <input
+                      id="registro-password"
+                      type="password"
+                      name="password"
+                      className="input-personalizado"
+                      placeholder="••••••••"
+                      value={formulario.password}
+                      onChange={manejarCambio}
+                      autoComplete="new-password"
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="campo-registro-login">
+                  <label className="form-label small fw-medium etiqueta-login ms-1 mb-1" htmlFor="registro-confirmar-password">
+                    Confirmar contraseña
+                  </label>
+                  <div className="grupo-input-personalizado">
+                    <i className="bi bi-check2-circle icono-input" aria-hidden="true"></i>
+                    <input
+                      id="registro-confirmar-password"
+                      type="password"
+                      name="confirmarPassword"
+                      className="input-personalizado"
+                      placeholder="••••••••"
+                      value={formulario.confirmarPassword}
+                      onChange={manejarCambio}
+                      autoComplete="new-password"
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-3">
+                <label className="form-label small fw-medium etiqueta-login ms-1 mb-1" htmlFor="login-email">
+                  Correo electrónico
+                </label>
+                <div className="grupo-input-personalizado">
+                  <i className="bi bi-envelope icono-input" aria-hidden="true"></i>
+                  <input
+                    id="login-email"
+                    type="email"
+                    name="email"
+                    className="input-personalizado"
+                    placeholder="correo@familia.com"
+                    value={formulario.email}
+                    onChange={manejarCambio}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label small fw-medium etiqueta-login ms-1 mb-1" htmlFor="login-password">
+                  Contraseña
+                </label>
+                <div className="grupo-input-personalizado">
+                  <i className="bi bi-lock icono-input" aria-hidden="true"></i>
+                  <input
+                    id="login-password"
+                    type="password"
+                    name="password"
+                    className="input-personalizado"
+                    placeholder="••••••••"
+                    value={formulario.password}
+                    onChange={manejarCambio}
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+
+                <div className="enlace-recuperacion-login">
+                  <button
+                    type="button"
+                    className="btn btn-link texto-dorado p-0 small fw-medium text-decoration-none"
+                    onClick={abrirRecuperacion}
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          <button
+            type="submit"
+            className={`boton-oscuro w-100 d-flex justify-content-center align-items-center gap-2 ${esRegistroVisible ? 'boton-crear-cuenta-registro' : 'mt-4'}`}
+            disabled={registroBloqueadoPorNickname}
+          >
             {esLogin ? 'Iniciar sesión' : 'Crear cuenta'}
-            <i className="bi bi-arrow-right"></i>
+            <i className="bi bi-arrow-right" aria-hidden="true"></i>
           </button>
         </form>
       </div>
@@ -483,20 +1218,23 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
         </div>
 
         {/* --- LADO DERECHO --- */}
-        <div className="col-12 col-lg-6 d-flex flex-column panel-login">
+        <div className={`col-12 col-lg-6 d-flex flex-column panel-login ${esRegistroVisible ? 'panel-registro-login' : ''}`}>
 
           <div className="d-flex align-items-center gap-2 mt-5 ms-5 mb-5 d-lg-none marca-login-movil">
             <i className="bi bi-infinity texto-dorado fs-1"></i>
             <span className="fuente-elegante fw-bold fs-3">Legacy</span>
           </div>
 
-          <div className="w-100 mx-auto p-4 p-sm-5 mt-lg-auto mb-lg-auto" style={{ maxWidth: '480px' }}>
+          <div
+            className={`w-100 mx-auto p-4 p-sm-5 mt-lg-auto mb-lg-auto contenedor-formulario-login ${esRegistroVisible ? 'contenedor-formulario-registro' : ''}`}
+            style={{ maxWidth: esRegistroVisible ? '650px' : '480px' }}
+          >
             {contenidoDerecha}
           </div>
 
           {/* FOOTER CORREGIDO */}
           {paso === 'formulario' && (
-            <div className="text-center mt-5 mt-lg-auto pb-5 border-0">
+            <div className={`text-center mt-5 mt-lg-auto pb-5 border-0 pie-login ${esRegistroVisible ? 'pie-registro-login' : ''}`}>
               <p className="small texto-login-secundario d-inline-flex align-items-center justify-content-center m-0">
                 {esLogin ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
                 <button
@@ -505,12 +1243,22 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
 
                   // ✨ ONCLICK ACTUALIZADO:
                   onClick={() => {
-                    const cambiandoARegistro = esLogin === true; // Si esLogin es true, significa que al hacer clic irá a Sign Up
+                    const cambiandoARegistro = esLogin === true;
                     setEsLogin(!esLogin);
                     setError('');
+                    setMensajeExito('');
+                    setFormulario((prev) => ({
+                      ...prev,
+                      nombre: '',
+                      nickname: '',
+                      fechaNacimiento: '',
+                      password: '',
+                      confirmarPassword: ''
+                    }));
+                    setEstadoNickname({ ...ESTADO_NICKNAME_INICIAL });
 
                     if (cambiandoARegistro) {
-                      setMostrarModalReglas(true); // Abre el modal de advertencia inmediatamente
+                      setMostrarModalReglas(true);
                     }
                   }}
                 >
@@ -682,7 +1430,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
                             <p><strong>Legacy</strong>, con domicilio provisional en Zapopan, Jalisco, México, y correo electrónico de contacto <a href="mailto:LegacyDesarrollo@gmail.com" className="texto-dorado text-decoration-none fw-bold">LegacyDesarrollo@gmail.com</a>, es el responsable del tratamiento de sus datos personales, en cumplimiento con la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).</p>
 
                             <h6 className="fw-bold mt-4 mb-2 modal-login-subtitulo">¿Para qué fines utilizaremos sus datos?</h6>
-                            <p>Los datos personales que recabamos de usted (tales como nombre de usuario, correo electrónico, contraseña, dirección IP, datos de navegación y archivos multimedia cargados) serán utilizados para las siguientes finalidades esenciales:</p>
+                            <p>Los datos personales que recabamos de usted (tales como nombre completo, nombre de usuario, fecha de nacimiento, correo electrónico, contraseña, dirección IP, datos de navegación y archivos multimedia cargados) serán utilizados para las siguientes finalidades esenciales:</p>
                             <ol>
                               <li>Crear, validar y administrar su cuenta de usuario en la plataforma.</li>
                               <li>Permitir el funcionamiento de las herramientas de la red social (publicaciones, chats privados, subida y descarga de archivos).</li>

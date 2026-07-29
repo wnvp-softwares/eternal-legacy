@@ -1,4 +1,4 @@
-const { Seguidor, Amigo } = require('../../models/index.model');
+const { Usuario, Seguidor, Amigo } = require('../../models/index.model');
 const {
     crearNotificacion,
     crearNotificacionesMultiples,
@@ -7,6 +7,18 @@ const {
     eliminarNotificaciones
 } = require('../../services/notificacion.service');
 
+const LIMITE_EXPLORAR_PREDETERMINADO = 24;
+const LIMITE_EXPLORAR_MAXIMO = 48;
+
+const escaparExpresionRegular = (valor = '') => (
+    String(valor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+);
+
+const normalizarEnteroPositivo = (valor, predeterminado, maximo = Number.MAX_SAFE_INTEGER) => {
+    const numero = Number.parseInt(valor, 10);
+    if (!Number.isInteger(numero) || numero < 1) return predeterminado;
+    return Math.min(numero, maximo);
+};
 
 const obtenerEstadoConexion = async ({ usuarioId, otroUsuarioId, siguiendo, meSigue }) => {
     const amistadAceptada = await Amigo.exists({
@@ -223,6 +235,145 @@ const obtenerAmigos = async (req, res) => {
     }
 };
 
+
+const obtenerUsuariosExplorar = async (req, res) => {
+    try {
+        const usuarioId = req.usuario.id;
+        const pagina = normalizarEnteroPositivo(req.query.page, 1);
+        const limite = normalizarEnteroPositivo(
+            req.query.limit,
+            LIMITE_EXPLORAR_PREDETERMINADO,
+            LIMITE_EXPLORAR_MAXIMO
+        );
+        const consulta = String(req.query.q || '').trim().slice(0, 80);
+        const salto = (pagina - 1) * limite;
+
+        const filtroUsuarios = {
+            _id: { $ne: usuarioId },
+            isVerified: true
+        };
+
+        if (consulta) {
+            const expresionBusqueda = new RegExp(escaparExpresionRegular(consulta), 'i');
+            filtroUsuarios.$or = [
+                { nombreUsuario: expresionBusqueda },
+                { nickname: expresionBusqueda }
+            ];
+        }
+
+        const [usuarios, total] = await Promise.all([
+            Usuario.find(filtroUsuarios)
+                .select('nombreUsuario nickname imagenPerfil createdAt')
+                .populate({
+                    path: 'imagenPerfil',
+                    select: 'urlArchivo'
+                })
+                .sort({ nombreUsuario: 1, _id: 1 })
+                .skip(salto)
+                .limit(limite)
+                .lean(),
+            Usuario.countDocuments(filtroUsuarios)
+        ]);
+
+        const idsUsuarios = usuarios.map(usuario => usuario._id);
+
+        let seguimientosSalientes = [];
+        let seguimientosEntrantes = [];
+        let amistadesAceptadas = [];
+
+        if (idsUsuarios.length > 0) {
+            [
+                seguimientosSalientes,
+                seguimientosEntrantes,
+                amistadesAceptadas
+            ] = await Promise.all([
+                Seguidor.find({
+                    seguidor: usuarioId,
+                    seguido: { $in: idsUsuarios }
+                }).select('seguido').lean(),
+                Seguidor.find({
+                    seguidor: { $in: idsUsuarios },
+                    seguido: usuarioId
+                }).select('seguidor').lean(),
+                Amigo.find({
+                    estado: 'Aceptado',
+                    $or: [
+                        {
+                            usuarioSolicitante: usuarioId,
+                            usuarioReceptor: { $in: idsUsuarios }
+                        },
+                        {
+                            usuarioReceptor: usuarioId,
+                            usuarioSolicitante: { $in: idsUsuarios }
+                        }
+                    ]
+                }).select('usuarioSolicitante usuarioReceptor').lean()
+            ]);
+        }
+
+        const idsQueSigo = new Set(
+            seguimientosSalientes.map(relacion => String(relacion.seguido))
+        );
+        const idsQueMeSiguen = new Set(
+            seguimientosEntrantes.map(relacion => String(relacion.seguidor))
+        );
+        const idsAmistadesFormales = new Set();
+
+        amistadesAceptadas.forEach((amistad) => {
+            const solicitanteId = String(amistad.usuarioSolicitante);
+            const receptorId = String(amistad.usuarioReceptor);
+            const otroUsuarioId = solicitanteId === String(usuarioId)
+                ? receptorId
+                : solicitanteId;
+
+            idsAmistadesFormales.add(otroUsuarioId);
+        });
+
+        const usuariosFormateados = usuarios.map((usuario) => {
+            const idConexion = String(usuario._id);
+            const siguiendo = idsQueSigo.has(idConexion);
+            const meSigue = idsQueMeSiguen.has(idConexion);
+            const seguimientoMutuo = siguiendo && meSigue;
+            const amistadFormal = idsAmistadesFormales.has(idConexion);
+            const sonAmigos = amistadFormal || seguimientoMutuo;
+            const nombre = usuario.nombreUsuario || 'Usuario';
+            const img = usuario.imagenPerfil?.urlArchivo
+                || `https://ui-avatars.com/api/?name=${encodeURIComponent(nombre)}&background=f1f5f9`;
+
+            return {
+                idConexion: usuario._id,
+                nombre,
+                nickname: usuario.nickname || '',
+                img,
+                siguiendo,
+                meSigue,
+                seguimientoMutuo,
+                amistadFormal,
+                sonAmigos,
+                puedeInvitarFamilia: sonAmigos
+            };
+        });
+
+        const totalPaginas = total > 0 ? Math.ceil(total / limite) : 0;
+
+        return res.status(200).json({
+            usuarios: usuariosFormateados,
+            paginacion: {
+                pagina,
+                limite,
+                total,
+                totalPaginas,
+                hayMas: pagina < totalPaginas
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener usuarios para Explorar:', error);
+        return res.status(500).json({
+            mensaje: 'No se pudieron cargar las personas de Legacy.'
+        });
+    }
+};
+
 const dejarDeSeguirUsuario = async (req, res) => {
     try {
         const { seguidoId } = req.params;
@@ -279,5 +430,6 @@ module.exports = {
     obtenerSeguidores,
     obtenerSiguiendo,
     obtenerAmigos,
+    obtenerUsuariosExplorar,
     dejarDeSeguirUsuario
 };
