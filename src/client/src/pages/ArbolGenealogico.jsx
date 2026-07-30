@@ -15,7 +15,6 @@ import './ArbolGenealogico.css';
 // CONFIGURACIÓN
 // ==========================================
 const URL_BASE_BACKEND = BACKEND_BASE_URL;
-const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
 
 const formatearCantidadIndicadorArbol = (cantidad) => {
   const total = Number(cantidad) || 0;
@@ -769,39 +768,34 @@ const construirFechaCorta = ({ fechaNacimiento, fechaFallecimiento, estaFallecid
 const normalizarNodo = (nodo, usuarioActualId = null) => {
   const id = obtenerId(nodo);
   const usuarioId = obtenerId(nodo.usuario);
+  const origenFinal = nodo.origen || (usuarioId ? 'usuario_real' : 'perfil_sin_cuenta');
+  const esUsuarioReal = origenFinal === 'usuario_real' && Boolean(usuarioId);
 
-  const esUsuarioActual =
-    usuarioActualId &&
-    usuarioId &&
-    String(usuarioId) === String(usuarioActualId);
-
-  const nombreBase =
-    nodo.nombre === 'Yo' && nodo.usuario?.nombreUsuario
-      ? nodo.usuario.nombreUsuario
-      : nodo.nombre || nodo.usuario?.nombreUsuario || 'Familiar';
-
-  const nombre =
-    esUsuarioActual && !nombreBase.includes('(Yo)')
-      ? `${nombreBase} (Yo)`
-      : nombreBase;
-
-  const informacionPerfil = nodo.usuario?.informacionPerfil || {};
-
-  const imagenPerfil = resolverUrlImagen(
-    nodo.usuario?.imagenPerfil?.urlArchivo ||
-    nodo.usuario?.imagenPerfil ||
-    null
+  const esUsuarioActual = Boolean(
+    usuarioActualId && usuarioId && String(usuarioId) === String(usuarioActualId)
   );
 
+  const nombreBase = esUsuarioReal
+    ? (nodo.usuario?.nombreUsuario || nodo.nombre || 'Familiar')
+    : (nodo.nombre || 'Familiar');
+
+  const nombre = esUsuarioActual && !nombreBase.includes('(Yo)')
+    ? `${nombreBase} (Yo)`
+    : nombreBase;
+
+  const informacionPerfil = nodo.usuario?.informacionPerfil || {};
   const fechaNacimientoPerfil = informacionPerfil.fechaNacimiento || null;
-  const fechaNacimientoFinal = nodo.fechaNacimiento || fechaNacimientoPerfil || null;
+  const fechaNacimientoFinal = esUsuarioReal
+    ? (fechaNacimientoPerfil || nodo.fechaNacimiento || null)
+    : (nodo.fechaNacimiento || null);
 
   const fotos = Array.isArray(nodo.fotos)
     ? nodo.fotos.map(normalizarFotoNodo).filter(Boolean)
     : [];
 
-  const fotoPerfilNodo = fotos.find(foto => foto.esFotoPerfil === true) || null;
-  const urlFotoPerfilNodo = fotoPerfilNodo ? obtenerSrcFoto(fotoPerfilNodo) : null;
+  const fotoPerfilLegada = fotos.find(foto => foto.esFotoPerfil === true) || null;
+  const fotoPerfilManual = resolverUrlImagen(nodo.fotoPerfilNodo) ||
+    (fotoPerfilLegada ? obtenerSrcFoto(fotoPerfilLegada) : null);
 
   const fechaCortaCalculada = construirFechaCorta({
     fechaNacimiento: fechaNacimientoFinal,
@@ -821,14 +815,16 @@ const normalizarNodo = (nodo, usuarioActualId = null) => {
     mongoId: id,
     usuarioId,
     esUsuarioActual,
+    esUsuarioReal,
 
     nombre,
     iniciales: nodo.iniciales || obtenerIniciales(nombreBase),
     colorFondo: nodo.colorFondo || colorPorTexto(nombreBase),
     colorTexto: nodo.colorTexto || '#0f172a',
 
-    // Las fotos de galería nunca se utilizan como avatar automáticamente.
-    fotoPerfil: imagenPerfil || urlFotoPerfilNodo || null,
+    // El avatar del árbol es manual e independiente de la foto general de Legacy.
+    fotoPerfilNodo: nodo.fotoPerfilNodo || fotoPerfilLegada?.url || '',
+    fotoPerfil: fotoPerfilManual || null,
 
     fechaNacimiento: fechaNacimientoFinal,
     fechaCorta: fechaCortaCalculada,
@@ -839,15 +835,24 @@ const normalizarNodo = (nodo, usuarioActualId = null) => {
     estaFallecido: Boolean(nodo.estaFallecido),
     tipo: nodo.tipo || 'normal',
     estado: nodo.estado || 'Pendiente',
-    origen: nodo.origen || (usuarioId ? 'usuario_real' : 'perfil_sin_cuenta'),
+    origen: origenFinal,
     generacion: Number(nodo.generacion ?? 0),
     fila: Number(nodo.fila ?? 0),
     fotos,
 
-    biografia:
-      nodo.biografia ||
-      informacionPerfil.biografia ||
-      '',
+    biografia: esUsuarioReal
+      ? String(informacionPerfil.biografia || '').trim()
+      : String(nodo.biografia || '').trim(),
+    genero: esUsuarioReal ? (informacionPerfil.genero || '') : (nodo.genero || ''),
+    lugarNacimiento: esUsuarioReal
+      ? (informacionPerfil.lugarNacimiento || '')
+      : (nodo.lugarNacimiento || ''),
+    ubicacionActual: esUsuarioReal
+      ? (informacionPerfil.ubicacionActual || '')
+      : (nodo.ubicacionActual || ''),
+    ocupacionEducacion: esUsuarioReal
+      ? (informacionPerfil.ocupacionEducacion || '')
+      : (nodo.ocupacionEducacion || ''),
 
     perfilPrivado: Boolean(nodo.perfilPrivado)
   };
@@ -907,6 +912,7 @@ const DURACION_PULSACION_NODO_MS = 320;
 const DISTANCIA_CANCELAR_PULSACION = 8;
 
 const FilaPersona = ({
+  personaId,
   nombre,
   fechaCorta,
   tipo,
@@ -920,11 +926,15 @@ const FilaPersona = ({
   esNodoEnMovimiento = false,
   esDestinoMover = false,
   puedeMantenerPresionado = false,
-  alMantenerPresionado
+  alMantenerPresionado,
+  puedeCambiarFoto = false,
+  fotoCargando = false,
+  alSeleccionarFoto
 }) => {
   const temporizadorPulsacionRef = useRef(null);
   const puntoInicialRef = useRef(null);
   const suprimirClicRef = useRef(false);
+  const inputFotoRef = useRef(null);
 
   const cancelarPulsacion = () => {
     if (temporizadorPulsacionRef.current) {
@@ -1008,6 +1018,40 @@ const FilaPersona = ({
 
         {tipo === 'creador' && <div className="etiqueta-rol creador"><i className="bi bi-star-fill"></i></div>}
         {tipo === 'admin' && <div className="etiqueta-rol admin"><i className="bi bi-shield-fill"></i></div>}
+
+        {puedeCambiarFoto && (
+          <>
+            <input
+              ref={inputFotoRef}
+              type="file"
+              accept="image/*"
+              className="input-foto-nodo-oculto"
+              onClick={(evento) => evento.stopPropagation()}
+              onChange={(evento) => alSeleccionarFoto?.(evento, personaId)}
+              tabIndex="-1"
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              className={`boton-camara-avatar-nodo ${fotoCargando ? 'cargando' : ''}`}
+              onPointerDown={(evento) => evento.stopPropagation()}
+              onClick={(evento) => {
+                evento.preventDefault();
+                evento.stopPropagation();
+                if (!fotoCargando) inputFotoRef.current?.click();
+              }}
+              disabled={fotoCargando}
+              title={fotoPerfil ? `Cambiar fotografía de ${nombre}` : `Agregar fotografía de ${nombre}`}
+              aria-label={fotoPerfil ? `Cambiar fotografía de ${nombre}` : `Agregar fotografía de ${nombre}`}
+            >
+              {fotoCargando ? (
+                <span className="spinner-border spinner-border-sm" aria-hidden="true"></span>
+              ) : (
+                <i className="bi bi-camera-fill" aria-hidden="true"></i>
+              )}
+            </button>
+          </>
+        )}
       </div>
 
       <div className="info-nodo">
@@ -1097,7 +1141,10 @@ const TarjetaPareja = ({
   modoMover,
   nodoEnMovimientoId,
   alSeleccionarMover,
-  alMoverComoPareja
+  alMoverComoPareja,
+  puedeCambiarFoto,
+  fotoCargandoId,
+  alSeleccionarFoto
 }) => {
   const [menuUnionAbierto, establecerMenuUnionAbierto] = useState(false);
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
@@ -1115,6 +1162,10 @@ const TarjetaPareja = ({
   const renderPersona = (persona) => (
     <FilaPersona
       {...persona}
+      personaId={persona.id}
+      puedeCambiarFoto={puedeCambiarFoto?.(persona) === true}
+      fotoCargando={String(fotoCargandoId || '') === String(persona.id)}
+      alSeleccionarFoto={alSeleccionarFoto}
       esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(persona.id)}
       esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
       puedeMantenerPresionado={puedeMover && !modoMover && !modoRelacionar}
@@ -1249,7 +1300,10 @@ const TarjetaIndividual = ({
   modoMover,
   nodoEnMovimientoId,
   alSeleccionarMover,
-  alMoverComoPareja
+  alMoverComoPareja,
+  puedeCambiarFoto,
+  fotoCargandoId,
+  alSeleccionarFoto
 }) => {
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
   const clasePendiente = persona.estado === 'Pendiente' ? 'nodo-pendiente' : '';
@@ -1266,6 +1320,10 @@ const TarjetaIndividual = ({
     >
       <FilaPersona
         {...persona}
+        personaId={persona.id}
+        puedeCambiarFoto={puedeCambiarFoto?.(persona) === true}
+        fotoCargando={String(fotoCargandoId || '') === String(persona.id)}
+        alSeleccionarFoto={alSeleccionarFoto}
         esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(persona.id)}
         esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
         puedeMantenerPresionado={puedeMover && !modoMover && !modoRelacionar}
@@ -1305,15 +1363,80 @@ const TarjetaIndividual = ({
   );
 };
 
+const normalizarCrucesLinea = (cruces = []) => Array.from(new Set(
+  (Array.isArray(cruces) ? cruces : [])
+    .map(Number)
+    .filter(valor => Number.isFinite(valor) && valor > 4 && valor < 96)
+    .map(valor => Math.round(valor * 100) / 100)
+)).sort((a, b) => a - b);
+
+const construirMascaraCrucesLinea = (cruces = []) => {
+  const posiciones = normalizarCrucesLinea(cruces);
+  if (posiciones.length === 0) return {};
+
+  const paradas = ['#000 0%'];
+
+  posiciones.forEach((posicion) => {
+    paradas.push(
+      `#000 calc(${posicion}% - 8px)`,
+      `rgba(0, 0, 0, 0.7) calc(${posicion}% - 5px)`,
+      `rgba(0, 0, 0, 0.18) calc(${posicion}% - 3px)`,
+      `transparent calc(${posicion}% - 1.5px)`,
+      `transparent calc(${posicion}% + 1.5px)`,
+      `rgba(0, 0, 0, 0.18) calc(${posicion}% + 3px)`,
+      `rgba(0, 0, 0, 0.7) calc(${posicion}% + 5px)`,
+      `#000 calc(${posicion}% + 8px)`
+    );
+  });
+
+  paradas.push('#000 100%');
+  const mascara = `linear-gradient(to right, ${paradas.join(', ')})`;
+
+  return {
+    WebkitMaskImage: mascara,
+    maskImage: mascara,
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskSize: '100% 100%',
+    maskSize: '100% 100%'
+  };
+};
+
+const LineaHorizontalConCruces = ({
+  top,
+  left = 0,
+  width = '100%',
+  cruces = [],
+  className = ''
+}) => {
+  const crucesNormalizados = normalizarCrucesLinea(cruces);
+
+  return (
+    <div
+      className={`linea-horizontal ${crucesNormalizados.length > 0 ? 'linea-horizontal-con-cruces' : ''} ${className}`.trim()}
+      style={{
+        top: `${Number(top)}px`,
+        left,
+        width,
+        ...construirMascaraCrucesLinea(crucesNormalizados)
+      }}
+      aria-hidden="true"
+    ></div>
+  );
+};
+
 const ConectorDinamico = ({
   yIn,
   salidas,
+  porcentajeCarril = 50,
+  crucesEntrada = [],
   puedeEditar = false,
   alEliminarLinea
 }) => {
   const salidasActivas = salidas || [];
   if (salidasActivas.length === 0 || yIn === undefined || yIn === null) return null;
 
+  const carril = Math.max(22, Math.min(78, Number(porcentajeCarril) || 50));
   const yOuts = salidasActivas.map(s => Number(s.y));
   const minY = Math.min(...yOuts, Number(yIn));
   const maxY = Math.max(...yOuts, Number(yIn));
@@ -1321,26 +1444,44 @@ const ConectorDinamico = ({
   return (
     <>
       <div className="punto-inicio" style={{ top: `${yIn}px` }}></div>
-      <div className="linea-horizontal" style={{ top: `${yIn}px`, width: '50%', left: 0 }}></div>
-      <div className="linea-vertical" style={{ top: `${minY}px`, height: `${maxY - minY}px`, left: '50%' }}></div>
+      <LineaHorizontalConCruces
+        top={yIn}
+        width={`${carril}%`}
+        cruces={crucesEntrada}
+      />
+      <div
+        className="linea-vertical linea-vertical-sobre-cruce"
+        style={{ top: `${minY}px`, height: `${maxY - minY}px`, left: `${carril}%` }}
+        aria-hidden="true"
+      ></div>
 
       {salidasActivas.map((salida) => {
         const y = Number(salida.y);
+        const hilosSalida = Array.isArray(salida.hiloIds) && salida.hiloIds.length > 0
+          ? salida.hiloIds
+          : (salida.hiloId ? [salida.hiloId] : []);
+        const claveSalida = hilosSalida.join('-') || `${yIn}-${y}`;
+
         return (
-          <React.Fragment key={salida.hiloId || `${yIn}-${y}`}>
-            <div className="linea-horizontal" style={{ top: `${y}px`, width: '50%', left: '50%' }}></div>
+          <React.Fragment key={claveSalida}>
+            <LineaHorizontalConCruces
+              top={y}
+              left={`${carril}%`}
+              width={`${100 - carril}%`}
+              cruces={salida.cruces}
+            />
             <div className="flecha-fin" style={{ top: `${y}px` }}></div>
-            {puedeEditar && salida.hiloId && (
+            {puedeEditar && hilosSalida.length > 0 && (
               <button
                 type="button"
                 className="accion-conector accion-conector-eliminar"
                 style={{ top: `${y - 12}px` }}
                 onClick={(evento) => {
                   evento.stopPropagation();
-                  alEliminarLinea?.(salida.hiloId);
+                  alEliminarLinea?.(hilosSalida);
                 }}
-                title="Eliminar esta relación"
-                aria-label="Eliminar esta relación"
+                title={hilosSalida.length > 1 ? 'Eliminar esta relación parental' : 'Eliminar esta relación'}
+                aria-label={hilosSalida.length > 1 ? 'Eliminar esta relación parental' : 'Eliminar esta relación'}
               >
                 <i className="bi bi-x-lg"></i>
               </button>
@@ -1516,6 +1657,14 @@ export default function ArbolGenealogico() {
     descripcion: ''
   });
 
+  // Recorte y subida directa de la fotografía exclusiva del círculo del nodo.
+  const [cropperFotoPerfilNodo, establecerCropperFotoPerfilNodo] = useState({
+    abierto: false,
+    archivo: null,
+    nodoId: null
+  });
+  const [subiendoFotoPerfilNodoId, establecerSubiendoFotoPerfilNodoId] = useState(null);
+
   const token = localStorage.getItem('token');
   const usuarioActualId = useMemo(() => obtenerUsuarioIdDesdeToken(token), [token]);
 
@@ -1527,40 +1676,9 @@ export default function ArbolGenealogico() {
     }
   }, []);
 
-  const [mostrarAnimacionConexiones, establecerMostrarAnimacionConexiones] = useState(false);
   const [procesandoAdminNodoId, establecerProcesandoAdminNodoId] = useState(null);
 
   const arbolActivoId = obtenerId(arbol);
-
-  const nodoAnimacionConexiones = useMemo(() => {
-    const nodoUsuarioActual = nodos.find(nodo => nodo.esUsuarioActual);
-    if (nodoUsuarioActual) return nodoUsuarioActual;
-
-    const nodoCreador = nodos.find(nodo => nodo.tipo === 'creador');
-    if (nodoCreador) return nodoCreador;
-
-    return nodos[0] || null;
-  }, [nodos]);
-
-  useEffect(() => {
-    if (vistaActual !== 'menu' || cargandoArbol) return undefined;
-
-    const animacionYaMostrada = sessionStorage.getItem(CLAVE_ANIMACION_CONEXIONES_ARBOL) === 'true';
-
-    if (animacionYaMostrada) {
-      establecerMostrarAnimacionConexiones(false);
-      return undefined;
-    }
-
-    sessionStorage.setItem(CLAVE_ANIMACION_CONEXIONES_ARBOL, 'true');
-    establecerMostrarAnimacionConexiones(true);
-
-    const temporizador = setTimeout(() => {
-      establecerMostrarAnimacionConexiones(false);
-    }, 2800);
-
-    return () => clearTimeout(temporizador);
-  }, [vistaActual, cargandoArbol]);
 
   const apiFetch = async (endpoint, opciones = {}) => {
     const respuesta = await fetch(`${URL_BASE_BACKEND}${endpoint}`, {
@@ -1584,6 +1702,14 @@ export default function ArbolGenealogico() {
     return data;
   };
 
+  const puedeEditarImagenesNodo = (persona = {}) => {
+    if (esUsuarioAdmin) return true;
+    const usuarioNodoId = persona.usuarioId || obtenerId(persona.usuario);
+    return Boolean(
+      usuarioNodoId && usuarioActualId && String(usuarioNodoId) === String(usuarioActualId)
+    );
+  };
+
 
   const audienciaMomentoArbol = useMemo(() => ({
     id: obtenerId(arbol),
@@ -1599,7 +1725,7 @@ export default function ArbolGenealogico() {
         usuarioId: obtenerId(nodo.usuario),
         nombre: nodo.nombre || nodo.usuario?.nombreUsuario || 'Familiar',
         origen: nodo.origen || (obtenerId(nodo.usuario) ? 'usuario_real' : 'perfil_sin_cuenta'),
-        imagen: resolverUrlImagen(nodo.fotoPerfil || nodo.usuario?.imagenPerfil?.urlArchivo || nodo.usuario?.imagenPerfil)
+        imagen: resolverUrlImagen(nodo.fotoPerfil || nodo.fotoPerfilNodo)
       }))
   ), [nodos]);
 
@@ -2243,14 +2369,16 @@ export default function ArbolGenealogico() {
     );
   };
 
-  const momentosPerfilSinCuenta = useMemo(() => {
-    if (!nodoSeleccionado || nodoSeleccionado.origen !== 'perfil_sin_cuenta') return [];
+  const momentosFotosNodo = useMemo(() => {
+    if (!nodoSeleccionado) return [];
 
-    const nodoId = obtenerId(nodoSeleccionado) || 'perfil-sin-cuenta';
+    const nodoId = obtenerId(nodoSeleccionado) || 'nodo-familiar';
     const urlsIncluidas = new Set();
     const fotosUnicas = (Array.isArray(nodoSeleccionado.fotos) ? nodoSeleccionado.fotos : [])
       .map(normalizarFotoNodo)
       .filter(Boolean)
+      // La fotografía del círculo es independiente y nunca aparece en el carrusel.
+      .filter(foto => foto.esFotoPerfil !== true)
       .filter(esFotografiaMomento)
       .filter((foto) => {
         const claveUrl = obtenerUrlCrudaFoto(foto).toLowerCase();
@@ -2273,7 +2401,7 @@ export default function ArbolGenealogico() {
         gruposPorFecha.set(claveFecha, {
           _id: `archivo-familiar-${nodoId}-${claveFecha}`,
           id: `archivo-familiar-${nodoId}-${claveFecha}`,
-          origenMomento: 'perfil_sin_cuenta',
+          origenMomento: 'archivo_nodo',
           esMomentoVirtual: true,
           fechaMomento: fechaEfectiva,
           fechaEfectiva,
@@ -2311,21 +2439,10 @@ export default function ArbolGenealogico() {
       ));
   }, [nodoSeleccionado, arbol?.nombreFamilia, arbol?.nombre]);
 
-  const momentosFamiliaresCombinados = useMemo(() => {
-    return [
-      ...momentosFamiliaresNodo.map(publicacion => ({
-        ...publicacion,
-        origenMomento: publicacion.origenMomento || 'publicacion'
-      })),
-      ...momentosPerfilSinCuenta
-    ].sort((a, b) => (
-      new Date(obtenerFechaEfectivaMomento(a) || 0).getTime() -
-      new Date(obtenerFechaEfectivaMomento(b) || 0).getTime()
-    ));
-  }, [momentosFamiliaresNodo, momentosPerfilSinCuenta]);
+  const momentosFamiliaresCombinados = useMemo(() => momentosFotosNodo, [momentosFotosNodo]);
 
   const publicacionMomentoActiva = momentosFamiliaresCombinados[indiceMomentoFamiliar] || null;
-  const esMomentoVirtualActivo = publicacionMomentoActiva?.origenMomento === 'perfil_sin_cuenta';
+  const esMomentoVirtualActivo = publicacionMomentoActiva?.origenMomento === 'archivo_nodo';
   const fotoMomentoActiva = publicacionMomentoActiva?.multimedia?.[indiceFotoMomentoFamiliar] || null;
   const descripcionMomentoActiva = esMomentoVirtualActivo
     ? String(fotoMomentoActiva?.descripcion || '').trim()
@@ -2461,65 +2578,21 @@ export default function ArbolGenealogico() {
   };
 
   const usuarioReaccionoMomento = (publicacion = {}) => {
-    if (publicacion?.origenMomento === 'perfil_sin_cuenta') return false;
+    if (publicacion?.origenMomento === 'archivo_nodo') return false;
     const miId = usuarioActualId || obtenerId(usuarioSesion);
     if (!miId || !Array.isArray(publicacion.reacciones)) return false;
     return publicacion.reacciones.some(reaccion => String(obtenerId(reaccion) || reaccion) === String(miId));
   };
 
   useEffect(() => {
-    const arbolId = obtenerId(arbol);
-    const nodoId = obtenerId(nodoSeleccionado);
-
     establecerModalMomentosFamiliaresAbierto(false);
     establecerIndiceMomentoFamiliar(0);
     establecerIndiceFotoMomentoFamiliar(0);
     establecerMomentosFamiliaresNodo([]);
     establecerErrorMomentosFamiliares('');
     establecerComentariosMomentos({});
-
-    if (!arbolId || !nodoId || !token) {
-      establecerCargandoMomentosFamiliares(false);
-      return undefined;
-    }
-
-    const controlador = new AbortController();
-
-    const cargarMomentos = async () => {
-      try {
-        establecerCargandoMomentosFamiliares(true);
-        const respuesta = await fetch(
-          `${URL_BASE_BACKEND}/api/publicaciones/arbol/${arbolId}/nodo/${nodoId}/momentos-familiares`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controlador.signal
-          }
-        );
-        const datos = await respuesta.json().catch(() => ({}));
-        if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudieron cargar los Momentos Familiares.');
-
-        const publicaciones = (Array.isArray(datos.publicaciones) ? datos.publicaciones : [])
-          .map(publicacion => ({
-            ...publicacion,
-            multimedia: (Array.isArray(publicacion.multimedia) ? publicacion.multimedia : []).filter(esFotografiaMomento)
-          }))
-          .filter(publicacion => publicacion.multimedia.length > 0)
-          .sort((a, b) => new Date(obtenerFechaEfectivaMomento(a)).getTime() - new Date(obtenerFechaEfectivaMomento(b)).getTime());
-
-        establecerMomentosFamiliaresNodo(publicaciones);
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.error('Error al cargar Momentos Familiares del nodo:', error);
-          establecerErrorMomentosFamiliares(error.message || 'No se pudieron cargar los Momentos Familiares.');
-        }
-      } finally {
-        if (!controlador.signal.aborted) establecerCargandoMomentosFamiliares(false);
-      }
-    };
-
-    cargarMomentos();
-    return () => controlador.abort();
-  }, [arbol?._id, nodoSeleccionado?.id, token, versionMomentosFamiliares]);
+    establecerCargandoMomentosFamiliares(false);
+  }, [arbol?._id, nodoSeleccionado?.id, versionMomentosFamiliares]);
 
   useEffect(() => {
     if (!modalMomentosFamiliaresAbierto || !publicacionMomentoActiva || esMomentoVirtualActivo) return;
@@ -2788,6 +2861,12 @@ export default function ArbolGenealogico() {
     const nodoObjetivo = nodoDestinoId
       ? nodos.find(nodo => String(nodo.id) === String(nodoDestinoId))
       : null;
+
+    if (nodoDestinoId && (!nodoObjetivo || !puedeEditarImagenesNodo(nodoObjetivo))) {
+      window.alert('No tienes permiso para administrar las fotografías de esta persona.');
+      return;
+    }
+
     const totalGaleriaNodo = Array.isArray(nodoObjetivo?.fotos)
       ? nodoObjetivo.fotos.filter(foto => foto?.esFotoPerfil !== true).length
       : 0;
@@ -2847,6 +2926,7 @@ export default function ArbolGenealogico() {
 
       const formData = new FormData();
       formData.append('archivo', archivoFotoPendiente);
+      if (nodoDestinoFotoPendiente) formData.append('nodoId', nodoDestinoFotoPendiente);
 
       const respuesta = await fetch(
         `${URL_BASE_BACKEND}/api/nodos/arbol/${arbol._id}/subir-foto`,
@@ -2908,7 +2988,13 @@ export default function ArbolGenealogico() {
 
         establecerNodoSeleccionado(prev => (
           prev && String(prev.id) === String(nodoDestinoFotoPendiente)
-            ? { ...prev, fotos: fotosActualizadas, fotoPerfil: obtenerSrcFoto(fotosActualizadas.find(foto => foto.esFotoPerfil)) }
+            ? {
+                ...prev,
+                fotos: fotosActualizadas,
+                fotoPerfil: destinoFotoPendiente === 'perfil'
+                  ? obtenerSrcFoto(fotosActualizadas.find(foto => foto.esFotoPerfil))
+                  : prev.fotoPerfil
+              }
             : prev
         ));
         establecerMensajeSistema('Fotografía añadida correctamente.');
@@ -2936,6 +3022,88 @@ export default function ArbolGenealogico() {
       setErrorFotoMetadata(error.message || 'No se pudo subir la fotografía.');
     } finally {
       setSubiendoFoto(false);
+    }
+  };
+
+  const cerrarCropperFotoPerfilNodo = () => {
+    establecerCropperFotoPerfilNodo({ abierto: false, archivo: null, nodoId: null });
+  };
+
+  const manejarSeleccionFotoPerfilNodo = (evento, nodoId) => {
+    const archivo = evento.target.files?.[0] || null;
+    evento.target.value = '';
+    if (!archivo || !nodoId) return;
+
+    if (!archivo.type.startsWith('image/')) {
+      window.alert('Selecciona una imagen válida.');
+      return;
+    }
+
+    const nodoObjetivo = nodos.find(nodo => String(nodo.id) === String(nodoId));
+    if (!nodoObjetivo || !puedeEditarImagenesNodo(nodoObjetivo)) {
+      window.alert('No tienes permiso para cambiar la fotografía de esta persona.');
+      return;
+    }
+
+    establecerCropperFotoPerfilNodo({
+      abierto: true,
+      archivo,
+      nodoId
+    });
+  };
+
+  const confirmarFotoPerfilNodo = async ({ archivo, vistaPrevia }) => {
+    const nodoId = cropperFotoPerfilNodo.nodoId;
+    const arbolId = obtenerId(arbol);
+    if (!archivo || !nodoId || !arbolId || subiendoFotoPerfilNodoId) return;
+
+    try {
+      establecerSubiendoFotoPerfilNodoId(nodoId);
+
+      const formData = new FormData();
+      formData.append('archivo', archivo);
+
+      const respuesta = await fetch(
+        `${URL_BASE_BACKEND}/api/nodos/arbol/${arbolId}/${nodoId}/foto-perfil`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData
+        }
+      );
+
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || 'No se pudo actualizar la fotografía del nodo.');
+      }
+
+      const url = datos.url || datos.nodo?.fotoPerfilNodo;
+      if (!url) throw new Error('El servidor no devolvió la fotografía actualizada.');
+
+      const fotoResuelta = resolverUrlImagen(url) || url;
+      const actualizarPersona = (persona) => (
+        String(persona.id) === String(nodoId)
+          ? {
+              ...persona,
+              fotoPerfilNodo: url,
+              fotoPerfil: fotoResuelta,
+              fotoPerfilNodoActualizadaEn: datos.nodo?.fotoPerfilNodoActualizadaEn || new Date().toISOString()
+            }
+          : persona
+      );
+
+      establecerNodos(prev => prev.map(actualizarPersona));
+      establecerNodoSeleccionado(prev => (
+        prev && String(prev.id) === String(nodoId) ? actualizarPersona(prev) : prev
+      ));
+      establecerMensajeSistema('Fotografía del nodo actualizada correctamente.');
+      cerrarCropperFotoPerfilNodo();
+    } catch (error) {
+      console.error('Error al actualizar fotografía del nodo:', error);
+      window.alert(error.message || 'No se pudo actualizar la fotografía del nodo.');
+    } finally {
+      establecerSubiendoFotoPerfilNodoId(null);
+      if (vistaPrevia?.startsWith('blob:')) URL.revokeObjectURL(vistaPrevia);
     }
   };
 
@@ -4087,7 +4255,11 @@ export default function ArbolGenealogico() {
     const idsUsados = new Set();
     const cards = [];
 
-    const uniones = hilosActivosFiltrados.filter(hilo => ['pareja', 'matrimonio', 'divorcio'].includes(hilo.tipoRelacion));
+    // Una pareja se comporta como una sola unidad para el ordenamiento. Esto evita
+    // que sus respectivas ramas se mezclen con las de otra pareja de la generación.
+    const uniones = hilosActivosFiltrados
+      .filter(hilo => ['pareja', 'matrimonio', 'divorcio'].includes(hilo.tipoRelacion))
+      .sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')));
 
     uniones.forEach((hilo) => {
       const origen = mapaNodos.get(String(hilo.nodoOrigenId));
@@ -4135,176 +4307,180 @@ export default function ArbolGenealogico() {
       });
     });
 
-    const mapaCardTemporal = new Map();
-
+    const cardPorNodoTemporal = new Map();
+    const cardPorId = new Map();
     cards.forEach((card) => {
-      card.nodosIds.forEach(nodoId => {
-        mapaCardTemporal.set(String(nodoId), card);
-      });
+      cardPorId.set(String(card.id), card);
+      card.nodosIds.forEach(nodoId => cardPorNodoTemporal.set(String(nodoId), card));
     });
 
-    const gruposFamiliares = new Map();
+    const padresPorCard = new Map();
+    const hijosPorCard = new Map();
+    const agregarRelacionCard = (mapa, origenId, destinoId) => {
+      const clave = String(origenId);
+      if (!mapa.has(clave)) mapa.set(clave, new Set());
+      mapa.get(clave).add(String(destinoId));
+    };
 
     hilosActivosFiltrados
       .filter(hilo => hilo.tipoRelacion === 'padre_hijo')
       .forEach((hilo) => {
-        const cardPadre = mapaCardTemporal.get(String(hilo.nodoOrigenId));
-        const cardHijo = mapaCardTemporal.get(String(hilo.nodoDestinoId));
-
+        const cardPadre = cardPorNodoTemporal.get(String(hilo.nodoOrigenId));
+        const cardHijo = cardPorNodoTemporal.get(String(hilo.nodoDestinoId));
         if (!cardPadre || !cardHijo || String(cardPadre.id) === String(cardHijo.id)) return;
 
-        const keyPadre = String(hilo.nodoOrigenId);
-
-        if (!gruposFamiliares.has(keyPadre)) {
-          gruposFamiliares.set(keyPadre, {
-            cardPadre,
-            cardsHijos: new Map(),
-            totalRelaciones: 0
-          });
-        }
-
-        const grupo = gruposFamiliares.get(keyPadre);
-
-        grupo.cardsHijos.set(String(cardHijo.id), cardHijo);
-        grupo.totalRelaciones += 1;
+        agregarRelacionCard(hijosPorCard, cardPadre.id, cardHijo.id);
+        agregarRelacionCard(padresPorCard, cardHijo.id, cardPadre.id);
       });
-
-    const zonasReservadasPorGeneracion = new Map();
-    const GAP_FILAS_GRUPO_FAMILIAR = 0.01;
-
-    const agregarZonaReservada = (generacion, zona) => {
-      const key = Number(generacion);
-
-      if (!zonasReservadasPorGeneracion.has(key)) {
-        zonasReservadasPorGeneracion.set(key, []);
-      }
-
-      if (Number(zona.end) < Number(zona.start)) return;
-
-      zonasReservadasPorGeneracion.get(key).push({
-        ...zona,
-        start: Number(zona.start),
-        end: Number(zona.end)
-      });
-    };
-
-    gruposFamiliares.forEach((grupo) => {
-      const cardsHijos = Array.from(grupo.cardsHijos.values());
-
-      if (grupo.totalRelaciones < 2 && cardsHijos.length < 2) return;
-
-      const todasLasCardsFamilia = [grupo.cardPadre, ...cardsHijos];
-      const idsCardsFamilia = new Set(todasLasCardsFamilia.map(card => String(card.id)));
-      const filasFamilia = todasLasCardsFamilia.map(card => Number(card.filaOriginal ?? card.fila));
-      const filaMinimaFamilia = Math.min(...filasFamilia);
-      const filaMaximaFamilia = Math.max(...filasFamilia);
-
-      agregarZonaReservada(Number(grupo.cardPadre.generacion), {
-        start: Number(grupo.cardPadre.filaOriginal ?? grupo.cardPadre.fila) + 1,
-        end: filaMaximaFamilia + GAP_FILAS_GRUPO_FAMILIAR,
-        idsPermitidos: idsCardsFamilia
-      });
-
-      const hijosPorGeneracion = new Map();
-
-      cardsHijos.forEach((cardHijo) => {
-        const key = Number(cardHijo.generacion);
-
-        if (!hijosPorGeneracion.has(key)) {
-          hijosPorGeneracion.set(key, []);
-        }
-
-        hijosPorGeneracion.get(key).push(cardHijo);
-      });
-
-      hijosPorGeneracion.forEach((cardsDeGeneracion, generacionHijos) => {
-        const filasHijos = cardsDeGeneracion.map(card => Number(card.filaOriginal ?? card.fila));
-        const filaMinimaHijos = Math.min(...filasHijos);
-        const filaMaximaHijos = Math.max(...filasHijos);
-        const idsPermitidos = new Set(cardsDeGeneracion.map(card => String(card.id)));
-
-        agregarZonaReservada(generacionHijos, {
-          start: Math.min(filaMinimaFamilia, filaMinimaHijos),
-          end: Math.max(filaMaximaFamilia, filaMaximaHijos) + GAP_FILAS_GRUPO_FAMILIAR,
-          idsPermitidos
-        });
-      });
-    });
 
     const agrupadas = new Map();
-
     cards.forEach((card) => {
-      const key = Number(card.generacion);
-      if (!agrupadas.has(key)) agrupadas.set(key, []);
-      agrupadas.get(key).push({
-        ...card,
-        fila: Number(card.filaOriginal ?? card.fila)
+      const generacion = Number(card.generacion);
+      if (!agrupadas.has(generacion)) agrupadas.set(generacion, []);
+      agrupadas.get(generacion).push({ ...card });
+    });
+
+    agrupadas.forEach((lista) => {
+      lista.sort((a, b) => {
+        const porFila = Number(a.filaOriginal) - Number(b.filaOriginal);
+        return porFila || String(a.id).localeCompare(String(b.id));
       });
     });
 
-    agrupadas.forEach((lista, generacion) => {
-      const zonas = zonasReservadasPorGeneracion.get(Number(generacion)) || [];
-      const filasOcupadas = new Set();
+    const generacionesOrdenadas = Array.from(agrupadas.keys()).sort((a, b) => a - b);
 
-      const cardEstaProtegida = (card) => {
-        return zonas.some(zona => zona.idsPermitidos?.has(String(card.id)));
-      };
+    const crearMapaIndices = () => {
+      const indices = new Map();
+      agrupadas.forEach((lista) => {
+        lista.forEach((card, indice) => indices.set(String(card.id), indice));
+      });
+      return indices;
+    };
 
-      lista.sort((a, b) => {
-        const diferenciaFila = Number(a.filaOriginal ?? a.fila) - Number(b.filaOriginal ?? b.fila);
+    const obtenerBaricentro = (card, relaciones, indices) => {
+      const idsRelacionados = Array.from(relaciones.get(String(card.id)) || []);
+      const posiciones = idsRelacionados
+        .map(id => indices.get(String(id)))
+        .filter(posicion => Number.isFinite(posicion));
 
-        if (diferenciaFila !== 0) return diferenciaFila;
+      if (posiciones.length === 0) return null;
+      return posiciones.reduce((total, valor) => total + valor, 0) / posiciones.length;
+    };
 
-        const aProtegida = cardEstaProtegida(a) ? 0 : 1;
-        const bProtegida = cardEstaProtegida(b) ? 0 : 1;
+    // Varias pasadas de baricentro reducen cruces entre generaciones sin perder
+    // como desempate el orden manual persistido en filaOriginal.
+    for (let pasada = 0; pasada < 6; pasada += 1) {
+      let indices = crearMapaIndices();
 
-        return aProtegida - bProtegida;
+      generacionesOrdenadas.forEach((generacion) => {
+        const lista = agrupadas.get(generacion) || [];
+        lista.sort((a, b) => {
+          const baricentroA = obtenerBaricentro(a, padresPorCard, indices);
+          const baricentroB = obtenerBaricentro(b, padresPorCard, indices);
+          if (baricentroA !== null || baricentroB !== null) {
+            const aSeguro = baricentroA ?? Number.MAX_SAFE_INTEGER;
+            const bSeguro = baricentroB ?? Number.MAX_SAFE_INTEGER;
+            if (aSeguro !== bSeguro) return aSeguro - bSeguro;
+          }
+          const porFila = Number(a.filaOriginal) - Number(b.filaOriginal);
+          return porFila || String(a.id).localeCompare(String(b.id));
+        });
+        indices = crearMapaIndices();
       });
 
-      lista.forEach((card) => {
-        let filaVisual = Number(card.filaOriginal ?? card.fila);
-
-        let huboAjuste = true;
-
-        while (huboAjuste) {
-          huboAjuste = false;
-
-          const zonaBloqueante = zonas.find(zona => {
-            const permitido = zona.idsPermitidos?.has(String(card.id));
-
-            return !permitido && filaVisual >= zona.start && filaVisual <= zona.end;
-          });
-
-          if (zonaBloqueante) {
-            filaVisual = zonaBloqueante.end + 1;
-            huboAjuste = true;
-            continue;
+      [...generacionesOrdenadas].reverse().forEach((generacion) => {
+        const lista = agrupadas.get(generacion) || [];
+        lista.sort((a, b) => {
+          const baricentroA = obtenerBaricentro(a, hijosPorCard, indices);
+          const baricentroB = obtenerBaricentro(b, hijosPorCard, indices);
+          if (baricentroA !== null || baricentroB !== null) {
+            const aSeguro = baricentroA ?? Number.MAX_SAFE_INTEGER;
+            const bSeguro = baricentroB ?? Number.MAX_SAFE_INTEGER;
+            if (aSeguro !== bSeguro) return aSeguro - bSeguro;
           }
+          const porFila = Number(a.filaOriginal) - Number(b.filaOriginal);
+          return porFila || String(a.id).localeCompare(String(b.id));
+        });
+        indices = crearMapaIndices();
+      });
+    }
 
-          if (filasOcupadas.has(filaVisual)) {
-            filaVisual += 1;
-            huboAjuste = true;
-          }
+    const centros = new Map();
+
+    // Posición inicial sin colisiones dentro de cada generación.
+    agrupadas.forEach((lista) => {
+      let siguienteTop = MARGEN_SUPERIOR_CONTENIDO_GENERACION;
+      lista.forEach((card, indice) => {
+        const alturaVisual = obtenerAlturaVisualCard(card);
+        card.alturaVisual = alturaVisual;
+        card.fila = indice;
+        card.topVisual = siguienteTop;
+        centros.set(String(card.id), siguienteTop + (alturaVisual / 2));
+        siguienteTop += alturaVisual + ESPACIO_VERTICAL_ENTRE_TARJETAS;
+      });
+    });
+
+    // Relaja los centros hacia sus familiares conectados y vuelve a resolver
+    // colisiones. Las parejas se desplazan como un bloque inseparable.
+    for (let pasada = 0; pasada < 8; pasada += 1) {
+      const propuestos = new Map();
+
+      cards.forEach((cardOriginal) => {
+        const cardId = String(cardOriginal.id);
+        const actual = centros.get(cardId) || 0;
+        const idsRelacionados = new Set([
+          ...Array.from(padresPorCard.get(cardId) || []),
+          ...Array.from(hijosPorCard.get(cardId) || [])
+        ]);
+        const centrosRelacionados = Array.from(idsRelacionados)
+          .map(id => centros.get(String(id)))
+          .filter(valor => Number.isFinite(valor));
+
+        if (centrosRelacionados.length === 0) {
+          propuestos.set(cardId, actual);
+          return;
         }
 
-        card.fila = filaVisual;
-        filasOcupadas.add(filaVisual);
+        const ideal = centrosRelacionados.reduce((total, valor) => total + valor, 0) /
+          centrosRelacionados.length;
+        propuestos.set(cardId, (actual * 0.45) + (ideal * 0.55));
       });
 
-      lista.sort((a, b) => Number(a.fila) - Number(b.fila));
+      agrupadas.forEach((lista) => {
+        let limiteCentro = MARGEN_SUPERIOR_CONTENIDO_GENERACION;
 
-      let siguienteTopDisponible = MARGEN_SUPERIOR_CONTENIDO_GENERACION;
+        lista.forEach((card, indice) => {
+          const altura = Number(card.alturaVisual) || obtenerAlturaVisualCard(card);
+          const centroMinimo = indice === 0
+            ? MARGEN_SUPERIOR_CONTENIDO_GENERACION + (altura / 2)
+            : limiteCentro + (altura / 2);
+          const centro = Math.max(centroMinimo, propuestos.get(String(card.id)) || centroMinimo);
+          centros.set(String(card.id), centro);
+          limiteCentro = centro + (altura / 2) + ESPACIO_VERTICAL_ENTRE_TARJETAS;
+        });
 
-      lista.forEach((card) => {
-        const alturaVisual = obtenerAlturaVisualCard(card);
-        const topPreferido = MARGEN_SUPERIOR_CONTENIDO_GENERACION +
-          (Number(card.fila) * ESPACIADO_Y) +
-          Math.max(0, (ESPACIADO_Y - alturaVisual) / 2);
-        const topVisual = Math.max(topPreferido, siguienteTopDisponible);
+        // Evita que toda la rama se aleje innecesariamente del borde superior.
+        if (lista.length > 0) {
+          const primera = lista[0];
+          const centroPrimera = centros.get(String(primera.id));
+          const topPrimera = centroPrimera - (primera.alturaVisual / 2);
+          const ajuste = Math.max(0, topPrimera - MARGEN_SUPERIOR_CONTENIDO_GENERACION);
+          if (ajuste > 0) {
+            lista.forEach(card => {
+              centros.set(String(card.id), centros.get(String(card.id)) - ajuste);
+            });
+          }
+        }
+      });
+    }
 
-        card.alturaVisual = alturaVisual;
-        card.topVisual = topVisual;
-        siguienteTopDisponible = topVisual + alturaVisual + ESPACIO_VERTICAL_ENTRE_TARJETAS;
+    agrupadas.forEach((lista) => {
+      lista.forEach((card, indice) => {
+        card.fila = indice;
+        card.topVisual = Math.max(
+          MARGEN_SUPERIOR_CONTENIDO_GENERACION,
+          (centros.get(String(card.id)) || 0) - (card.alturaVisual / 2)
+        );
       });
     });
 
@@ -4343,24 +4519,66 @@ export default function ArbolGenealogico() {
   }, [nodos, filtrosAplicados.generacion]);
 
   const relacionesPadreHijo = useMemo(() => {
-    return hilosActivosFiltrados
+    const agrupadas = new Map();
+
+    hilosActivosFiltrados
       .filter(hilo => hilo.tipoRelacion === 'padre_hijo')
-      .map((hilo) => {
+      .forEach((hilo) => {
         const cardOrigen = cardPorNodoId.get(String(hilo.nodoOrigenId));
         const cardDestino = cardPorNodoId.get(String(hilo.nodoDestinoId));
-        if (!cardOrigen || !cardDestino) return null;
+        if (!cardOrigen || !cardDestino || String(cardOrigen.id) === String(cardDestino.id)) return;
 
-        return {
-          hiloId: hilo.id,
-          genIn: Number(cardOrigen.generacion),
-          genOut: Number(cardDestino.generacion),
-          yIn: obtenerYPersonaEnCard(cardOrigen, hilo.nodoOrigenId),
-          yOut: obtenerYPersonaEnCard(cardDestino, hilo.nodoDestinoId),
-          nodoOrigenId: hilo.nodoOrigenId,
-          nodoDestinoId: hilo.nodoDestinoId
-        };
-      })
-      .filter(Boolean);
+        // Dos relaciones desde los integrantes de una misma pareja hacia el mismo
+        // hijo comparten una sola rama visual, pero conservan ambos hilos reales.
+        const clave = `${cardOrigen.id}|${cardDestino.id}|${hilo.nodoDestinoId}`;
+        if (!agrupadas.has(clave)) {
+          agrupadas.set(clave, {
+            cardOrigen,
+            cardDestino,
+            nodoDestinoId: hilo.nodoDestinoId,
+            padresIds: new Set(),
+            hilosIds: []
+          });
+        }
+
+        const grupo = agrupadas.get(clave);
+        grupo.padresIds.add(String(hilo.nodoOrigenId));
+        grupo.hilosIds.push(hilo.id);
+      });
+
+    return Array.from(agrupadas.values()).map((grupo) => {
+      const { cardOrigen, cardDestino, padresIds, hilosIds, nodoDestinoId } = grupo;
+      const idsPareja = cardOrigen.tipo === 'pareja'
+        ? [cardOrigen.pareja1?.id, cardOrigen.pareja2?.id].filter(Boolean).map(String)
+        : [];
+      const ambosIntegrantesSonPadres = idsPareja.length === 2 &&
+        idsPareja.every(id => padresIds.has(id));
+
+      const puntosPadres = Array.from(padresIds)
+        .map(id => obtenerYPersonaEnCard(cardOrigen, id))
+        .filter(valor => Number.isFinite(valor));
+
+      const yIn = ambosIntegrantesSonPadres
+        ? obtenerTopVisualCard(cardOrigen) + ((Number(cardOrigen.alturaVisual) || obtenerAlturaVisualCard(cardOrigen)) / 2)
+        : (
+          puntosPadres.length > 0
+            ? puntosPadres.reduce((total, valor) => total + valor, 0) / puntosPadres.length
+            : obtenerYPersonaEnCard(cardOrigen, cardOrigen.nodoPrincipalId)
+        );
+
+      return {
+        hiloId: hilosIds[0] || null,
+        hiloIds: hilosIds,
+        familiaKey: String(cardOrigen.id),
+        genIn: Number(cardOrigen.generacion),
+        genOut: Number(cardDestino.generacion),
+        yIn,
+        yOut: obtenerYPersonaEnCard(cardDestino, nodoDestinoId),
+        nodoOrigenId: Array.from(padresIds)[0] || null,
+        nodosOrigenIds: Array.from(padresIds),
+        nodoDestinoId
+      };
+    });
   }, [hilosActivosFiltrados, cardPorNodoId]);
 
   const alturaContenidoActual = useMemo(() => {
@@ -4415,9 +4633,17 @@ export default function ArbolGenealogico() {
     const fotos = Array.isArray(nodo.fotos)
       ? nodo.fotos.map(normalizarFotoNodo).filter(Boolean)
       : [];
+    const fotoLegada = fotos.find(foto => foto.esFotoPerfil === true) || null;
+    const fotoPrincipal = nodo.fotoPerfilNodo
+      ? normalizarFotoNodo({
+          url: nodo.fotoPerfilNodo,
+          fechaSubida: nodo.fotoPerfilNodoActualizadaEn || nodo.updatedAt || new Date().toISOString(),
+          esFotoPerfil: true
+        })
+      : fotoLegada;
 
     return {
-      fotoPrincipal: fotos.find(foto => foto.esFotoPerfil === true) || null,
+      fotoPrincipal,
       fotosGaleria: fotos.filter(foto => foto.esFotoPerfil !== true)
     };
   };
@@ -4605,9 +4831,9 @@ La persona seguirá dentro del árbol como miembro normal.`
     const estaFallecido = Boolean(fechaFallecimiento);
     const fotoPerfil = formularioPerfilSinCuenta.fotoPerfil
       ? normalizarFotoNodo({
-        ...formularioPerfilSinCuenta.fotoPerfil,
-        esFotoPerfil: true
-      })
+          ...formularioPerfilSinCuenta.fotoPerfil,
+          esFotoPerfil: true
+        })
       : null;
 
     const fotosGaleria = formularioPerfilSinCuenta.fotosGaleria
@@ -4616,8 +4842,6 @@ La persona seguirá dentro del árbol como miembro normal.`
         esFotoPerfil: false
       }))
       .filter(Boolean);
-
-    const fotos = [fotoPerfil, ...fotosGaleria].filter(Boolean);
 
     return {
       nombre,
@@ -4635,7 +4859,8 @@ La persona seguirá dentro del árbol como miembro normal.`
       }),
       estaFallecido,
       biografia: descripcion,
-      fotos,
+      fotoPerfilNodo: fotoPerfil ? (obtenerUrlCrudaFoto(fotoPerfil) || fotoPerfil.url || '') : '',
+      fotos: fotosGaleria,
       fotoPerfil: fotoPerfil ? obtenerSrcFoto(fotoPerfil) : null,
       edad: calcularEdad(fechaNacimiento, estaFallecido ? fechaFallecimiento : null),
       estado: 'Incompleto',
@@ -4657,6 +4882,7 @@ La persona seguirá dentro del árbol como miembro normal.`
       fechaCorta: datosPerfil.fechaCorta,
       estaFallecido: datosPerfil.estaFallecido,
       edad: datosPerfil.edad,
+      fotoPerfilNodo: datosPerfil.fotoPerfilNodo || '',
       fotos: datosPerfil.fotos,
       biografia: datosPerfil.biografia,
       estado: datosPerfil.estado
@@ -4797,6 +5023,8 @@ La persona seguirá dentro del árbol como miembro normal.`
       estaFallecido,
       tipo: datosFamiliar.tipo || 'normal',
       estado: datosFamiliar.estado || 'Pendiente',
+      fotoPerfilNodo: datosFamiliar.fotoPerfilNodo || '',
+      fotoPerfil: datosFamiliar.fotoPerfil || resolverUrlImagen(datosFamiliar.fotoPerfilNodo),
       fotos,
       biografia: datosFamiliar.biografia || '',
       origen: datosFamiliar.origen || 'usuario_real'
@@ -4828,6 +5056,7 @@ La persona seguirá dentro del árbol como miembro normal.`
         estado: persona.estado || 'Incompleto',
         generacion,
         fila,
+        fotoPerfilNodo: persona.fotoPerfilNodo || '',
         fotos: Array.isArray(persona.fotos) ? persona.fotos : [],
         biografia: persona.biografia || ''
       })
@@ -5003,6 +5232,7 @@ La persona seguirá dentro del árbol como miembro normal.`
         origen: 'perfil_sin_cuenta',
         generacion: generacionDestino,
         fila: filaDestino,
+        fotoPerfilNodo: personaEnColocacion.fotoPerfilNodo || '',
         fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
         biografia: personaEnColocacion.biografia || '',
         visible: true
@@ -5026,6 +5256,7 @@ La persona seguirá dentro del árbol como miembro normal.`
           estado: 'Incompleto',
           generacion: generacionDestino,
           fila: filaDestino,
+          fotoPerfilNodo: personaEnColocacion.fotoPerfilNodo || '',
           fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
           biografia: personaEnColocacion.biografia || ''
         }
@@ -5084,6 +5315,7 @@ La persona seguirá dentro del árbol como miembro normal.`
         origen: 'perfil_sin_cuenta',
         generacion: personaDestino.generacion,
         fila: personaDestino.fila,
+        fotoPerfilNodo: personaEnColocacion.fotoPerfilNodo || '',
         fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
         biografia: personaEnColocacion.biografia || '',
         visible: true
@@ -5120,6 +5352,7 @@ La persona seguirá dentro del árbol como miembro normal.`
           estado: 'Incompleto',
           generacion: personaDestino.generacion,
           fila: personaDestino.fila,
+          fotoPerfilNodo: personaEnColocacion.fotoPerfilNodo || '',
           fotos: Array.isArray(personaEnColocacion.fotos) ? personaEnColocacion.fotos : [],
           biografia: personaEnColocacion.biografia || ''
         }
@@ -5814,11 +6047,32 @@ La persona seguirá dentro del árbol como miembro normal.`
     );
   };
 
-  const manejarEliminacionLinea = async (hiloId) => {
-    await eliminarRelacionDirecta(
-      hiloId,
-      '¿Deseas eliminar esta relación de descendencia?'
+  const manejarEliminacionLinea = async (hilosIds) => {
+    const ids = Array.from(new Set(
+      (Array.isArray(hilosIds) ? hilosIds : [hilosIds]).filter(Boolean).map(String)
+    ));
+    if (ids.length === 0 || !arbol?._id || procesandoAccionEstructural) return;
+
+    const confirmado = window.confirm(
+      ids.length > 1
+        ? 'Esta rama representa a ambos padres. ¿Deseas eliminar las dos relaciones de descendencia?'
+        : '¿Deseas eliminar esta relación de descendencia?'
     );
+    if (!confirmado) return;
+
+    try {
+      establecerProcesandoAccionEstructural(true);
+      for (const hiloId of ids) {
+        await apiFetch(`/api/hilos/arbol/${arbol._id}/${hiloId}`, { method: 'DELETE' });
+      }
+      establecerMensajeSistema('Relación de descendencia eliminada correctamente.');
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al eliminar relación de descendencia:', error);
+      window.alert(error.message || 'No se pudo eliminar la relación.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
   };
 
 
@@ -6162,46 +6416,124 @@ La persona seguirá dentro del árbol como miembro normal.`
       relacion => Number(relacion.genOut) > Number(generacionConector) + 1
     );
 
-    const agrupadas = {};
+    const agrupadas = new Map();
 
     relacionesQueTerminan.forEach((relacion) => {
-      const key = `${String(relacion.nodoOrigenId)}-${String(Math.round(relacion.yIn))}`;
+      const key = `${relacion.familiaKey}-${Math.round(Number(relacion.yIn))}`;
 
-      if (!agrupadas[key]) {
-        agrupadas[key] = {
+      if (!agrupadas.has(key)) {
+        agrupadas.set(key, {
+          familiaKey: relacion.familiaKey,
           yIn: relacion.yIn,
           salidas: []
-        };
+        });
       }
 
-      agrupadas[key].salidas.push({
+      agrupadas.get(key).salidas.push({
         y: relacion.yOut,
         hiloId: relacion.hiloId,
+        hiloIds: relacion.hiloIds,
         nodoDestinoId: relacion.nodoDestinoId
       });
     });
 
-    const lineasFinales = Object.keys(agrupadas).map(key => (
-      <ConectorDinamico
-        key={`linea-${generacionConector}-${key}`}
-        yIn={agrupadas[key].yIn}
-        salidas={agrupadas[key].salidas}
-        puedeEditar={esUsuarioAdmin}
-        alEliminarLinea={manejarEliminacionLinea}
-      />
-    ));
+    const gruposOrdenados = Array.from(agrupadas.entries())
+      .sort(([, a], [, b]) => Number(a.yIn) - Number(b.yIn));
+    const totalGrupos = gruposOrdenados.length;
 
-    const alturasContinuacion = Array.from(
-      new Set(relacionesQueContinuan.map(relacion => Math.round(Number(relacion.yIn))))
-    );
+    const especificaciones = gruposOrdenados.map(([key, grupo], indice) => {
+      const porcentajeCarril = totalGrupos <= 1
+        ? 50
+        : 30 + ((40 * indice) / Math.max(1, totalGrupos - 1));
+      const ySalidas = grupo.salidas.map(salida => Number(salida.y));
+      const puntosUnion = [Number(grupo.yIn), ...ySalidas];
 
-    const lineasContinuacion = alturasContinuacion.map((altura) => (
-      <div
-        key={`continuacion-conector-${generacionConector}-${altura}`}
+      return {
+        key,
+        grupo,
+        porcentajeCarril,
+        minY: Math.min(...puntosUnion),
+        maxY: Math.max(...puntosUnion),
+        puntosUnion
+      };
+    });
+
+    const obtenerCrucesHorizontales = ({
+      y,
+      inicioX,
+      finX,
+      claveExcluir = null
+    }) => {
+      const yNumero = Number(y);
+      const inicio = Number(inicioX);
+      const fin = Number(finX);
+      const longitud = fin - inicio;
+      if (!Number.isFinite(yNumero) || !Number.isFinite(longitud) || longitud <= 0) return [];
+
+      return especificaciones
+        .filter((otra) => {
+          if (claveExcluir && String(otra.key) === String(claveExcluir)) return false;
+
+          const xCruce = Number(otra.porcentajeCarril);
+          if (xCruce <= inicio + 1 || xCruce >= fin - 1) return false;
+          if (yNumero <= otra.minY + 2 || yNumero >= otra.maxY - 2) return false;
+
+          // Cuando la horizontal toca un extremo real de la otra rama es una unión,
+          // no un cruce; en ese caso no se abre una interrupción visual.
+          return !otra.puntosUnion.some(punto => Math.abs(Number(punto) - yNumero) <= 3);
+        })
+        .map(otra => ((Number(otra.porcentajeCarril) - inicio) / longitud) * 100);
+    };
+
+    const lineasFinales = especificaciones.map((especificacion) => {
+      const { key, grupo, porcentajeCarril } = especificacion;
+      const crucesEntrada = obtenerCrucesHorizontales({
+        y: grupo.yIn,
+        inicioX: 0,
+        finX: porcentajeCarril,
+        claveExcluir: key
+      });
+      const salidasConCruces = grupo.salidas.map((salida) => ({
+        ...salida,
+        cruces: obtenerCrucesHorizontales({
+          y: salida.y,
+          inicioX: porcentajeCarril,
+          finX: 100,
+          claveExcluir: key
+        })
+      }));
+
+      return (
+        <ConectorDinamico
+          key={`linea-${generacionConector}-${key}`}
+          yIn={grupo.yIn}
+          salidas={salidasConCruces}
+          porcentajeCarril={porcentajeCarril}
+          crucesEntrada={crucesEntrada}
+          puedeEditar={esUsuarioAdmin}
+          alEliminarLinea={manejarEliminacionLinea}
+        />
+      );
+    });
+
+    const continuacionesUnicas = new Map();
+    relacionesQueContinuan.forEach((relacion) => {
+      const key = `${relacion.familiaKey}-${Math.round(Number(relacion.yIn))}`;
+      if (!continuacionesUnicas.has(key)) continuacionesUnicas.set(key, relacion);
+    });
+
+    const lineasContinuacion = Array.from(continuacionesUnicas.entries()).map(([key, relacion]) => (
+      <LineaHorizontalConCruces
+        key={`continuacion-conector-${generacionConector}-${key}`}
+        top={Math.round(Number(relacion.yIn))}
         className="linea-continuacion-conector"
-        style={{ top: `${altura}px` }}
-        aria-hidden="true"
-      ></div>
+        cruces={obtenerCrucesHorizontales({
+          y: relacion.yIn,
+          inicioX: 0,
+          finX: 100,
+          claveExcluir: key
+        })}
+      />
     ));
 
     return [...lineasFinales, ...lineasContinuacion];
@@ -6266,6 +6598,9 @@ La persona seguirá dentro del árbol como miembro normal.`
           nodoEnMovimientoId={nodoEnMovimiento?.id || null}
           alSeleccionarMover={seleccionarNodoParaMover}
           alMoverComoPareja={moverNodoComoPareja}
+          puedeCambiarFoto={puedeEditarImagenesNodo}
+          fotoCargandoId={subiendoFotoPerfilNodoId}
+          alSeleccionarFoto={manejarSeleccionFotoPerfilNodo}
         />
       );
     }
@@ -6290,6 +6625,9 @@ La persona seguirá dentro del árbol como miembro normal.`
         nodoEnMovimientoId={nodoEnMovimiento?.id || null}
         alSeleccionarMover={seleccionarNodoParaMover}
         alMoverComoPareja={moverNodoComoPareja}
+        puedeCambiarFoto={puedeEditarImagenesNodo}
+        fotoCargandoId={subiendoFotoPerfilNodoId}
+        alSeleccionarFoto={manejarSeleccionFotoPerfilNodo}
       />
     );
   };
@@ -6547,64 +6885,6 @@ La persona seguirá dentro del árbol como miembro normal.`
     );
   };
 
-  const renderAnimacionConexionesArbol = () => {
-    if (!mostrarAnimacionConexiones) return null;
-
-    const nombreBase = normalizarTexto(
-      nodoAnimacionConexiones?.nombre?.replace(' (Yo)', '') ||
-      usuarioSesion?.nombreUsuario ||
-      'Tu perfil'
-    );
-
-    const fotoPerfilAnimacion = resolverUrlImagen(
-      nodoAnimacionConexiones?.fotoPerfil ||
-      usuarioSesion?.imagenPerfil?.urlArchivo ||
-      usuarioSesion?.imagenPerfil ||
-      null
-    );
-
-    const inicialesAnimacion = nodoAnimacionConexiones?.iniciales || obtenerIniciales(nombreBase);
-
-    return (
-      <div
-        className="overlay-conexiones-arbol"
-        onClick={() => establecerMostrarAnimacionConexiones(false)}
-        role="presentation"
-        aria-hidden="true"
-      >
-        <div className="conexiones-animacion-canvas">
-          <div className="halo-conexion halo-uno"></div>
-          <div className="halo-conexion halo-dos"></div>
-          <div className="halo-conexion halo-tres"></div>
-
-          {Array.from({ length: 8 }).map((_, index) => (
-            <span key={`rama-conexion-${index + 1}`} className={`rama-conexion rama-${index + 1}`}></span>
-          ))}
-
-          {Array.from({ length: 8 }).map((_, index) => (
-            <span key={`punto-conexion-${index + 1}`} className={`punto-conexion punto-${index + 1}`}></span>
-          ))}
-
-          <div className="nodo-central-conexiones">
-            <span className="pulso-nodo-conexion"></span>
-            <div className="avatar-conexion-central">
-              {fotoPerfilAnimacion ? (
-                <img src={fotoPerfilAnimacion} alt={nombreBase} />
-              ) : (
-                <span>{inicialesAnimacion}</span>
-              )}
-            </div>
-            <strong>{nombreBase}</strong>
-          </div>
-
-          <div className="texto-conexiones-arbol">
-            <span>Conectando tu legado</span>
-            <small>Las ramas de tu historia comienzan aquí</small>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderMenuArboles = () => {
     const totalArboles = arbolesDisponibles.length;
@@ -6612,8 +6892,6 @@ La persona seguirá dentro del árbol como miembro normal.`
 
     return (
       <div className="contenedor-arbol menu-arboles-wrapper">
-        {renderAnimacionConexionesArbol()}
-
         {mensajeSistema && (
           <div className="mensaje-colocacion-flotante" style={{ backgroundColor: 'var(--dorado)' }}>
             <span>{mensajeSistema}</span>
@@ -6843,6 +7121,23 @@ La persona seguirá dentro del árbol como miembro normal.`
 
   return (
     <div className="contenedor-arbol">
+
+      {cropperFotoPerfilNodo.abierto && createPortal((
+        <ImageCropperModal
+          abierto={cropperFotoPerfilNodo.abierto}
+          archivo={cropperFotoPerfilNodo.archivo}
+          titulo="Ajustar fotografía del nodo"
+          descripcion="Centra el rostro o la parte más importante. Esta imagen solo se usará dentro de este árbol."
+          aspectRatio={1}
+          forma="circle"
+          outputWidth={640}
+          outputHeight={640}
+          calidad={0.9}
+          sufijoArchivo="foto-nodo"
+          onCancelar={cerrarCropperFotoPerfilNodo}
+          onConfirmar={confirmarFotoPerfilNodo}
+        />
+      ), document.body)}
 
       {cropperPublicacionArbol.abierto && createPortal((
         <ImageCropperModal
@@ -7403,33 +7698,31 @@ La persona seguirá dentro del árbol como miembro normal.`
                     })()}
                   </div>
 
-                  {esUsuarioAdmin && (
+                  {(esUsuarioAdmin || puedeEditarImagenesNodo(nodoSeleccionado)) && (
                     <div className="acciones-perfil-sin-cuenta-panel">
-                      {nodoSeleccionado.origen === 'perfil_sin_cuenta' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => iniciarEditarPerfilSinCuenta(nodoSeleccionado)}
-                            disabled={procesandoAccionEstructural}
-                          >
-                            <i className="bi bi-pencil"></i>
-                            Editar datos
-                          </button>
-
-                          <label className="boton-agregar-foto-nodo">
-                            <i className="bi bi-camera"></i>
-                            Agregar fotografía
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(evento) => handleSeleccionarImagenIndividual(evento, 'galeria', nodoSeleccionado.id)}
-                              disabled={subiendoFoto || procesandoAccionEstructural}
-                            />
-                          </label>
-                        </>
+                      {esUsuarioAdmin && nodoSeleccionado.origen === 'perfil_sin_cuenta' && (
+                        <button
+                          type="button"
+                          onClick={() => iniciarEditarPerfilSinCuenta(nodoSeleccionado)}
+                          disabled={procesandoAccionEstructural}
+                        >
+                          <i className="bi bi-pencil"></i>
+                          Editar datos
+                        </button>
                       )}
 
-                      {nodoSeleccionado.tipo !== 'creador' && (
+                      <label className="boton-agregar-foto-nodo">
+                        <i className="bi bi-images"></i>
+                        Agregar a su galería
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(evento) => handleSeleccionarImagenIndividual(evento, 'galeria', nodoSeleccionado.id)}
+                          disabled={subiendoFoto || procesandoAccionEstructural}
+                        />
+                      </label>
+
+                      {esUsuarioAdmin && nodoSeleccionado.tipo !== 'creador' && (
                         <button
                           type="button"
                           className="peligro"
@@ -7461,7 +7754,7 @@ La persona seguirá dentro del árbol como miembro normal.`
                     {cargandoMomentosFamiliares && fotosMomentosPanel.length === 0 ? (
                       <div className="estado-fotos-momentos-panel">
                         <span className="spinner-border spinner-border-sm"></span>
-                        Cargando Momentos Familiares...
+                        Cargando fotografías del árbol...
                       </div>
                     ) : errorMomentosFamiliares && fotosMomentosPanel.length === 0 ? (
                       <div className="estado-fotos-momentos-panel error">
@@ -7491,7 +7784,7 @@ La persona seguirá dentro del árbol como miembro normal.`
                     ) : (
                       <div className="estado-fotos-momentos-panel vacio">
                         <i className="bi bi-images"></i>
-                        <span>Aún no hay Momentos Familiares con fotos relacionados con esta persona.</span>
+                        <span>Aún no hay fotografías agregadas manualmente para esta persona.</span>
                       </div>
                     )}
                   </div>
@@ -8747,7 +9040,7 @@ La persona seguirá dentro del árbol como miembro normal.`
                   <div className="estado-archivo-familiar">
                     <i className="bi bi-images"></i>
                     <strong>Fotografía del archivo familiar</strong>
-                    <p>Esta imagen pertenece al perfil sin cuenta de {nodoSeleccionado.nombre} y forma parte de sus Momentos Familiares dentro del árbol.</p>
+                    <p>Esta imagen fue agregada manualmente al nodo de {nodoSeleccionado.nombre}; no proviene de sus publicaciones ni de su perfil general.</p>
                   </div>
                 ) : (
                   <>

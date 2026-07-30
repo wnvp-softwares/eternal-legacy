@@ -786,3 +786,55 @@ html[data-theme="dark"] select.input-config {
     }
 }
 
+
+/* =========================================
+   VISIBILIDAD DE CONTRASEÑAS
+   ========================================= */
+.contenedor-password-config {
+    position: relative;
+    width: 100%;
+}
+
+.input-config.input-password-config {
+    width: 100%;
+    padding-right: 3rem;
+}
+
+.boton-visibilidad-password-config {
+    position: absolute;
+    top: 50%;
+    right: 0.6rem;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--texto-secundario);
+    cursor: pointer;
+    transition: color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.boton-visibilidad-password-config:hover {
+    color: var(--dorado-oscuro);
+    background-color: var(--hover-menu);
+}
+
+.boton-visibilidad-password-config:focus-visible {
+    color: var(--dorado-oscuro);
+    outline: 2px solid var(--dorado);
+    outline-offset: 1px;
+}
+
+.boton-visibilidad-password-config:active {
+    transform: translateY(-50%) scale(0.94);
+}
+
+.boton-visibilidad-password-config i {
+    font-size: 1rem;
+    line-height: 1;
+}

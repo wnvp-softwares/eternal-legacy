@@ -10,7 +10,7 @@ import {
   sincronizarLlavesE2EConCuenta
 } from '../utils/e2eCrypto';
 
-const CLAVE_ANIMACION_CONEXIONES_ARBOL = 'legacy_animacion_conexiones_arbol_mostrada';
+const CLAVE_BIENVENIDA_SESION_PENDIENTE = 'legacy_bienvenida_sesion_pendiente';
 const DURACION_CODIGO_SEGUNDOS = 300;
 const ESPERA_REENVIO_SEGUNDOS = 60;
 const ESPERA_VALIDACION_NICKNAME_MS = 450;
@@ -77,6 +77,19 @@ const ESTADO_RECUPERACION_INICIAL = {
   puedePreservarE2E: false
 };
 
+const BotonVisibilidadContrasena = ({ visible, onToggle, etiquetaMostrar = 'Mostrar contraseña' }) => (
+  <button
+    type="button"
+    className="boton-visibilidad-contrasena-login"
+    onClick={onToggle}
+    aria-label={visible ? 'Ocultar contraseña' : etiquetaMostrar}
+    aria-pressed={visible}
+    title={visible ? 'Ocultar contraseña' : etiquetaMostrar}
+  >
+    <i className={`bi ${visible ? 'bi-eye-slash' : 'bi-eye'}`} aria-hidden="true"></i>
+  </button>
+);
+
 export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   const [esLogin, setEsLogin] = useState(true);
   const navigate = useNavigate();
@@ -92,6 +105,20 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
     confirmarPassword: ''
   });
   const [estadoNickname, setEstadoNickname] = useState({ ...ESTADO_NICKNAME_INICIAL });
+  const [visibilidadContrasenas, setVisibilidadContrasenas] = useState({
+    login: false,
+    registro: false,
+    confirmarRegistro: false,
+    recuperacion: false,
+    confirmarRecuperacion: false
+  });
+
+  const alternarVisibilidadContrasena = (campo) => {
+    setVisibilidadContrasenas((prev) => ({
+      ...prev,
+      [campo]: !prev[campo]
+    }));
+  };
 
   // ESTADOS PARA EL MODAL DE ADVERTENCIA Y REGLAS
   const [mostrarModalReglas, setMostrarModalReglas] = useState(false);
@@ -132,6 +159,16 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
     return () => window.clearInterval(intervalo);
   }, [tiempoReenvio]);
 
+
+  useEffect(() => {
+    setVisibilidadContrasenas({
+      login: false,
+      registro: false,
+      confirmarRegistro: false,
+      recuperacion: false,
+      confirmarRecuperacion: false
+    });
+  }, [esLogin, paso]);
 
   useEffect(() => {
     if (esLogin || paso !== 'formulario') {
@@ -210,8 +247,8 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
     return `${min}:${seg < 10 ? '0' : ''}${seg}`;
   };
 
-  const prepararAnimacionEntradaArbol = () => {
-    sessionStorage.removeItem(CLAVE_ANIMACION_CONEXIONES_ARBOL);
+  const prepararBienvenidaSesion = () => {
+    sessionStorage.setItem(CLAVE_BIENVENIDA_SESION_PENDIENTE, 'true');
   };
 
   const prepararCifradoDespuesLogin = async (tokenSesion, usuarioSesion = null) => {
@@ -360,7 +397,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
 
         await prepararCifradoDespuesLogin(datos.token, datos.usuario);
 
-        prepararAnimacionEntradaArbol();
+        prepararBienvenidaSesion();
         navigate(rutaInicial, { replace: true });
       } catch (err) {
         setError(err.message);
@@ -583,7 +620,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
 
       await prepararCifradoDespuesLogin(datos.token, datos.usuario);
 
-      prepararAnimacionEntradaArbol();
+      prepararBienvenidaSesion();
       navigate(rutaInicial, { replace: true });
     } catch (err) {
       setError(err.message);
@@ -884,13 +921,18 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
             <div className="grupo-input-personalizado">
               <i className="bi bi-lock icono-input"></i>
               <input
-                type="password"
+                type={visibilidadContrasenas.recuperacion ? 'text' : 'password'}
                 name="password"
-                className="input-personalizado"
+                className="input-personalizado input-con-boton-visibilidad"
                 placeholder="••••••••"
                 value={formulario.password}
                 onChange={manejarCambio}
                 autoComplete="new-password"
+              />
+              <BotonVisibilidadContrasena
+                visible={visibilidadContrasenas.recuperacion}
+                onToggle={() => alternarVisibilidadContrasena('recuperacion')}
+                etiquetaMostrar="Mostrar nueva contraseña"
               />
             </div>
           </div>
@@ -900,13 +942,18 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
             <div className="grupo-input-personalizado">
               <i className="bi bi-check2-circle icono-input"></i>
               <input
-                type="password"
+                type={visibilidadContrasenas.confirmarRecuperacion ? 'text' : 'password'}
                 name="confirmarPassword"
-                className="input-personalizado"
+                className="input-personalizado input-con-boton-visibilidad"
                 placeholder="••••••••"
                 value={formulario.confirmarPassword}
                 onChange={manejarCambio}
                 autoComplete="new-password"
+              />
+              <BotonVisibilidadContrasena
+                visible={visibilidadContrasenas.confirmarRecuperacion}
+                onToggle={() => alternarVisibilidadContrasena('confirmarRecuperacion')}
+                etiquetaMostrar="Mostrar confirmación de contraseña"
               />
             </div>
           </div>
@@ -1096,15 +1143,19 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
                     <i className="bi bi-lock icono-input" aria-hidden="true"></i>
                     <input
                       id="registro-password"
-                      type="password"
+                      type={visibilidadContrasenas.registro ? 'text' : 'password'}
                       name="password"
-                      className="input-personalizado"
+                      className="input-personalizado input-con-boton-visibilidad"
                       placeholder="••••••••"
                       value={formulario.password}
                       onChange={manejarCambio}
                       autoComplete="new-password"
                       minLength={6}
                       required
+                    />
+                    <BotonVisibilidadContrasena
+                      visible={visibilidadContrasenas.registro}
+                      onToggle={() => alternarVisibilidadContrasena('registro')}
                     />
                   </div>
                 </div>
@@ -1117,15 +1168,20 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
                     <i className="bi bi-check2-circle icono-input" aria-hidden="true"></i>
                     <input
                       id="registro-confirmar-password"
-                      type="password"
+                      type={visibilidadContrasenas.confirmarRegistro ? 'text' : 'password'}
                       name="confirmarPassword"
-                      className="input-personalizado"
+                      className="input-personalizado input-con-boton-visibilidad"
                       placeholder="••••••••"
                       value={formulario.confirmarPassword}
                       onChange={manejarCambio}
                       autoComplete="new-password"
                       minLength={6}
                       required
+                    />
+                    <BotonVisibilidadContrasena
+                      visible={visibilidadContrasenas.confirmarRegistro}
+                      onToggle={() => alternarVisibilidadContrasena('confirmarRegistro')}
+                      etiquetaMostrar="Mostrar confirmación de contraseña"
                     />
                   </div>
                 </div>
@@ -1161,14 +1217,18 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
                   <i className="bi bi-lock icono-input" aria-hidden="true"></i>
                   <input
                     id="login-password"
-                    type="password"
+                    type={visibilidadContrasenas.login ? 'text' : 'password'}
                     name="password"
-                    className="input-personalizado"
+                    className="input-personalizado input-con-boton-visibilidad"
                     placeholder="••••••••"
                     value={formulario.password}
                     onChange={manejarCambio}
                     autoComplete="current-password"
                     required
+                  />
+                  <BotonVisibilidadContrasena
+                    visible={visibilidadContrasenas.login}
+                    onToggle={() => alternarVisibilidadContrasena('login')}
                   />
                 </div>
 

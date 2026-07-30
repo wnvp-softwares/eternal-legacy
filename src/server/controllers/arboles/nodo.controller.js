@@ -90,6 +90,16 @@ const obtenerUrlArchivoSubido = (archivo) => {
     return null;
 };
 
+const normalizarFotoPerfilNodo = (valor = '') => {
+    const url = String(valor || '').trim();
+
+    if (!url || url.startsWith('data:') || url.startsWith('blob:')) {
+        return '';
+    }
+
+    return url;
+};
+
 const normalizarFecha = (valor, valorPorDefecto = null) => {
     if (!valor) return valorPorDefecto;
 
@@ -178,6 +188,7 @@ const prepararGeneracionParaGuardar = async ({ arbolId, generacion, session = nu
 const subirFotoNodo = async (req, res) => {
     try {
         const { arbolId } = req.params;
+        const nodoId = obtenerIdSeguro(req.body?.nodoId);
 
         const arbol = await Arbol.findOne({
             _id: arbolId,
@@ -188,9 +199,24 @@ const subirFotoNodo = async (req, res) => {
             return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
         }
 
-        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
+        const esAdministrador = usuarioPuedeEditarArbol(arbol, req.usuario.id);
+        let esPropietarioNodo = false;
+
+        if (nodoId) {
+            const nodoDestino = await Nodo.findOne({
+                _id: nodoId,
+                arbol: arbolId,
+                visible: true
+            }).select('usuario');
+
+            esPropietarioNodo = Boolean(
+                nodoDestino && sonMismoId(nodoDestino.usuario, req.usuario.id)
+            );
+        }
+
+        if (!esAdministrador && !esPropietarioNodo) {
             return res.status(403).json({
-                mensaje: 'No tienes permiso para subir fotografías a este árbol.'
+                mensaje: 'No tienes permiso para subir fotografías para esta persona.'
             });
         }
 
@@ -223,6 +249,64 @@ const subirFotoNodo = async (req, res) => {
         console.error('❌ Error al subir fotografía del nodo:', error);
         return res.status(500).json({
             mensaje: error.message || 'Error interno al subir la fotografía.'
+        });
+    }
+};
+
+const actualizarFotoPerfilNodo = async (req, res) => {
+    try {
+        const { arbolId, nodoId } = req.params;
+
+        const [arbol, nodo] = await Promise.all([
+            Arbol.findOne({ _id: arbolId, activo: true }),
+            Nodo.findOne({ _id: nodoId, arbol: arbolId, visible: true })
+        ]);
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
+        }
+
+        if (!nodo) {
+            return res.status(404).json({ mensaje: 'La persona seleccionada no existe en el árbol.' });
+        }
+
+        const puedeAdministrar = usuarioPuedeEditarArbol(arbol, req.usuario.id);
+        const esNodoPropio = sonMismoId(nodo.usuario, req.usuario.id);
+
+        if (!puedeAdministrar && !esNodoPropio) {
+            return res.status(403).json({
+                mensaje: 'Solo puedes cambiar la fotografía de tu propio nodo.'
+            });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ mensaje: 'Selecciona una fotografía.' });
+        }
+
+        if (!String(req.file.mimetype || '').startsWith('image/')) {
+            return res.status(400).json({ mensaje: 'El archivo seleccionado no es una imagen válida.' });
+        }
+
+        const url = normalizarFotoPerfilNodo(obtenerUrlArchivoSubido(req.file));
+        if (!url) {
+            return res.status(500).json({
+                mensaje: 'La imagen se recibió, pero no fue posible obtener su URL pública.'
+            });
+        }
+
+        nodo.fotoPerfilNodo = url;
+        nodo.fotoPerfilNodoActualizadaEn = new Date();
+        await nodo.save();
+
+        return res.status(200).json({
+            mensaje: 'Fotografía del nodo actualizada correctamente.',
+            url,
+            nodo
+        });
+    } catch (error) {
+        console.error('❌ Error al actualizar la fotografía del nodo:', error);
+        return res.status(500).json({
+            mensaje: error.message || 'No se pudo actualizar la fotografía del nodo.'
         });
     }
 };
@@ -263,7 +347,7 @@ const obtenerNodosPorArbol = async (req, res) => {
                     },
                     {
                         path: 'informacionPerfil',
-                        select: 'biografia fechaNacimiento lugarNacimiento ubicacionActual ocupacionEducacion'
+                        select: 'biografia fechaNacimiento lugarNacimiento ubicacionActual ocupacionEducacion genero'
                     }
                 ]
             })
@@ -315,7 +399,7 @@ const obtenerDetalleNodo = async (req, res) => {
                 },
                 {
                     path: 'informacionPerfil',
-                    select: 'biografia fechaNacimiento lugarNacimiento ubicacionActual ocupacionEducacion'
+                    select: 'biografia fechaNacimiento lugarNacimiento ubicacionActual ocupacionEducacion genero'
                 }
             ]
         });
@@ -396,6 +480,7 @@ const crearPerfilSinCuenta = async (req, res) => {
             estado = 'Incompleto',
             generacion,
             fila,
+            fotoPerfilNodo = '',
             fotos = [],
             biografia = '',
             perfilPrivado = false
@@ -457,6 +542,8 @@ const crearPerfilSinCuenta = async (req, res) => {
                 origen: 'perfil_sin_cuenta',
                 generacion: resultadoGeneracion.generacion,
                 fila: resultadoFila.valor,
+                fotoPerfilNodo: normalizarFotoPerfilNodo(fotoPerfilNodo),
+                fotoPerfilNodoActualizadaEn: fotoPerfilNodo ? new Date() : null,
                 fotos: fotosFormateadas,
                 biografia,
                 perfilPrivado,
@@ -494,12 +581,6 @@ const actualizarNodo = async (req, res) => {
             return res.status(404).json({ mensaje: 'Árbol no encontrado' });
         }
 
-        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
-            return res.status(403).json({
-                mensaje: 'No tienes permiso para editar este árbol.'
-            });
-        }
-
         await normalizarGeneracionesPersistidas(arbolId);
 
         const nodo = await Nodo.findOne({
@@ -510,6 +591,27 @@ const actualizarNodo = async (req, res) => {
 
         if (!nodo) {
             return res.status(404).json({ mensaje: 'Nodo no encontrado' });
+        }
+
+        const esAdministrador = usuarioPuedeEditarArbol(arbol, req.usuario.id);
+        const esNodoPropio = sonMismoId(nodo.usuario, req.usuario.id);
+
+        if (!esAdministrador && !esNodoPropio) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para editar esta persona.'
+            });
+        }
+
+        if (!esAdministrador) {
+            const camposPropiosPermitidos = new Set(['fotos', 'fotoPerfilNodo']);
+            const campoNoPermitido = Object.keys(req.body || {})
+                .find(campo => !camposPropiosPermitidos.has(campo));
+
+            if (campoNoPermitido) {
+                return res.status(403).json({
+                    mensaje: 'Solo puedes administrar las imágenes de tu propio nodo.'
+                });
+            }
         }
 
         const camposPermitidos = [
@@ -555,6 +657,11 @@ const actualizarNodo = async (req, res) => {
             }
 
             nodo.fila = resultadoFila.valor;
+        }
+
+        if (req.body.fotoPerfilNodo !== undefined) {
+            nodo.fotoPerfilNodo = normalizarFotoPerfilNodo(req.body.fotoPerfilNodo);
+            nodo.fotoPerfilNodoActualizadaEn = nodo.fotoPerfilNodo ? new Date() : null;
         }
 
         if (req.body.fotos !== undefined) {
@@ -742,6 +849,7 @@ const eliminarNodo = async (req, res) => {
 
 module.exports = {
     subirFotoNodo,
+    actualizarFotoPerfilNodo,
     obtenerNodosPorArbol,
     obtenerDetalleNodo,
     crearPerfilSinCuenta,

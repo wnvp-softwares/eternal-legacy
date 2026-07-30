@@ -106,6 +106,19 @@ const nodoSchema = new mongoose.Schema({
         }
     },
 
+    // Fotografía exclusiva del nodo dentro del árbol. No forma parte del carrusel
+    // ni modifica la imagen general de una cuenta vinculada.
+    fotoPerfilNodo: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+
+    fotoPerfilNodoActualizadaEn: {
+        type: Date,
+        default: null
+    },
+
     fotos: [{
         url: { type: String, required: true },
         fechaSubida: { type: Date, default: Date.now },
@@ -113,7 +126,7 @@ const nodoSchema = new mongoose.Schema({
         personas: { type: String, default: '' },
         lugar: { type: String, default: '' },
         descripcion: { type: String, default: '' },
-        // Solo una fotografía por nodo puede tener este valor en true.
+        // Campo legado: las nuevas fotografías de perfil usan fotoPerfilNodo y no la galería.
         esFotoPerfil: { type: Boolean, default: false }
     }],
 

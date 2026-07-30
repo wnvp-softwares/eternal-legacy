@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './Layout.css';
@@ -7,6 +8,7 @@ import { API_BASE_URL, resolverUrlBackend } from '../config/env';
 import { trackearEvento } from '../utils/telemetria';
 
 const CLAVE_BUSQUEDAS_RECIENTES = 'legacy_busquedas_recientes';
+const CLAVE_BIENVENIDA_SESION_PENDIENTE = 'legacy_bienvenida_sesion_pendiente';
 
 const normalizarTexto = (texto = '') => String(texto || '').trim();
 
@@ -162,6 +164,9 @@ export default function Layout() {
   const navigate = useNavigate();
   const contenedorBusquedaRef = useRef(null);
   const inputBusquedaMovilRef = useRef(null);
+  const textareaSoporteRef = useRef(null);
+  const modalSoporteRef = useRef(null);
+  const botonSoporteOrigenRef = useRef(null);
 
   const [dropdownAbierto, setDropdownAbierto] = useState(false);
   const [textoBusqueda, setTextoBusqueda] = useState('');
@@ -177,6 +182,11 @@ export default function Layout() {
   const [mensajesNoLeidos, setMensajesNoLeidos] = useState(0);
   const [indicadoresNavegacion, setIndicadoresNavegacion] = useState(INDICADORES_NAVEGACION_INICIALES);
   const [usuarioLogueado, setUsuarioLogueado] = useState(leerUsuarioSesion);
+  const [modalSoporteAbierto, setModalSoporteAbierto] = useState(false);
+  const [formSoporte, setFormSoporte] = useState({ tipo: 'Sugerencia', mensaje: '' });
+  const [enviandoSoporte, setEnviandoSoporte] = useState(false);
+  const [mensajeSoporte, setMensajeSoporte] = useState('');
+  const [errorSoporte, setErrorSoporte] = useState('');
 
   const token = localStorage.getItem('token');
   const queryBusqueda = textoBusqueda.trim();
@@ -260,6 +270,68 @@ export default function Layout() {
     });
   };
 
+  const abrirModalSoporte = (evento) => {
+    botonSoporteOrigenRef.current = evento?.currentTarget || document.activeElement;
+    setDropdownAbierto(false);
+    cerrarBuscador();
+    setMensajeSoporte('');
+    setErrorSoporte('');
+    setModalSoporteAbierto(true);
+  };
+
+  const cerrarModalSoporte = () => {
+    if (enviandoSoporte) return;
+    setModalSoporteAbierto(false);
+    setMensajeSoporte('');
+    setErrorSoporte('');
+    window.setTimeout(() => botonSoporteOrigenRef.current?.focus?.(), 0);
+  };
+
+  const enviarSoporte = async (evento) => {
+    evento.preventDefault();
+    const mensaje = normalizarTexto(formSoporte.mensaje);
+
+    if (!mensaje) {
+      setErrorSoporte('Cuéntanos brevemente cómo podemos ayudarte o qué te gustaría mejorar.');
+      return;
+    }
+
+    if (!token) {
+      setErrorSoporte('Tu sesión terminó. Inicia sesión nuevamente para enviar el mensaje.');
+      return;
+    }
+
+    try {
+      setEnviandoSoporte(true);
+      setErrorSoporte('');
+      setMensajeSoporte('');
+
+      const respuesta = await fetch(`${API_BASE_URL}/usuarios/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          tipo: formSoporte.tipo,
+          mensaje
+        })
+      });
+
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) {
+        throw new Error(datos.mensaje || 'No pudimos enviar tu mensaje. Intenta nuevamente.');
+      }
+
+      setFormSoporte(prev => ({ ...prev, mensaje: '' }));
+      setMensajeSoporte(datos.mensaje || 'Gracias. Tu mensaje fue enviado al equipo de Legacy.');
+    } catch (error) {
+      setErrorSoporte(error.message || 'No pudimos enviar tu mensaje.');
+    } finally {
+      setEnviandoSoporte(false);
+    }
+  };
+
   const abrirBuscadorMovil = () => {
     setDropdownAbierto(false);
     setBusquedaMovilAbierta(true);
@@ -313,6 +385,54 @@ export default function Layout() {
 
     return () => clearTimeout(timer);
   }, [busquedaMovilAbierta]);
+
+  useEffect(() => {
+    if (!modalSoporteAbierto) return undefined;
+
+    const overflowPrevio = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const temporizadorFoco = window.setTimeout(() => {
+      textareaSoporteRef.current?.focus();
+    }, 80);
+
+    const manejarTecladoSoporte = (evento) => {
+      if (evento.key === 'Escape' && !enviandoSoporte) {
+        cerrarModalSoporte();
+        return;
+      }
+
+      if (evento.key !== 'Tab') return;
+
+      const modal = modalSoporteRef.current;
+      if (!modal) return;
+
+      const elementos = Array.from(modal.querySelectorAll(
+        'button:not([disabled]), select:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter(elemento => elemento.offsetParent !== null);
+
+      if (elementos.length === 0) return;
+
+      const primero = elementos[0];
+      const ultimo = elementos[elementos.length - 1];
+
+      if (evento.shiftKey && document.activeElement === primero) {
+        evento.preventDefault();
+        ultimo.focus();
+      } else if (!evento.shiftKey && document.activeElement === ultimo) {
+        evento.preventDefault();
+        primero.focus();
+      }
+    };
+
+    document.addEventListener('keydown', manejarTecladoSoporte);
+
+    return () => {
+      window.clearTimeout(temporizadorFoco);
+      document.body.style.overflow = overflowPrevio;
+      document.removeEventListener('keydown', manejarTecladoSoporte);
+    };
+  }, [modalSoporteAbierto, enviandoSoporte]);
 
   useEffect(() => {
     const manejarClickFuera = (evento) => {
@@ -647,12 +767,12 @@ export default function Layout() {
     <div className="layout-principal">
       {/* NAVBAR SUPERIOR */}
       <nav className="navbar-superior d-flex align-items-center justify-content-between px-3 px-md-4 border-bottom">
-        <div className="d-flex align-items-center gap-2" style={{ width: '250px' }}>
+        <div className="marca-nav-principal d-flex align-items-center gap-2">
           <i className="bi bi-infinity icono-logo"></i>
           <span className="fuente-elegante fw-bold logo-texto d-none d-sm-block">Legacy</span>
         </div>
 
-        <div className="flex-grow-1 d-flex justify-content-center d-none d-md-flex">
+        <div className="zona-busqueda-nav flex-grow-1 d-flex justify-content-center d-none d-md-flex">
           <div className="contenedor-busqueda" ref={contenedorBusquedaRef}>
             <i className="bi bi-search icono-busqueda"></i>
             <input
@@ -696,6 +816,16 @@ export default function Layout() {
             aria-label="Abrir búsqueda"
           >
             <i className="bi bi-search"></i>
+          </button>
+
+          <button
+            type="button"
+            className="position-relative iconos-nav indicador-nav-superior boton-soporte-nav-superior d-xl-none"
+            onClick={abrirModalSoporte}
+            aria-label="Abrir soporte y sugerencias"
+            title="Soporte y sugerencias"
+          >
+            <i className="bi bi-life-preserver" aria-hidden="true"></i>
           </button>
 
           {/* --- INDICADORES RÁPIDOS --- */}
@@ -765,6 +895,7 @@ export default function Layout() {
                     setDropdownAbierto(false);
                     localStorage.removeItem('token');
                     localStorage.removeItem('usuario');
+                    sessionStorage.removeItem(CLAVE_BIENVENIDA_SESION_PENDIENTE);
                     window.location.href = '/login';
                   }}
                 >
@@ -851,6 +982,14 @@ export default function Layout() {
 
           <Link to="/perfil" className={`item-menu ${esActiva('/perfil') ? 'activo' : ''}`}><i className="bi bi-person"></i> Perfil</Link>
           <Link to="/configuracion" className={`item-menu ${esActiva('/configuracion') ? 'activo' : ''}`}><i className="bi bi-gear"></i> Configuración</Link>
+          <button
+            type="button"
+            className="item-menu item-menu-soporte"
+            onClick={abrirModalSoporte}
+          >
+            <i className="bi bi-chat-right-heart" aria-hidden="true"></i>
+            Soporte y sugerencias
+          </button>
         </aside>
 
         {/* MENÚ INFERIOR MÓVIL */}
@@ -902,6 +1041,126 @@ export default function Layout() {
           <Outlet context={{ textoBusqueda }} />
         </main>
       </div>
+
+      {modalSoporteAbierto && createPortal(
+        <div
+          className="modal-soporte-global-backdrop"
+          role="presentation"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) cerrarModalSoporte();
+          }}
+        >
+          <section
+            ref={modalSoporteRef}
+            className="modal-soporte-global"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-modal-soporte"
+            aria-describedby="descripcion-modal-soporte"
+          >
+            <header className="modal-soporte-global-header">
+              <div className="modal-soporte-global-icono" aria-hidden="true">
+                <i className="bi bi-chat-right-heart-fill"></i>
+              </div>
+              <div>
+                <span>Estamos para escucharte</span>
+                <h2 id="titulo-modal-soporte">Soporte y sugerencias</h2>
+                <p id="descripcion-modal-soporte">
+                  Comparte una duda, un problema o una idea para seguir construyendo Legacy contigo.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal-soporte-global-cerrar"
+                onClick={cerrarModalSoporte}
+                disabled={enviandoSoporte}
+                aria-label="Cerrar soporte"
+              >
+                <i className="bi bi-x-lg" aria-hidden="true"></i>
+              </button>
+            </header>
+
+            <form className="modal-soporte-global-form" onSubmit={enviarSoporte}>
+              <div className="modal-soporte-campo">
+                <label htmlFor="tipo-soporte-global">Tipo de mensaje</label>
+                <select
+                  id="tipo-soporte-global"
+                  value={formSoporte.tipo}
+                  onChange={(evento) => setFormSoporte(prev => ({ ...prev, tipo: evento.target.value }))}
+                  disabled={enviandoSoporte}
+                >
+                  <option value="Sugerencia">Sugerencia</option>
+                  <option value="Problema">Reportar un problema</option>
+                  <option value="Pregunta">Pregunta</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+
+              <div className="modal-soporte-campo">
+                <label htmlFor="mensaje-soporte-global">Mensaje</label>
+                <textarea
+                  ref={textareaSoporteRef}
+                  id="mensaje-soporte-global"
+                  rows="6"
+                  maxLength="2000"
+                  value={formSoporte.mensaje}
+                  onChange={(evento) => {
+                    setFormSoporte(prev => ({ ...prev, mensaje: evento.target.value }));
+                    if (errorSoporte) setErrorSoporte('');
+                  }}
+                  placeholder="Escribe aquí lo que deseas compartir..."
+                  disabled={enviandoSoporte}
+                ></textarea>
+                <span className="modal-soporte-contador">{formSoporte.mensaje.length}/2000</span>
+              </div>
+
+              <div className="modal-soporte-mensajes" aria-live="polite">
+                {errorSoporte && (
+                  <p className="modal-soporte-alerta error">
+                    <i className="bi bi-exclamation-circle" aria-hidden="true"></i>
+                    {errorSoporte}
+                  </p>
+                )}
+                {mensajeSoporte && (
+                  <p className="modal-soporte-alerta exito">
+                    <i className="bi bi-check-circle" aria-hidden="true"></i>
+                    {mensajeSoporte}
+                  </p>
+                )}
+              </div>
+
+              <div className="modal-soporte-global-acciones">
+                <button
+                  type="button"
+                  className="boton-soporte-secundario"
+                  onClick={cerrarModalSoporte}
+                  disabled={enviandoSoporte}
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="submit"
+                  className="boton-soporte-primario"
+                  disabled={enviandoSoporte || !normalizarTexto(formSoporte.mensaje)}
+                >
+                  {enviandoSoporte ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <span>Enviar mensaje</span>
+                      <i className="bi bi-send" aria-hidden="true"></i>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

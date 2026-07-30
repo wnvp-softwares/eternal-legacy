@@ -6,6 +6,7 @@ const upload = require('../../configs/multer.config');
 
 const {
     subirFotoNodo,
+    actualizarFotoPerfilNodo,
     obtenerNodosPorArbol,
     obtenerDetalleNodo,
     crearPerfilSinCuenta,
@@ -20,6 +21,14 @@ router.post(
     verificarToken,
     upload.single('archivo'),
     subirFotoNodo
+);
+
+// Cambiar la fotografía exclusiva del círculo de un nodo.
+router.post(
+    '/arbol/:arbolId/:nodoId/foto-perfil',
+    verificarToken,
+    upload.single('archivo'),
+    actualizarFotoPerfilNodo
 );
 
 // Obtener todos los nodos/personas de un árbol

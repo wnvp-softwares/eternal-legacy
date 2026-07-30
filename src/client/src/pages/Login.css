@@ -895,3 +895,50 @@ html[data-bs-theme="dark"] .contenedor-login .input-fecha-registro,
         margin-bottom: 0.48rem;
     }
 }
+
+/* =========================================================
+   VISIBILIDAD DE CONTRASEÑAS
+   ========================================================= */
+.contenedor-login .input-con-boton-visibilidad {
+    padding-right: 3rem;
+}
+
+.contenedor-login .boton-visibilidad-contrasena-login {
+    position: absolute;
+    top: 50%;
+    right: 0.65rem;
+    z-index: 4;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--texto-secundario);
+    cursor: pointer;
+    transition: color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.contenedor-login .boton-visibilidad-contrasena-login:hover {
+    color: var(--dorado-oscuro);
+    background-color: var(--hover-menu);
+}
+
+.contenedor-login .boton-visibilidad-contrasena-login:focus-visible {
+    color: var(--dorado-oscuro);
+    outline: 2px solid var(--dorado);
+    outline-offset: 1px;
+}
+
+.contenedor-login .boton-visibilidad-contrasena-login:active {
+    transform: translateY(-50%) scale(0.94);
+}
+
+.contenedor-login .boton-visibilidad-contrasena-login i {
+    font-size: 1rem;
+    line-height: 1;
+}

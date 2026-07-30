@@ -120,6 +120,18 @@ export default function Configuracion() {
     nuevaContrasena: '',
     confirmarContrasena: ''
   });
+  const [visibilidadSeguridad, setVisibilidadSeguridad] = useState({
+    contrasenaActual: false,
+    nuevaContrasena: false,
+    confirmarContrasena: false
+  });
+
+  const alternarVisibilidadSeguridad = (campo) => {
+    setVisibilidadSeguridad((prev) => ({
+      ...prev,
+      [campo]: !prev[campo]
+    }));
+  };
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [cargando2FAEstado, setCargando2FAEstado] = useState(false);
   const [guardandoSeguridad, setGuardandoSeguridad] = useState(false);
@@ -138,14 +150,6 @@ export default function Configuracion() {
   // Estado informativo de Apariencia. El tema se administra globalmente desde PreferenciasContext.
   const [mensajeApariencia, setMensajeApariencia] = useState('');
 
-  // 1. Agregar estados en la parte superior de Configuracion Component
-  const [formSoporte, setFormSoporte] = useState({
-    tipo: 'Sugerencia',
-    mensaje: ''
-  });
-  const [enviandoSoporte, setEnviandoSoporte] = useState(false);
-  const [mensajeSoporte, setMensajeSoporte] = useState('');
-  const [errorSoporte, setErrorSoporte] = useState('');
 
   const token = localStorage.getItem('token');
   const zonasParaSelector = zonasHorariasDisponibles.length > 0
@@ -214,34 +218,6 @@ export default function Configuracion() {
     }
   };
 
-  const enviarSoporte = async (e) => {
-    e.preventDefault();
-    if (!formSoporte.mensaje.trim()) {
-      setErrorSoporte('Por favor, escribe un comentario o descripción antes de enviar.');
-      return;
-    }
-
-    try {
-      setEnviandoSoporte(true);
-      setErrorSoporte('');
-      setMensajeSoporte('');
-
-      const data = await apiFetch('/api/usuarios/feedback', {
-        method: 'POST',
-        body: JSON.stringify({
-          tipo: formSoporte.tipo,
-          mensaje: formSoporte.mensaje
-        })
-      });
-
-      setMensajeSoporte(data.mensaje || '¡Gracias por tus comentarios!');
-      setFormSoporte({ tipo: 'Sugerencia', mensaje: '' });
-    } catch (error) {
-      setErrorSoporte(error.message || 'No se pudo enviar tu recomendación.');
-    } finally {
-      setEnviandoSoporte(false);
-    }
-  };
 
   // Función para sincronizar de inmediato al entrar a la sección de Seguridad
   const verificarEstado2FA = async () => {
@@ -378,6 +354,11 @@ export default function Configuracion() {
       });
       setMensajeSeguridad(data.mensaje || 'Contraseña actualizada correctamente.');
       setFormSeguridad({ contrasenaActual: '', nuevaContrasena: '', confirmarContrasena: '' });
+      setVisibilidadSeguridad({
+        contrasenaActual: false,
+        nuevaContrasena: false,
+        confirmarContrasena: false
+      });
     } catch (error) {
       setErrorSeguridad(error.message || 'Error al intentar actualizar la contraseña.');
     } finally {
@@ -710,17 +691,74 @@ export default function Configuracion() {
 
             <form onSubmit={manejarCambioContrasena}>
               <div className="grupo-form">
-                <label className="label-form">Contraseña Actual</label>
-                <input type="password" className="input-config" placeholder="••••••••" value={formSeguridad.contrasenaActual} onChange={(e) => setFormSeguridad({ ...formSeguridad, contrasenaActual: e.target.value })} />
+                <label className="label-form" htmlFor="config-contrasena-actual">Contraseña Actual</label>
+                <div className="contenedor-password-config">
+                  <input
+                    id="config-contrasena-actual"
+                    type={visibilidadSeguridad.contrasenaActual ? 'text' : 'password'}
+                    className="input-config input-password-config"
+                    placeholder="••••••••"
+                    value={formSeguridad.contrasenaActual}
+                    onChange={(e) => setFormSeguridad({ ...formSeguridad, contrasenaActual: e.target.value })}
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    className="boton-visibilidad-password-config"
+                    onClick={() => alternarVisibilidadSeguridad('contrasenaActual')}
+                    aria-label={visibilidadSeguridad.contrasenaActual ? 'Ocultar contraseña actual' : 'Mostrar contraseña actual'}
+                    aria-pressed={visibilidadSeguridad.contrasenaActual}
+                  >
+                    <i className={`bi ${visibilidadSeguridad.contrasenaActual ? 'bi-eye-slash' : 'bi-eye'}`} aria-hidden="true"></i>
+                  </button>
+                </div>
               </div>
               <div className="row">
                 <div className="col-12 col-md-6 grupo-form">
-                  <label className="label-form">Nueva Contraseña</label>
-                  <input type="password" className="input-config" placeholder="••••••••" value={formSeguridad.nuevaContrasena} onChange={(e) => setFormSeguridad({ ...formSeguridad, nuevaContrasena: e.target.value })} />
+                  <label className="label-form" htmlFor="config-nueva-contrasena">Nueva Contraseña</label>
+                  <div className="contenedor-password-config">
+                    <input
+                      id="config-nueva-contrasena"
+                      type={visibilidadSeguridad.nuevaContrasena ? 'text' : 'password'}
+                      className="input-config input-password-config"
+                      placeholder="••••••••"
+                      value={formSeguridad.nuevaContrasena}
+                      onChange={(e) => setFormSeguridad({ ...formSeguridad, nuevaContrasena: e.target.value })}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="boton-visibilidad-password-config"
+                      onClick={() => alternarVisibilidadSeguridad('nuevaContrasena')}
+                      aria-label={visibilidadSeguridad.nuevaContrasena ? 'Ocultar nueva contraseña' : 'Mostrar nueva contraseña'}
+                      aria-pressed={visibilidadSeguridad.nuevaContrasena}
+                    >
+                      <i className={`bi ${visibilidadSeguridad.nuevaContrasena ? 'bi-eye-slash' : 'bi-eye'}`} aria-hidden="true"></i>
+                    </button>
+                  </div>
                 </div>
                 <div className="col-12 col-md-6 grupo-form">
-                  <label className="label-form">Confirmar Nueva Contraseña</label>
-                  <input type="password" className="input-config" placeholder="••••••••" value={formSeguridad.confirmarContrasena} onChange={(e) => setFormSeguridad({ ...formSeguridad, confirmarContrasena: e.target.value })} />
+                  <label className="label-form" htmlFor="config-confirmar-contrasena">Confirmar Nueva Contraseña</label>
+                  <div className="contenedor-password-config">
+                    <input
+                      id="config-confirmar-contrasena"
+                      type={visibilidadSeguridad.confirmarContrasena ? 'text' : 'password'}
+                      className="input-config input-password-config"
+                      placeholder="••••••••"
+                      value={formSeguridad.confirmarContrasena}
+                      onChange={(e) => setFormSeguridad({ ...formSeguridad, confirmarContrasena: e.target.value })}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="boton-visibilidad-password-config"
+                      onClick={() => alternarVisibilidadSeguridad('confirmarContrasena')}
+                      aria-label={visibilidadSeguridad.confirmarContrasena ? 'Ocultar confirmación de contraseña' : 'Mostrar confirmación de contraseña'}
+                      aria-pressed={visibilidadSeguridad.confirmarContrasena}
+                    >
+                      <i className={`bi ${visibilidadSeguridad.confirmarContrasena ? 'bi-eye-slash' : 'bi-eye'}`} aria-hidden="true"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="d-flex justify-content-end mt-4">
@@ -915,69 +953,6 @@ export default function Configuracion() {
           </>
         );
 
-      case 'soporte':
-        return (
-          <>
-            <h3 className="fuente-elegante titulo-panel fs-4">Envíanos tus recomendaciones</h3>
-            <p className="ayuda-configuracion mb-4">
-              ¿Tienes sugerencias para mejorar Legacy o encontraste un error en la plataforma? Déjanos tu mensaje.
-            </p>
-
-            {mensajeSoporte && (
-              <div className="alerta-configuracion exito">
-                <i className="bi bi-check-circle-fill"></i>
-                <span>{mensajeSoporte}</span>
-              </div>
-            )}
-            {errorSoporte && (
-              <div className="alerta-configuracion error">
-                <i className="bi bi-exclamation-triangle-fill"></i>
-                <span>{errorSoporte}</span>
-              </div>
-            )}
-
-            <form onSubmit={enviarSoporte}>
-              <div className="grupo-form">
-                <label className="label-form">Tipo de mensaje</label>
-                <select
-                  className="input-config"
-                  value={formSoporte.tipo}
-                  onChange={(e) => setFormSoporte({ ...formSoporte, tipo: e.target.value })}
-                >
-                  <option value="Sugerencia">Sugerencia / Recomendación</option>
-                  <option value="Bug">Reporte de Bug o Fallo</option>
-                  <option value="Otro">Otro comentario</option>
-                </select>
-              </div>
-
-              <div className="grupo-form">
-                <label className="label-form">Envíanos tus recomendaciones</label>
-                <textarea
-                  className="input-config"
-                  rows={5}
-                  value={formSoporte.mensaje}
-                  onChange={(e) => setFormSoporte({ ...formSoporte, mensaje: e.target.value })}
-                  placeholder="Escribe aquí lo que nos quieras recomendar o reportar..."
-                ></textarea>
-              </div>
-
-              <div className="d-flex justify-content-end mt-4">
-                <button className="boton-guardar" type="submit" disabled={enviandoSoporte}>
-                  {enviandoSoporte ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                      Enviando...
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-send me-2"></i>Enviar mensaje
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </>
-        );
       default:
   return null;
 }
@@ -994,12 +969,6 @@ return (
           <button className={`item-configuracion ${seccionActiva === 'seguridad' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('seguridad')}><i className="bi bi-key"></i> {t('menu_seguridad')}</button>
           <button className={`item-configuracion ${seccionActiva === 'idioma' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('idioma')}><i className="bi bi-globe"></i> {t('menu_idioma')}</button>
           <button className={`item-configuracion ${seccionActiva === 'apariencia' ? 'activo' : ''}`} onClick={() => solicitarCambioSeccion('apariencia')}><i className="bi bi-palette"></i> {t('menu_apariencia')}</button>
-          <button
-            className={`item-configuracion ${seccionActiva === 'soporte' ? 'activo' : ''}`}
-            onClick={() => solicitarCambioSeccion('soporte')}
-          >
-            <i className="bi bi-chat-right-heart"></i> Soporte y Sugerencias
-          </button>
         </aside>
         <main className="panel-configuracion">{renderContenido()}</main>
       </div>
