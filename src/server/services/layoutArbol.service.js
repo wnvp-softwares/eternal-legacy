@@ -345,6 +345,7 @@ const moverNodoAtomico = async ({
     generacionDestino,
     filaDestino = null,
     parejaDestinoId = null,
+    moverParejaCompleta = false,
     creadoPor
 }) => ejecutarOperacionLayout(async (session) => {
     await normalizarGeneracionesPersistidas({ arbolId, session });
@@ -375,7 +376,76 @@ const moverNodoAtomico = async ({
         session
     });
 
-    if (parejaDestinoId) {
+    if (moverParejaCompleta) {
+        if (!unionActual) {
+            const error = new Error('La persona seleccionada ya no forma parte de una pareja activa.');
+            error.status = 409;
+            throw error;
+        }
+
+        const parejaId = sonMismoId(unionActual.nodoOrigen, nodoId)
+            ? unionActual.nodoDestino
+            : unionActual.nodoOrigen;
+        const consultaParejaActual = Nodo.findOne({
+            _id: parejaId,
+            arbol: arbolId,
+            visible: true
+        });
+        if (session) consultaParejaActual.session(session);
+        parejaDestino = await consultaParejaActual;
+
+        if (!parejaDestino) {
+            const error = new Error('No se encontró al otro integrante de la pareja.');
+            error.status = 409;
+            throw error;
+        }
+
+        const destino = await prepararGeneracionObjetivo({
+            arbolId,
+            generacion: generacionDestino,
+            session
+        });
+
+        if (destino.desplazamiento > 0) {
+            generacionOrigen += destino.desplazamiento;
+        }
+
+        generacionFinal = destino.generacion;
+        const indiceDestino = convertirEntero(filaDestino);
+
+        if (indiceDestino !== null && indiceDestino < 0) {
+            const error = new Error('La posición de destino debe ser un número entero mayor o igual a cero.');
+            error.status = 400;
+            throw error;
+        }
+
+        nodo.generacion = generacionFinal;
+        nodo.fila = Number.MAX_SAFE_INTEGER;
+        nodo.posicionManual = true;
+        parejaDestino.generacion = generacionFinal;
+        parejaDestino.fila = Number.MAX_SAFE_INTEGER;
+        parejaDestino.posicionManual = true;
+        await nodo.save(opcionesSesion(session));
+        await parejaDestino.save(opcionesSesion(session));
+
+        if (generacionOrigen !== generacionFinal) {
+            await normalizarFilasGeneracion({
+                arbolId,
+                generacion: generacionOrigen,
+                session
+            });
+        }
+
+        await normalizarFilasGeneracion({
+            arbolId,
+            generacion: generacionFinal,
+            nodoPrioritarioId: nodoId,
+            indiceDestino,
+            session
+        });
+
+        unionFinal = unionActual;
+    } else if (parejaDestinoId) {
         if (sonMismoId(nodoId, parejaDestinoId)) {
             const error = new Error('No puedes unir una persona consigo misma.');
             error.status = 400;
@@ -429,7 +499,10 @@ const moverNodoAtomico = async ({
         generacionFinal = Number(parejaDestino.generacion);
         nodo.generacion = generacionFinal;
         nodo.fila = Number(parejaDestino.fila);
+        nodo.posicionManual = true;
+        parejaDestino.posicionManual = true;
         await nodo.save(opcionesSesion(session));
+        await parejaDestino.save(opcionesSesion(session));
 
         if (yaEsParejaDestino) {
             unionActual.estado = 'Activa';
@@ -505,6 +578,7 @@ const moverNodoAtomico = async ({
         }
 
         nodo.generacion = generacionFinal;
+        nodo.posicionManual = true;
         // Se coloca temporalmente al final. La normalización posterior abre la posición solicitada
         // y reenumera todos los bloques de la generación sin dejar huecos.
         nodo.fila = Number.MAX_SAFE_INTEGER;
@@ -540,7 +614,8 @@ const moverNodoAtomico = async ({
         nodo: nodoActualizado,
         union: unionFinal,
         relacionesEliminadas,
-        movidoComoPareja: Boolean(parejaDestinoId)
+        movidoComoPareja: Boolean(parejaDestinoId),
+        parejaMovidaCompleta: Boolean(moverParejaCompleta)
     };
 });
 

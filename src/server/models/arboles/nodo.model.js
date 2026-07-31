@@ -106,6 +106,13 @@ const nodoSchema = new mongoose.Schema({
         }
     },
 
+    // Conserva la intención del usuario cuando reorganiza un nodo manualmente.
+    // Los nodos con esta marca no se fuerzan dentro del bloque automático de hermanos.
+    posicionManual: {
+        type: Boolean,
+        default: false
+    },
+
     // Fotografía exclusiva del nodo dentro del árbol. No forma parte del carrusel
     // ni modifica la imagen general de una cuenta vinculada.
     fotoPerfilNodo: {

@@ -51,6 +51,8 @@ const ESPACIADO_Y = 122;
 const ALTURA_VISUAL_TARJETA_INDIVIDUAL = 86;
 const ALTURA_VISUAL_TARJETA_PAREJA = 150;
 const ESPACIO_VERTICAL_ENTRE_TARJETAS = 28;
+const ESPACIO_VERTICAL_ENTRE_FAMILIAS = 96;
+const ESPACIO_VERTICAL_PAREJA_PUENTE = 52;
 const MARGEN_SUPERIOR_CONTENIDO_GENERACION = 24;
 const MARGEN_INFERIOR_CONTENIDO_GENERACION = 72;
 // Desplazamiento vertical aproximado desde el centro de una tarjeta de pareja
@@ -838,6 +840,7 @@ const normalizarNodo = (nodo, usuarioActualId = null) => {
     origen: origenFinal,
     generacion: Number(nodo.generacion ?? 0),
     fila: Number(nodo.fila ?? 0),
+    posicionManual: Boolean(nodo.posicionManual),
     fotos,
 
     biografia: esUsuarioReal
@@ -1140,7 +1143,10 @@ const TarjetaPareja = ({
   alEliminarUnion,
   modoMover,
   nodoEnMovimientoId,
-  alSeleccionarMover,
+  nodosEnMovimientoIds = [],
+  esMovimientoParejaCompleta = false,
+  esParejaEnMovimiento = false,
+  alSeleccionarMoverPareja,
   alMoverComoPareja,
   puedeCambiarFoto,
   fotoCargandoId,
@@ -1166,10 +1172,15 @@ const TarjetaPareja = ({
       puedeCambiarFoto={puedeCambiarFoto?.(persona) === true}
       fotoCargando={String(fotoCargandoId || '') === String(persona.id)}
       alSeleccionarFoto={alSeleccionarFoto}
-      esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(persona.id)}
-      esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
+      esNodoEnMovimiento={modoMover && nodosEnMovimientoIds.map(String).includes(String(persona.id))}
+      esDestinoMover={modoMover && !esMovimientoParejaCompleta && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
       puedeMantenerPresionado={puedeMover && !modoMover && !modoRelacionar}
-      alMantenerPresionado={() => alSeleccionarMover(persona)}
+      alMantenerPresionado={() => alSeleccionarMoverPareja({
+        pareja1,
+        pareja2,
+        unionId,
+        personaReferencia: persona
+      })}
       alHacerClic={(evento) => {
         if (modoRelacionar && esDestinoValido) {
           evento.stopPropagation();
@@ -1179,6 +1190,16 @@ const TarjetaPareja = ({
 
         if (modoMover) {
           evento.stopPropagation();
+          if (!nodoEnMovimientoId) {
+            alSeleccionarMoverPareja({
+              pareja1,
+              pareja2,
+              unionId,
+              personaReferencia: persona
+            });
+            return;
+          }
+          if (esMovimientoParejaCompleta) return;
           if (String(nodoEnMovimientoId) !== String(persona.id)) alMoverComoPareja(persona);
           return;
         }
@@ -1189,7 +1210,7 @@ const TarjetaPareja = ({
   );
 
   return (
-    <div className={`tarjeta-nodo-unificada ${claseDestino}`} onClick={manejarClicTarjeta}>
+    <div className={`tarjeta-nodo-unificada ${claseDestino} ${esParejaEnMovimiento ? 'pareja-en-movimiento' : ''}`} onClick={manejarClicTarjeta}>
       {renderPersona(pareja1)}
       {pareja2 && renderPersona(pareja2)}
 
@@ -1299,6 +1320,7 @@ const TarjetaIndividual = ({
   onDestinoClick,
   modoMover,
   nodoEnMovimientoId,
+  esMovimientoParejaCompleta = false,
   alSeleccionarMover,
   alMoverComoPareja,
   puedeCambiarFoto,
@@ -1325,7 +1347,7 @@ const TarjetaIndividual = ({
         fotoCargando={String(fotoCargandoId || '') === String(persona.id)}
         alSeleccionarFoto={alSeleccionarFoto}
         esNodoEnMovimiento={modoMover && String(nodoEnMovimientoId) === String(persona.id)}
-        esDestinoMover={modoMover && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
+        esDestinoMover={modoMover && !esMovimientoParejaCompleta && nodoEnMovimientoId && String(nodoEnMovimientoId) !== String(persona.id)}
         puedeMantenerPresionado={puedeMover && !modoMover && !modoRelacionar}
         alMantenerPresionado={() => alSeleccionarMover(persona)}
         alHacerClic={(evento) => {
@@ -1337,6 +1359,11 @@ const TarjetaIndividual = ({
 
           if (modoMover) {
             evento.stopPropagation();
+            if (!nodoEnMovimientoId) {
+              alSeleccionarMover(persona);
+              return;
+            }
+            if (esMovimientoParejaCompleta) return;
             if (String(nodoEnMovimientoId) !== String(persona.id)) alMoverComoPareja(persona);
             return;
           }
@@ -1622,6 +1649,10 @@ export default function ArbolGenealogico() {
   // Estado: Movimiento
   const [modoMover, establecerModoMover] = useState(false);
   const [nodoEnMovimiento, establecerNodoEnMovimiento] = useState(null);
+  const esMovimientoParejaCompleta = nodoEnMovimiento?.tipoMovimiento === 'pareja';
+  const nodosEnMovimientoIds = Array.isArray(nodoEnMovimiento?.nodosIds)
+    ? nodoEnMovimiento.nodosIds.map(String)
+    : (nodoEnMovimiento?.id ? [String(nodoEnMovimiento.id)] : []);
 
   // Menú de Exportación
   const [mostrarMenuExportar, establecerMostrarMenuExportar] = useState(false);
@@ -2644,6 +2675,144 @@ export default function ArbolGenealogico() {
     return `${limpiarNombreArchivo(nombreFamilia)}-${fecha}`;
   };
 
+  const convertirFuncionColorARgba = (() => {
+    let contexto = null;
+
+    return (funcionColor) => {
+      try {
+        if (!contexto) {
+          const canvasColor = document.createElement('canvas');
+          canvasColor.width = 1;
+          canvasColor.height = 1;
+          contexto = canvasColor.getContext('2d', { willReadFrequently: true });
+        }
+
+        if (!contexto) return 'rgba(0, 0, 0, 0)';
+
+        contexto.clearRect(0, 0, 1, 1);
+        contexto.fillStyle = 'rgba(0, 0, 0, 0)';
+        contexto.fillStyle = funcionColor;
+        contexto.fillRect(0, 0, 1, 1);
+        const [rojo, verde, azul, alfa] = contexto.getImageData(0, 0, 1, 1).data;
+        return `rgba(${rojo}, ${verde}, ${azul}, ${Math.round((alfa / 255) * 1000) / 1000})`;
+      } catch (error) {
+        console.warn('No se pudo convertir un color avanzado durante la exportación:', funcionColor, error);
+        return 'rgba(0, 0, 0, 0)';
+      }
+    };
+  })();
+
+  const normalizarColoresCssExportacion = (valor = '') => {
+    const reemplazarFuncionBalanceada = (textoOriginal, nombreFuncion) => {
+      let texto = textoOriginal;
+      let desde = 0;
+
+      while (desde < texto.length) {
+        const textoMinusculas = texto.toLowerCase();
+        const inicio = textoMinusculas.indexOf(`${nombreFuncion.toLowerCase()}(`, desde);
+        if (inicio < 0) break;
+
+        let profundidad = 0;
+        let fin = -1;
+        for (let indice = inicio; indice < texto.length; indice += 1) {
+          if (texto[indice] === '(') profundidad += 1;
+          if (texto[indice] === ')') {
+            profundidad -= 1;
+            if (profundidad === 0) {
+              fin = indice + 1;
+              break;
+            }
+          }
+        }
+
+        if (fin < 0) break;
+        const funcionColor = texto.slice(inicio, fin);
+        const reemplazo = convertirFuncionColorARgba(funcionColor);
+        texto = `${texto.slice(0, inicio)}${reemplazo}${texto.slice(fin)}`;
+        desde = inicio + reemplazo.length;
+      }
+
+      return texto;
+    };
+
+    const texto = String(valor || '');
+    if (!/color(?:-mix)?\s*\(/i.test(texto)) return texto;
+
+    const sinMezclas = reemplazarFuncionBalanceada(texto, 'color-mix');
+    return reemplazarFuncionBalanceada(sinMezclas, 'color');
+  };
+
+  const normalizarColoresLienzoClonado = (documentoClonado, lienzoClonado) => {
+    if (!documentoClonado || !lienzoClonado) return;
+
+    const propiedadesColor = [
+      'color',
+      'background-color',
+      'background-image',
+      'border-top-color',
+      'border-right-color',
+      'border-bottom-color',
+      'border-left-color',
+      'outline-color',
+      'box-shadow',
+      'text-shadow',
+      'text-decoration-color',
+      'filter',
+      'fill',
+      'stroke',
+      'stop-color',
+      'flood-color',
+      'caret-color',
+      '-webkit-text-fill-color',
+      '-webkit-text-stroke-color'
+    ];
+    const ventanaClonada = documentoClonado.defaultView;
+    const reglasPseudo = [];
+    const elementos = Array.from(new Set([
+      documentoClonado.documentElement,
+      documentoClonado.body,
+      lienzoClonado,
+      ...lienzoClonado.querySelectorAll('*')
+    ].filter(Boolean)));
+
+    elementos.forEach((elemento, indice) => {
+      const estilo = ventanaClonada?.getComputedStyle(elemento);
+      if (estilo) {
+        propiedadesColor.forEach((propiedad) => {
+          const valor = estilo.getPropertyValue(propiedad);
+          const valorNormalizado = normalizarColoresCssExportacion(valor);
+          if (valorNormalizado !== valor) {
+            elemento.style.setProperty(propiedad, valorNormalizado, 'important');
+          }
+        });
+      }
+
+      ['::before', '::after'].forEach((pseudo) => {
+        const estiloPseudo = ventanaClonada?.getComputedStyle(elemento, pseudo);
+        if (!estiloPseudo || estiloPseudo.content === 'none') return;
+
+        const declaraciones = propiedadesColor.flatMap((propiedad) => {
+          const valor = estiloPseudo.getPropertyValue(propiedad);
+          const valorNormalizado = normalizarColoresCssExportacion(valor);
+          return valorNormalizado !== valor
+            ? [`${propiedad}: ${valorNormalizado} !important;`]
+            : [];
+        });
+
+        if (declaraciones.length === 0) return;
+        const clase = `legacy-export-color-${indice}`;
+        elemento.classList.add(clase);
+        reglasPseudo.push(`.${clase}${pseudo} { ${declaraciones.join(' ')} }`);
+      });
+    });
+
+    if (reglasPseudo.length > 0) {
+      const estilosExportacion = documentoClonado.createElement('style');
+      estilosExportacion.textContent = reglasPseudo.join('\n');
+      documentoClonado.head?.appendChild(estilosExportacion);
+    }
+  };
+
   const crearCanvasExportacionArbol = async () => {
     const lienzo = lienzoExportableRef.current;
     const contenido = contenidoExportableRef.current;
@@ -2688,9 +2857,20 @@ export default function ArbolGenealogico() {
       const ancho = Math.max(lienzo.scrollWidth, contenido.scrollWidth, lienzo.clientWidth);
       const alto = Math.max(lienzo.scrollHeight, contenido.scrollHeight, lienzo.clientHeight);
       const estiloCalculado = window.getComputedStyle(lienzo);
+      const estiloContenedor = lienzo.parentElement
+        ? window.getComputedStyle(lienzo.parentElement)
+        : null;
+      const fondoLienzo = estiloCalculado.backgroundColor;
+      const fondoEsTransparente = !fondoLienzo ||
+        fondoLienzo === 'transparent' ||
+        fondoLienzo === 'rgba(0, 0, 0, 0)';
+      const colorFondoExportacion = fondoEsTransparente
+        ? (estiloContenedor?.backgroundColor || '#ffffff')
+        : fondoLienzo;
+      const colorFondoCompatible = normalizarColoresCssExportacion(colorFondoExportacion);
 
       return await html2canvas(lienzo, {
-        backgroundColor: estiloCalculado.backgroundColor || '#ffffff',
+        backgroundColor: colorFondoCompatible,
         scale: Math.min(2, window.devicePixelRatio || 1.5),
         useCORS: true,
         allowTaint: false,
@@ -2705,6 +2885,17 @@ export default function ArbolGenealogico() {
           const lienzoClonado = documentoClonado.querySelector('.lienzo-arbol');
           const contenidoClonado = documentoClonado.querySelector('.contenido-exportable-arbol');
 
+          documentoClonado.documentElement?.style.setProperty(
+            'background-color',
+            colorFondoCompatible || '#ffffff',
+            'important'
+          );
+          documentoClonado.body?.style.setProperty(
+            'background-color',
+            colorFondoCompatible || '#ffffff',
+            'important'
+          );
+
           if (lienzoClonado) {
             lienzoClonado.classList.add('modo-exportacion-arbol');
             lienzoClonado.style.overflow = 'visible';
@@ -2716,6 +2907,10 @@ export default function ArbolGenealogico() {
             contenidoClonado.style.transform = 'scale(1)';
             contenidoClonado.style.transition = 'none';
             contenidoClonado.style.transformOrigin = 'top left';
+          }
+
+          if (lienzoClonado) {
+            normalizarColoresLienzoClonado(documentoClonado, lienzoClonado);
           }
         }
       });
@@ -2734,29 +2929,65 @@ export default function ArbolGenealogico() {
     }
   };
 
-  const descargarCanvasComoImagen = (canvas) => {
-    const nombreArchivo = `${obtenerNombreArchivoExportacion()}.png`;
+  const obtenerConfigExportacion = (formato) => ({
+    pdf: {
+      extension: 'pdf',
+      mimeType: 'application/pdf',
+      descripcion: 'Documento PDF',
+      etiqueta: 'PDF'
+    },
+    jpg: {
+      extension: 'jpg',
+      mimeType: 'image/jpeg',
+      descripcion: 'Imagen JPG',
+      etiqueta: 'JPG'
+    },
+    png: {
+      extension: 'png',
+      mimeType: 'image/png',
+      descripcion: 'Imagen PNG',
+      etiqueta: 'PNG'
+    }
+  }[formato] || null);
 
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        const enlaceFallback = document.createElement('a');
-        enlaceFallback.href = canvas.toDataURL('image/png');
-        enlaceFallback.download = nombreArchivo;
-        enlaceFallback.click();
-        return;
-      }
+  const solicitarDestinoExportacion = async (formato) => {
+    const config = obtenerConfigExportacion(formato);
+    if (!config || typeof window.showSaveFilePicker !== 'function') {
+      return { manejador: null, cancelado: false };
+    }
 
-      const url = URL.createObjectURL(blob);
-      const enlace = document.createElement('a');
-      enlace.href = url;
-      enlace.download = nombreArchivo;
-      enlace.click();
-      URL.revokeObjectURL(url);
-    }, 'image/png', 1);
+    try {
+      const manejador = await window.showSaveFilePicker({
+        suggestedName: `${obtenerNombreArchivoExportacion()}.${config.extension}`,
+        types: [{
+          description: config.descripcion,
+          accept: {
+            [config.mimeType]: [`.${config.extension}`]
+          }
+        }],
+        excludeAcceptAllOption: true
+      });
+      return { manejador, cancelado: false };
+    } catch (error) {
+      if (error?.name === 'AbortError') return { manejador: null, cancelado: true };
+      console.warn('El navegador no permitió seleccionar la carpeta; se usará la descarga estándar.', error);
+      return { manejador: null, cancelado: false };
+    }
   };
 
-  const descargarCanvasComoPDF = (canvas) => {
-    const nombreArchivo = `${obtenerNombreArchivoExportacion()}.pdf`;
+  const crearBlobImagen = (canvas, formato) => {
+    const config = obtenerConfigExportacion(formato);
+    const calidad = formato === 'jpg' ? 0.94 : 1;
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error(`No se pudo generar la imagen ${config?.etiqueta || ''}.`));
+      }, config?.mimeType || 'image/png', calidad);
+    });
+  };
+
+  const crearBlobPDF = (canvas) => {
     const orientacion = canvas.width >= canvas.height ? 'landscape' : 'portrait';
     const pdf = new jsPDF({
       orientation: orientacion,
@@ -2766,11 +2997,36 @@ export default function ArbolGenealogico() {
     });
 
     pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
-    pdf.save(nombreArchivo);
+    return pdf.output('blob');
+  };
+
+  const guardarBlobExportacion = async ({ blob, formato, manejador }) => {
+    const config = obtenerConfigExportacion(formato);
+    const nombreArchivo = `${obtenerNombreArchivoExportacion()}.${config.extension}`;
+
+    if (manejador) {
+      const escritor = await manejador.createWritable();
+      await escritor.write(blob);
+      await escritor.close();
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombreArchivo;
+    enlace.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const exportarArbol = async (formato) => {
     if (exportandoArbol) return;
+
+    const config = obtenerConfigExportacion(formato);
+    if (!config) {
+      window.alert('Selecciona PDF, JPG o PNG como formato de exportación.');
+      return;
+    }
 
     if (!arbol?._id) {
       window.alert('Abre un árbol antes de exportarlo.');
@@ -2787,20 +3043,26 @@ export default function ArbolGenealogico() {
       return;
     }
 
+    const destino = await solicitarDestinoExportacion(formato);
+    if (destino.cancelado) return;
+
     establecerMostrarMenuExportar(false);
     establecerExportandoArbol(true);
-    establecerMensajeSistema(formato === 'pdf' ? 'Generando PDF del árbol...' : 'Generando imagen del árbol...');
+    establecerMensajeSistema(`Generando ${config.etiqueta} del árbol...`);
 
     try {
       const canvas = await crearCanvasExportacionArbol();
+      const blob = formato === 'pdf'
+        ? crearBlobPDF(canvas)
+        : await crearBlobImagen(canvas, formato);
 
-      if (formato === 'pdf') {
-        descargarCanvasComoPDF(canvas);
-      } else {
-        descargarCanvasComoImagen(canvas);
-      }
+      await guardarBlobExportacion({
+        blob,
+        formato,
+        manejador: destino.manejador
+      });
 
-      establecerMensajeSistema(formato === 'pdf' ? 'PDF generado correctamente.' : 'Imagen generada correctamente.');
+      establecerMensajeSistema(`${config.etiqueta} generado correctamente.`);
     } catch (error) {
       console.error('Error al exportar árbol:', error);
       establecerMensajeSistema('');
@@ -3341,7 +3603,7 @@ export default function ArbolGenealogico() {
     });
   };
 
-  const cargarMenuArboles = async () => {
+  const cargarMenuArboles = async ({ abrirArbolPropio = false } = {}) => {
     if (!token) {
       establecerErrorArbol('No has iniciado sesión.');
       establecerCargandoArbol(false);
@@ -3379,7 +3641,12 @@ export default function ArbolGenealogico() {
       establecerArbolPropio(miArbol);
       establecerArbolesDisponibles(normalizarListaArboles(arboles, miArbol));
       establecerInvitacionesPendientes(invitaciones);
-      establecerVistaActual('menu');
+
+      if (abrirArbolPropio && miArbol) {
+        await abrirArbol(miArbol);
+      } else {
+        establecerVistaActual('menu');
+      }
     } catch (error) {
       console.error('Error al cargar menú de árboles:', error);
       establecerErrorArbol(error.message || 'No se pudo cargar el menú de árboles.');
@@ -3561,7 +3828,7 @@ export default function ArbolGenealogico() {
   };
 
   useEffect(() => {
-    cargarMenuArboles();
+    cargarMenuArboles({ abrirArbolPropio: true });
   }, [token]);
 
   useEffect(() => {
@@ -3578,7 +3845,22 @@ export default function ArbolGenealogico() {
 
   const acercarZoom = () => establecerNivelZoom(prev => Math.min(prev + 0.2, 1.8));
   const alejarZoom = () => establecerNivelZoom(prev => Math.max(prev - 0.2, 0.4));
-  const restablecerZoom = () => establecerNivelZoom(1);
+  const restablecerZoom = () => {
+    establecerNivelZoom(1);
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const lienzo = lienzoExportableRef.current;
+        if (!lienzo) return;
+
+        lienzo.scrollTo({
+          left: Math.max(0, (lienzo.scrollWidth - lienzo.clientWidth) / 2),
+          top: Math.max(0, (lienzo.scrollHeight - lienzo.clientHeight) / 2),
+          behavior: 'smooth'
+        });
+      });
+    });
+  };
 
   const obtenerFiltrosSeleccionados = () => ({
     vista: filtroVista,
@@ -4284,6 +4566,7 @@ export default function ArbolGenealogico() {
         generacion,
         fila,
         filaOriginal: fila,
+        posicionManual: Boolean(origen.posicionManual || destino.posicionManual),
         nodoPrincipalId: origen.id,
         nodosIds: [origen.id, destino.id]
       });
@@ -4302,6 +4585,7 @@ export default function ArbolGenealogico() {
         generacion,
         fila,
         filaOriginal: fila,
+        posicionManual: Boolean(nodo.posicionManual),
         nodoPrincipalId: nodo.id,
         nodosIds: [nodo.id]
       });
@@ -4310,6 +4594,7 @@ export default function ArbolGenealogico() {
     const cardPorNodoTemporal = new Map();
     const cardPorId = new Map();
     cards.forEach((card) => {
+      card.alturaVisual = obtenerAlturaVisualCard(card);
       cardPorId.set(String(card.id), card);
       card.nodosIds.forEach(nodoId => cardPorNodoTemporal.set(String(nodoId), card));
     });
@@ -4329,163 +4614,396 @@ export default function ArbolGenealogico() {
         const cardHijo = cardPorNodoTemporal.get(String(hilo.nodoDestinoId));
         if (!cardPadre || !cardHijo || String(cardPadre.id) === String(cardHijo.id)) return;
 
-        agregarRelacionCard(hijosPorCard, cardPadre.id, cardHijo.id);
         agregarRelacionCard(padresPorCard, cardHijo.id, cardPadre.id);
+        agregarRelacionCard(hijosPorCard, cardPadre.id, cardHijo.id);
       });
 
-    const agrupadas = new Map();
+    const padresNodo = new Map();
+    hilosActivos
+      .filter(hilo => hilo.tipoRelacion === 'padre_hijo')
+      .forEach((hilo) => {
+        const hijoId = String(hilo.nodoDestinoId);
+        if (!padresNodo.has(hijoId)) padresNodo.set(hijoId, new Set());
+        padresNodo.get(hijoId).add(String(hilo.nodoOrigenId));
+      });
+
+    const compararPorFilaOriginal = (a, b) => {
+      const porFila = Number(a.filaOriginal) - Number(b.filaOriginal);
+      return porFila || String(a.id).localeCompare(String(b.id));
+    };
+
+    // Cada conjunto exacto de padres define una familia. Una tarjeta de pareja
+    // con dos conjuntos distintos es un puente y se coloca entre ambos grupos.
+    cards.forEach((card) => {
+      const clavesFamilia = new Set();
+
+      card.nodosIds.forEach((nodoId) => {
+        const padres = Array.from(padresNodo.get(String(nodoId)) || [])
+          .sort((a, b) => a.localeCompare(b));
+        if (padres.length > 0) clavesFamilia.add(padres.join('|'));
+      });
+
+      card.clavesFamilia = Array.from(clavesFamilia);
+      card.esParejaPuente = card.tipo === 'pareja' && card.clavesFamilia.length > 1;
+    });
+
+    const compartirFamilia = (cardA, cardB) => {
+      const clavesA = new Set(cardA?.clavesFamilia || []);
+      return (cardB?.clavesFamilia || []).some(clave => clavesA.has(clave));
+    };
+
+    const alturasRama = new Map();
+    const calcularAlturaRama = (cardId, visitando = new Set()) => {
+      const claveCard = String(cardId);
+      if (alturasRama.has(claveCard)) return alturasRama.get(claveCard);
+
+      const card = cardPorId.get(claveCard);
+      if (!card) return 0;
+      if (visitando.has(claveCard)) return Number(card.alturaVisual);
+
+      const siguientesVisitando = new Set(visitando);
+      siguientesVisitando.add(claveCard);
+
+      const hijos = Array.from(hijosPorCard.get(claveCard) || [])
+        .map(id => cardPorId.get(String(id)))
+        .filter(Boolean)
+        .sort(compararPorFilaOriginal);
+
+      let alturaHijos = 0;
+      hijos.forEach((hijo, indice) => {
+        const alturaCompleta = calcularAlturaRama(hijo.id, siguientesVisitando);
+        const divisorPuente = hijo.esParejaPuente
+          ? Math.max(1, hijo.clavesFamilia.length)
+          : 1;
+        const alturaAportada = alturaCompleta / divisorPuente;
+
+        if (indice > 0) {
+          alturaHijos += compartirFamilia(hijos[indice - 1], hijo)
+            ? ESPACIO_VERTICAL_ENTRE_TARJETAS
+            : ESPACIO_VERTICAL_ENTRE_FAMILIAS;
+        }
+
+        alturaHijos += alturaAportada;
+      });
+
+      const altura = Math.max(Number(card.alturaVisual), alturaHijos);
+      alturasRama.set(claveCard, altura);
+      return altura;
+    };
+
+    cards.forEach((card) => {
+      card.alturaReservada = calcularAlturaRama(card.id);
+    });
+
+    const cardsPorGeneracionTemporal = new Map();
     cards.forEach((card) => {
       const generacion = Number(card.generacion);
-      if (!agrupadas.has(generacion)) agrupadas.set(generacion, []);
-      agrupadas.get(generacion).push({ ...card });
+      if (!cardsPorGeneracionTemporal.has(generacion)) {
+        cardsPorGeneracionTemporal.set(generacion, []);
+      }
+      cardsPorGeneracionTemporal.get(generacion).push(card);
     });
 
-    agrupadas.forEach((lista) => {
-      lista.sort((a, b) => {
-        const porFila = Number(a.filaOriginal) - Number(b.filaOriginal);
-        return porFila || String(a.id).localeCompare(String(b.id));
-      });
-    });
+    const crearSegmentosGeneracion = (lista = []) => {
+      const familias = new Map();
+      const puentes = [];
 
-    const generacionesOrdenadas = Array.from(agrupadas.keys()).sort((a, b) => a - b);
+      const asegurarFamilia = (clave, filaReferencia = Number.MAX_SAFE_INTEGER) => {
+        if (!familias.has(clave)) {
+          familias.set(clave, {
+            clave,
+            cards: [],
+            filaReferencia
+          });
+        } else {
+          const familia = familias.get(clave);
+          familia.filaReferencia = Math.min(familia.filaReferencia, filaReferencia);
+        }
+        return familias.get(clave);
+      };
 
-    const crearMapaIndices = () => {
-      const indices = new Map();
-      agrupadas.forEach((lista) => {
-        lista.forEach((card, indice) => indices.set(String(card.id), indice));
-      });
-      return indices;
-    };
-
-    const obtenerBaricentro = (card, relaciones, indices) => {
-      const idsRelacionados = Array.from(relaciones.get(String(card.id)) || []);
-      const posiciones = idsRelacionados
-        .map(id => indices.get(String(id)))
-        .filter(posicion => Number.isFinite(posicion));
-
-      if (posiciones.length === 0) return null;
-      return posiciones.reduce((total, valor) => total + valor, 0) / posiciones.length;
-    };
-
-    // Varias pasadas de baricentro reducen cruces entre generaciones sin perder
-    // como desempate el orden manual persistido en filaOriginal.
-    for (let pasada = 0; pasada < 6; pasada += 1) {
-      let indices = crearMapaIndices();
-
-      generacionesOrdenadas.forEach((generacion) => {
-        const lista = agrupadas.get(generacion) || [];
-        lista.sort((a, b) => {
-          const baricentroA = obtenerBaricentro(a, padresPorCard, indices);
-          const baricentroB = obtenerBaricentro(b, padresPorCard, indices);
-          if (baricentroA !== null || baricentroB !== null) {
-            const aSeguro = baricentroA ?? Number.MAX_SAFE_INTEGER;
-            const bSeguro = baricentroB ?? Number.MAX_SAFE_INTEGER;
-            if (aSeguro !== bSeguro) return aSeguro - bSeguro;
-          }
-          const porFila = Number(a.filaOriginal) - Number(b.filaOriginal);
-          return porFila || String(a.id).localeCompare(String(b.id));
-        });
-        indices = crearMapaIndices();
-      });
-
-      [...generacionesOrdenadas].reverse().forEach((generacion) => {
-        const lista = agrupadas.get(generacion) || [];
-        lista.sort((a, b) => {
-          const baricentroA = obtenerBaricentro(a, hijosPorCard, indices);
-          const baricentroB = obtenerBaricentro(b, hijosPorCard, indices);
-          if (baricentroA !== null || baricentroB !== null) {
-            const aSeguro = baricentroA ?? Number.MAX_SAFE_INTEGER;
-            const bSeguro = baricentroB ?? Number.MAX_SAFE_INTEGER;
-            if (aSeguro !== bSeguro) return aSeguro - bSeguro;
-          }
-          const porFila = Number(a.filaOriginal) - Number(b.filaOriginal);
-          return porFila || String(a.id).localeCompare(String(b.id));
-        });
-        indices = crearMapaIndices();
-      });
-    }
-
-    const centros = new Map();
-
-    // Posición inicial sin colisiones dentro de cada generación.
-    agrupadas.forEach((lista) => {
-      let siguienteTop = MARGEN_SUPERIOR_CONTENIDO_GENERACION;
-      lista.forEach((card, indice) => {
-        const alturaVisual = obtenerAlturaVisualCard(card);
-        card.alturaVisual = alturaVisual;
-        card.fila = indice;
-        card.topVisual = siguienteTop;
-        centros.set(String(card.id), siguienteTop + (alturaVisual / 2));
-        siguienteTop += alturaVisual + ESPACIO_VERTICAL_ENTRE_TARJETAS;
-      });
-    });
-
-    // Relaja los centros hacia sus familiares conectados y vuelve a resolver
-    // colisiones. Las parejas se desplazan como un bloque inseparable.
-    for (let pasada = 0; pasada < 8; pasada += 1) {
-      const propuestos = new Map();
-
-      cards.forEach((cardOriginal) => {
-        const cardId = String(cardOriginal.id);
-        const actual = centros.get(cardId) || 0;
-        const idsRelacionados = new Set([
-          ...Array.from(padresPorCard.get(cardId) || []),
-          ...Array.from(hijosPorCard.get(cardId) || [])
-        ]);
-        const centrosRelacionados = Array.from(idsRelacionados)
-          .map(id => centros.get(String(id)))
-          .filter(valor => Number.isFinite(valor));
-
-        if (centrosRelacionados.length === 0) {
-          propuestos.set(cardId, actual);
+      [...lista].sort(compararPorFilaOriginal).forEach((card) => {
+        // Una pareja colocada por el usuario es un ancla, incluso cuando conecta
+        // dos ramas. Solo las parejas completamente automáticas se reubican como puente.
+        if (card.esParejaPuente && !card.posicionManual) {
+          puentes.push(card);
+          card.clavesFamilia.forEach(clave => asegurarFamilia(clave, Number(card.filaOriginal)));
           return;
         }
 
-        const ideal = centrosRelacionados.reduce((total, valor) => total + valor, 0) /
-          centrosRelacionados.length;
-        propuestos.set(cardId, (actual * 0.45) + (ideal * 0.55));
+        // Una posición elegida por el usuario conserva su excepción individual:
+        // no vuelve a integrarse forzosamente al bloque automático de hermanos.
+        const claveFamilia = card.posicionManual
+          ? `manual:${card.id}`
+          : (card.clavesFamilia[0] || `sin-padres:${card.id}`);
+        const familia = asegurarFamilia(claveFamilia, Number(card.filaOriginal));
+        familia.cards.push(card);
       });
 
-      agrupadas.forEach((lista) => {
-        let limiteCentro = MARGEN_SUPERIOR_CONTENIDO_GENERACION;
+      const conexiones = new Map();
+      const agregarConexion = (origen, destino) => {
+        if (!conexiones.has(origen)) conexiones.set(origen, new Set());
+        conexiones.get(origen).add(destino);
+      };
 
-        lista.forEach((card, indice) => {
-          const altura = Number(card.alturaVisual) || obtenerAlturaVisualCard(card);
-          const centroMinimo = indice === 0
-            ? MARGEN_SUPERIOR_CONTENIDO_GENERACION + (altura / 2)
-            : limiteCentro + (altura / 2);
-          const centro = Math.max(centroMinimo, propuestos.get(String(card.id)) || centroMinimo);
-          centros.set(String(card.id), centro);
-          limiteCentro = centro + (altura / 2) + ESPACIO_VERTICAL_ENTRE_TARJETAS;
+      puentes.forEach((card) => {
+        card.clavesFamilia.forEach((origen) => {
+          card.clavesFamilia.forEach((destino) => {
+            if (origen !== destino) agregarConexion(origen, destino);
+          });
         });
+      });
 
-        // Evita que toda la rama se aleje innecesariamente del borde superior.
-        if (lista.length > 0) {
-          const primera = lista[0];
-          const centroPrimera = centros.get(String(primera.id));
-          const topPrimera = centroPrimera - (primera.alturaVisual / 2);
-          const ajuste = Math.max(0, topPrimera - MARGEN_SUPERIOR_CONTENIDO_GENERACION);
-          if (ajuste > 0) {
-            lista.forEach(card => {
-              centros.set(String(card.id), centros.get(String(card.id)) - ajuste);
-            });
-          }
+      const compararFamilias = (a, b) => {
+        const porFila = Number(a.filaReferencia) - Number(b.filaReferencia);
+        return porFila || String(a.clave).localeCompare(String(b.clave));
+      };
+
+      const pendientes = Array.from(familias.values()).sort(compararFamilias);
+      const familiasOrdenadas = [];
+      let actual = pendientes.shift();
+
+      while (actual) {
+        familiasOrdenadas.push(actual);
+        const vecinas = Array.from(conexiones.get(actual.clave) || [])
+          .map(clave => pendientes.find(familia => familia.clave === clave))
+          .filter(Boolean)
+          .sort(compararFamilias);
+        const siguientePorFila = pendientes[0];
+        const siguiente = siguientePorFila?.clave.startsWith('manual:')
+          ? siguientePorFila
+          : (vecinas[0] || siguientePorFila);
+        if (!siguiente) break;
+        pendientes.splice(pendientes.indexOf(siguiente), 1);
+        actual = siguiente;
+      }
+
+      const segmentos = [];
+      const puentesAgregados = new Set();
+
+      familiasOrdenadas.forEach((familia, indice) => {
+        if (familia.cards.length > 0) {
+          segmentos.push({
+            id: `familia-${familia.clave}`,
+            tipo: familia.clave.startsWith('manual:') ? 'manual' : 'familia',
+            claveFamilia: familia.clave,
+            filaReferencia: familia.filaReferencia,
+            cards: [...familia.cards].sort(compararPorFilaOriginal)
+          });
+        }
+
+        const siguienteFamilia = familiasOrdenadas[indice + 1];
+        if (!siguienteFamilia) return;
+
+        const puentesEntreFamilias = puentes
+          .filter(card => (
+            !puentesAgregados.has(String(card.id)) &&
+            card.clavesFamilia.includes(familia.clave) &&
+            card.clavesFamilia.includes(siguienteFamilia.clave)
+          ))
+          .sort(compararPorFilaOriginal);
+
+        if (puentesEntreFamilias.length > 0) {
+          puentesEntreFamilias.forEach(card => puentesAgregados.add(String(card.id)));
+          segmentos.push({
+            id: `puente-${puentesEntreFamilias.map(card => card.id).join('-')}`,
+            tipo: 'puente',
+            filaReferencia: Math.min(...puentesEntreFamilias.map(card => Number(card.filaOriginal))),
+            cards: puentesEntreFamilias
+          });
         }
       });
-    }
 
-    agrupadas.forEach((lista) => {
-      lista.forEach((card, indice) => {
-        card.fila = indice;
-        card.topVisual = Math.max(
-          MARGEN_SUPERIOR_CONTENIDO_GENERACION,
-          (centros.get(String(card.id)) || 0) - (card.alturaVisual / 2)
+      puentes
+        .filter(card => !puentesAgregados.has(String(card.id)))
+        .sort(compararPorFilaOriginal)
+        .forEach((card) => {
+          const segmentoPuente = {
+            id: `puente-${card.id}`,
+            tipo: 'puente',
+            filaReferencia: Number(card.filaOriginal),
+            cards: [card]
+          };
+          const indiceInsercion = segmentos.findIndex(segmento => (
+            Number(segmento.filaReferencia) > Number(card.filaOriginal)
+          ));
+
+          if (indiceInsercion < 0) segmentos.push(segmentoPuente);
+          else segmentos.splice(indiceInsercion, 0, segmentoPuente);
+        });
+
+      return segmentos;
+    };
+
+    const centros = new Map();
+    const agrupadas = new Map();
+    const generacionesOrdenadas = Array.from(cardsPorGeneracionTemporal.keys())
+      .sort((a, b) => a - b);
+
+    generacionesOrdenadas.forEach((generacion) => {
+      const segmentos = crearSegmentosGeneracion(cardsPorGeneracionTemporal.get(generacion));
+      const cardsColocadas = [];
+      let cursor = MARGEN_SUPERIOR_CONTENIDO_GENERACION;
+      let segmentoAnterior = null;
+
+      segmentos.forEach((segmento) => {
+        const obtenerAlturaColocacion = (card) => (
+          card.posicionManual || card.tipo === 'pareja'
+            ? Number(card.alturaVisual)
+            : Number(card.alturaReservada)
         );
+        const alturaSegmento = segmento.cards.reduce((total, card, indice) => (
+          total + obtenerAlturaColocacion(card) +
+          (indice > 0 ? ESPACIO_VERTICAL_ENTRE_TARJETAS : 0)
+        ), 0);
+
+        const centrosPadres = Array.from(new Set(
+          segmento.cards.flatMap(card => Array.from(padresPorCard.get(String(card.id)) || []))
+        ))
+          .map(id => centros.get(String(id)))
+          .filter(valor => Number.isFinite(valor));
+
+        const centroIdeal = centrosPadres.length > 0
+          ? centrosPadres.reduce((total, valor) => total + valor, 0) / centrosPadres.length
+          : null;
+        const separacion = segmentoAnterior
+          ? (
+            segmento.tipo === 'puente' || segmentoAnterior.tipo === 'puente'
+              ? ESPACIO_VERTICAL_PAREJA_PUENTE
+              : segmento.tipo === 'familia' && segmentoAnterior.tipo === 'familia'
+                ? ESPACIO_VERTICAL_ENTRE_FAMILIAS
+                : ESPACIO_VERTICAL_ENTRE_TARJETAS
+          )
+          : 0;
+        const topMinimo = cursor + separacion;
+        const topIdeal = Number.isFinite(centroIdeal)
+          ? centroIdeal - (alturaSegmento / 2)
+          : topMinimo;
+        const topSegmento = Math.max(
+          MARGEN_SUPERIOR_CONTENIDO_GENERACION,
+          topMinimo,
+          topIdeal
+        );
+
+        let topReservado = topSegmento;
+        segmento.cards.forEach((card, indiceCard) => {
+          const alturaReservada = Math.max(
+            Number(card.alturaVisual),
+            obtenerAlturaColocacion(card) || 0
+          );
+
+          card.topReservado = topReservado;
+          card.bottomReservado = topReservado + alturaReservada;
+          card.topVisual = topReservado + ((alturaReservada - Number(card.alturaVisual)) / 2);
+          card.fila = cardsColocadas.length;
+          card.segmentoFamiliarId = segmento.id;
+          card.inicioBloqueFamiliar = indiceCard === 0;
+
+          centros.set(String(card.id), card.topVisual + (Number(card.alturaVisual) / 2));
+          cardsColocadas.push(card);
+          topReservado = card.bottomReservado + ESPACIO_VERTICAL_ENTRE_TARJETAS;
+        });
+
+        cursor = topSegmento + alturaSegmento;
+        segmentoAnterior = segmento;
+      });
+
+      agrupadas.set(generacion, cardsColocadas);
+    });
+
+    // Segunda fase: las casillas fijan el orden, mientras la extensión real de
+    // la descendencia determina el centro vertical de las generaciones anteriores.
+    // Se procesa de derecha a izquierda para que cada rama inferior ya sea estable.
+    const obtenerRangoDescendencia = (cardId, visitando = new Set()) => {
+      const claveCard = String(cardId);
+      if (visitando.has(claveCard)) return null;
+
+      const siguientesVisitando = new Set(visitando);
+      siguientesVisitando.add(claveCard);
+      let limiteSuperior = Number.POSITIVE_INFINITY;
+      let limiteInferior = Number.NEGATIVE_INFINITY;
+
+      Array.from(hijosPorCard.get(claveCard) || []).forEach((hijoId) => {
+        const hijo = cardPorId.get(String(hijoId));
+        if (!hijo) return;
+
+        const topHijo = obtenerTopVisualCard(hijo);
+        const alturaHijo = Number(hijo.alturaVisual) || obtenerAlturaVisualCard(hijo);
+        limiteSuperior = Math.min(limiteSuperior, topHijo);
+        limiteInferior = Math.max(limiteInferior, topHijo + alturaHijo);
+
+        const rangoNietos = obtenerRangoDescendencia(hijo.id, siguientesVisitando);
+        if (rangoNietos) {
+          limiteSuperior = Math.min(limiteSuperior, rangoNietos.inicio);
+          limiteInferior = Math.max(limiteInferior, rangoNietos.fin);
+        }
+      });
+
+      if (!Number.isFinite(limiteSuperior) || !Number.isFinite(limiteInferior)) return null;
+      return { inicio: limiteSuperior, fin: limiteInferior };
+    };
+
+    [...generacionesOrdenadas].reverse().forEach((generacion) => {
+      const lista = agrupadas.get(generacion) || [];
+      if (lista.length === 0) return;
+
+      const separaciones = lista.slice(0, -1).map((card, indice) => {
+        const siguiente = lista[indice + 1];
+        const finActual = obtenerTopVisualCard(card) + Number(card.alturaVisual);
+        const separacionActual = obtenerTopVisualCard(siguiente) - finActual;
+
+        return Math.max(
+          ESPACIO_VERTICAL_ENTRE_TARJETAS,
+          Math.min(ESPACIO_VERTICAL_ENTRE_FAMILIAS, separacionActual)
+        );
+      });
+
+      const posicionesDeseadas = lista.map((card) => {
+        const rango = obtenerRangoDescendencia(card.id);
+        if (!rango) return obtenerTopVisualCard(card);
+
+        const centroDescendencia = rango.inicio + ((rango.fin - rango.inicio) / 2);
+        return centroDescendencia - (Number(card.alturaVisual) / 2);
+      });
+
+      const posicionesFinales = [...posicionesDeseadas];
+
+      // Pase descendente: abre espacio sin cambiar el orden de las casillas.
+      for (let indice = 1; indice < lista.length; indice += 1) {
+        const limiteAnterior = posicionesFinales[indice - 1] +
+          Number(lista[indice - 1].alturaVisual) + separaciones[indice - 1];
+        posicionesFinales[indice] = Math.max(posicionesFinales[indice], limiteAnterior);
+      }
+
+      // Pase ascendente: acerca el bloque a sus centros ideales sin traslaparlo.
+      for (let indice = lista.length - 2; indice >= 0; indice -= 1) {
+        const limiteSiguiente = posicionesFinales[indice + 1] -
+          separaciones[indice] - Number(lista[indice].alturaVisual);
+        posicionesFinales[indice] = Math.min(posicionesFinales[indice], limiteSiguiente);
+      }
+
+      const menorTop = Math.min(...posicionesFinales);
+      const desplazamientoLienzo = menorTop < MARGEN_SUPERIOR_CONTENIDO_GENERACION
+        ? MARGEN_SUPERIOR_CONTENIDO_GENERACION - menorTop
+        : 0;
+
+      lista.forEach((card, indice) => {
+        const topAnterior = obtenerTopVisualCard(card);
+        const topNuevo = posicionesFinales[indice] + desplazamientoLienzo;
+        const desplazamiento = topNuevo - topAnterior;
+
+        card.topVisual = topNuevo;
+        if (Number.isFinite(Number(card.topReservado))) {
+          card.topReservado = Number(card.topReservado) + desplazamiento;
+        }
+        if (Number.isFinite(Number(card.bottomReservado))) {
+          card.bottomReservado = Number(card.bottomReservado) + desplazamiento;
+        }
       });
     });
 
     return agrupadas;
-  }, [nodosFiltrados, hilosActivosFiltrados, mapaNodos]);
+  }, [nodosFiltrados, hilosActivosFiltrados, hilosActivos, mapaNodos]);
 
   const cardPorNodoId = useMemo(() => {
     const mapa = new Map();
@@ -4588,7 +5106,11 @@ export default function ArbolGenealogico() {
       cards.forEach((card) => {
         const topVisual = obtenerTopVisualCard(card);
         const alturaVisual = Number(card.alturaVisual) || obtenerAlturaVisualCard(card);
-        limiteInferior = Math.max(limiteInferior, topVisual + alturaVisual);
+        const limiteReservado = Number(card.bottomReservado);
+        limiteInferior = Math.max(
+          limiteInferior,
+          Number.isFinite(limiteReservado) ? limiteReservado : topVisual + alturaVisual
+        );
       });
     });
 
@@ -5913,12 +6435,38 @@ La persona seguirá dentro del árbol como miembro normal.`
     establecerMensajeSistema(`Selecciona una posición dentro de una generación o toca otra persona para mover a ${persona.nombre} como pareja.`);
   };
 
+  const seleccionarParejaParaMover = ({ pareja1, pareja2, unionId, personaReferencia }) => {
+    if (!pareja1?.id || !pareja2?.id || !unionId || !esUsuarioAdmin) return;
+
+    if (hayFiltrosAplicados) restablecerFiltrosArbol();
+    establecerModoMover(true);
+    establecerNodoEnMovimiento({
+      id: personaReferencia?.id || pareja1.id,
+      nombre: `${pareja1.nombre} y ${pareja2.nombre}`,
+      tipoMovimiento: 'pareja',
+      unionId,
+      nodosIds: [pareja1.id, pareja2.id],
+      pareja1,
+      pareja2,
+      generacion: Number(pareja1.generacion),
+      fila: Math.min(Number(pareja1.fila), Number(pareja2.fila))
+    });
+    establecerNodoSeleccionado(null);
+    establecerModoRelacionar(false);
+    establecerOrigenRelacion(null);
+    establecerRelacionPendiente(null);
+    establecerMostrarInvitar(false);
+    establecerMostrarFiltros(false);
+    establecerMostrarEventos(false);
+    establecerMensajeSistema(`Selecciona una casilla para mover juntos a ${pareja1.nombre} y ${pareja2.nombre}.`);
+  };
+
   const moverNodoAGeneracion = async (generacionDestino, filaDestino = null) => {
     if (!nodoEnMovimiento || !arbol?._id || procesandoAccionEstructural) return;
 
     const unionActual = obtenerUnionDeNodo(nodoEnMovimiento.id);
     const parejaActual = unionActual ? obtenerParejaDeNodo(nodoEnMovimiento.id) : null;
-    const textoUnion = unionActual
+    const textoUnion = unionActual && !esMovimientoParejaCompleta
       ? `\n\nSu relación con ${parejaActual?.nombre || 'su pareja actual'} se eliminará.`
       : '';
     const etiquetaGeneracion = Number(generacionDestino) < 0
@@ -5936,7 +6484,9 @@ La persona seguirá dentro del árbol como miembro normal.`
       : '';
 
     const confirmado = window.confirm(
-      `¿Deseas mover a ${nodoEnMovimiento.nombre} a ${etiquetaGeneracion}${textoPosicion}?${textoUnion}`
+      esMovimientoParejaCompleta
+        ? `¿Deseas mover juntos a ${nodoEnMovimiento.nombre} a ${etiquetaGeneracion}${textoPosicion}?\n\nLa relación de pareja se conservará.`
+        : `¿Deseas mover a ${nodoEnMovimiento.nombre} a ${etiquetaGeneracion}${textoPosicion}?${textoUnion}`
     );
     if (!confirmado) return;
 
@@ -5946,6 +6496,10 @@ La persona seguirá dentro del árbol como miembro normal.`
 
     if (hayFilaDestino) {
       payload.filaDestino = Number(filaDestino);
+    }
+
+    if (esMovimientoParejaCompleta) {
+      payload.moverParejaCompleta = true;
     }
 
     try {
@@ -5967,8 +6521,52 @@ La persona seguirá dentro del árbol como miembro normal.`
     }
   };
 
+  const restablecerPosicionAutomaticaNodo = async (persona) => {
+    if (!persona?.id || !arbol?._id || !esUsuarioAdmin || procesandoAccionEstructural) return;
+
+    const unionActual = obtenerUnionDeNodo(persona.id);
+    const parejaActual = unionActual ? obtenerParejaDeNodo(persona.id) : null;
+    const idsRestablecer = [persona.id, parejaActual?.id].filter(Boolean);
+
+    const confirmado = window.confirm(
+      unionActual && parejaActual
+        ? `¿Deseas devolver a ${persona.nombre} y ${parejaActual.nombre} al orden automático?\n\nLa pareja permanecerá unida, pero su bloque podrá ajustarse nuevamente según sus conexiones.`
+        : `¿Deseas devolver a ${persona.nombre} al orden automático?\n\nSu posición podrá ajustarse nuevamente según sus padres, hermanos y generación.`
+    );
+
+    if (!confirmado) return;
+
+    try {
+      establecerProcesandoAccionEstructural(true);
+      await Promise.all(idsRestablecer.map(nodoId => (
+        apiFetch(`/api/nodos/arbol/${arbol._id}/${nodoId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ posicionManual: false })
+        })
+      )));
+
+      establecerNodoSeleccionado(prev => (
+        prev && String(prev.id) === String(persona.id)
+          ? { ...prev, posicionManual: false }
+          : prev
+      ));
+      establecerMensajeSistema(
+        unionActual && parejaActual
+          ? `${persona.nombre} y ${parejaActual.nombre} volvieron al orden automático.`
+          : `${persona.nombre} volvió al orden automático.`
+      );
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al restablecer la posición automática:', error);
+      window.alert(error.message || 'No se pudo restablecer la posición automática.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
+  };
+
   const moverNodoComoPareja = async (personaDestino) => {
     if (!nodoEnMovimiento || !personaDestino || !arbol?._id || procesandoAccionEstructural) return;
+    if (esMovimientoParejaCompleta) return;
     if (String(nodoEnMovimiento.id) === String(personaDestino.id)) return;
 
     const confirmado = window.confirm(
@@ -6567,7 +7165,16 @@ La persona seguirá dentro del árbol como miembro normal.`
       : [String(card.nodoPrincipalId)];
     const esDestinoValido = Boolean(
       (modoRelacionar && origenRelacion && !idsCard.includes(String(origenRelacion.nodoId))) ||
-      (modoMover && nodoEnMovimiento && !idsCard.includes(String(nodoEnMovimiento.id)))
+      (
+        modoMover &&
+        nodoEnMovimiento &&
+        !esMovimientoParejaCompleta &&
+        !idsCard.includes(String(nodoEnMovimiento.id))
+      )
+    );
+    const esParejaEnMovimiento = Boolean(
+      esMovimientoParejaCompleta &&
+      idsCard.some(id => nodosEnMovimientoIds.includes(String(id)))
     );
 
     if (card.tipo === 'pareja') {
@@ -6596,7 +7203,10 @@ La persona seguirá dentro del árbol como miembro normal.`
           alEliminarUnion={manejarEliminacionUnion}
           modoMover={modoMover}
           nodoEnMovimientoId={nodoEnMovimiento?.id || null}
-          alSeleccionarMover={seleccionarNodoParaMover}
+          nodosEnMovimientoIds={nodosEnMovimientoIds}
+          esMovimientoParejaCompleta={esMovimientoParejaCompleta}
+          esParejaEnMovimiento={esParejaEnMovimiento}
+          alSeleccionarMoverPareja={seleccionarParejaParaMover}
           alMoverComoPareja={moverNodoComoPareja}
           puedeCambiarFoto={puedeEditarImagenesNodo}
           fotoCargandoId={subiendoFotoPerfilNodoId}
@@ -6623,6 +7233,7 @@ La persona seguirá dentro del árbol como miembro normal.`
         }}
         modoMover={modoMover}
         nodoEnMovimientoId={nodoEnMovimiento?.id || null}
+        esMovimientoParejaCompleta={esMovimientoParejaCompleta}
         alSeleccionarMover={seleccionarNodoParaMover}
         alMoverComoPareja={moverNodoComoPareja}
         puedeCambiarFoto={puedeEditarImagenesNodo}
@@ -6637,12 +7248,15 @@ La persona seguirá dentro del árbol como miembro normal.`
     const puedeMoverAqui = Boolean(modoMover && nodoEnMovimiento);
     const textoGeneracion = etiquetaExtra || `GENERACIÓN ${romano(generacion)}`;
     const nodoMovimientoId = String(nodoEnMovimiento?.id || '');
+    const idsMovimientoSet = new Set(nodosEnMovimientoIds.map(String));
 
     const cardsDestinoMovimiento = puedeMoverAqui
       ? cards.flatMap((card) => {
-        const contieneNodoMovimiento = card.nodosIds.some(id => String(id) === nodoMovimientoId);
+        const contieneNodoMovimiento = card.nodosIds.some(id => idsMovimientoSet.has(String(id)));
 
         if (!contieneNodoMovimiento) return [card];
+
+        if (esMovimientoParejaCompleta) return [];
 
         if (card.tipo === 'pareja') {
           const personaRestante = [card.pareja1, card.pareja2]
@@ -6693,11 +7307,12 @@ La persona seguirá dentro del árbol como miembro normal.`
         return {
           indice,
           top,
+          numeroCasilla: indice + 1,
           etiqueta: indice === 0
-            ? 'Mover al inicio'
+            ? 'Al inicio'
             : indice === cardsDestinoMovimiento.length
-              ? 'Mover al final'
-              : 'Mover aquí'
+              ? 'Al final'
+              : `Entre posiciones ${indice} y ${indice + 1}`
         };
       })
       : [];
@@ -6756,10 +7371,13 @@ La persona seguirá dentro del árbol como miembro normal.`
             }}
             disabled={procesandoAccionEstructural}
             title={`${posicion.etiqueta} en ${textoGeneracion.toLowerCase()}`}
-            aria-label={`${posicion.etiqueta} en ${textoGeneracion}`}
+            aria-label={`Colocar en casilla ${posicion.numeroCasilla} de ${textoGeneracion}`}
           >
-            <i className="bi bi-arrow-bar-down" aria-hidden="true"></i>
-            <span>{posicion.etiqueta}</span>
+            <i className="bi bi-geo-alt-fill" aria-hidden="true"></i>
+            <span className="posicion-insercion-contenido">
+              <strong>Casilla {posicion.numeroCasilla}</strong>
+              <small>{posicion.etiqueta}</small>
+            </span>
           </button>
         ))}
 
@@ -7258,14 +7876,18 @@ La persona seguirá dentro del árbol como miembro normal.`
           <div>
             <i className="bi bi-arrows-move"></i>
             <span>
-              Moviendo a <strong>{nodoEnMovimiento.nombre}</strong>. Elige una generación o toca otra persona para unirlos como pareja.
+              {esMovimientoParejaCompleta ? (
+                <>Moviendo la pareja <strong>{nodoEnMovimiento.nombre}</strong>. Selecciona una casilla dorada exacta; ambos conservarán su relación.</>
+              ) : (
+                <>Moviendo a <strong>{nodoEnMovimiento.nombre}</strong>. Selecciona una casilla dorada exacta o toca otra persona para unirlos como pareja.</>
+              )}
             </span>
           </div>
           <button type="button" onClick={cancelarModoMover}>Cancelar</button>
         </div>
       )}
 
-      {ayudaEdicionRapidaVisible && esUsuarioAdmin && (
+      {ayudaEdicionRapidaVisible && (
         <div className="modal-accion-arbol-overlay" role="presentation">
           <section className="modal-accion-arbol ayuda-edicion-rapida" role="dialog" aria-modal="true" aria-labelledby="titulo-ayuda-arbol">
             <button
@@ -7279,13 +7901,20 @@ La persona seguirá dentro del árbol como miembro normal.`
             >
               <i className="bi bi-x-lg"></i>
             </button>
-            <span className="modal-accion-arbol-etiqueta">Edición rápida</span>
-            <h3 id="titulo-ayuda-arbol">Edita el árbol sin activar ningún modo</h3>
+            <span className="modal-accion-arbol-etiqueta">Instrucciones</span>
+            <h3 id="titulo-ayuda-arbol">Cómo usar tu árbol genealógico</h3>
             <div className="lista-ayuda-edicion-rapida">
-              <div><i className="bi bi-plus-circle"></i><span>Usa el botón <strong>+</strong> de una generación para agregar familiares.</span></div>
-              <div><i className="bi bi-hand-index-thumb"></i><span>Mantén presionado un nodo para moverlo.</span></div>
-              <div><i className="bi bi-caret-right-fill"></i><span>Usa la flecha del nodo para crear una relación.</span></div>
-              <div><i className="bi bi-heart"></i><span>Toca el icono central de una pareja para cambiar su estado.</span></div>
+              <div><i className="bi bi-grid-1x2"></i><span>Al entrar se abre automáticamente el árbol que creaste. Usa <strong>Ver mis árboles</strong> en los atajos superiores para crear, seleccionar o consultar otros árboles.</span></div>
+              {esUsuarioAdmin && (
+                <>
+                  <div><i className="bi bi-plus-circle"></i><span>Usa el botón <strong>+</strong> de una generación para agregar familiares.</span></div>
+                  <div><i className="bi bi-hand-index-thumb"></i><span>Mantén presionado un nodo y selecciona una <strong>casilla dorada</strong> para fijar su posición exacta dentro de una generación.</span></div>
+                  <div><i className="bi bi-people"></i><span>Mantén presionado a cualquier integrante de una pareja para <strong>mover el bloque completo</strong> sin eliminar su relación.</span></div>
+                  <div><i className="bi bi-caret-right-fill"></i><span>Usa la flecha del nodo para crear una relación.</span></div>
+                  <div><i className="bi bi-heart"></i><span>Toca el icono central de una pareja para cambiar su estado.</span></div>
+                  <div><i className="bi bi-magic"></i><span>Desde el perfil de un nodo fijado puedes usar <strong>Volver al orden automático</strong>.</span></div>
+                </>
+              )}
             </div>
             <button
               type="button"
@@ -7349,25 +7978,23 @@ La persona seguirá dentro del árbol como miembro normal.`
             type="button"
             className="boton-accion-arbol boton-arboles-superior"
             onClick={volverAlMenuArboles}
-            aria-label="Mis árboles"
-            title="Mis árboles"
+            aria-label="Ver mis árboles"
+            title="Ver mis árboles"
           >
             <i className="bi bi-grid-1x2" aria-hidden="true"></i>
-            <span className="texto-control-superior">Mis árboles</span>
+            <span className="texto-control-superior">Ver mis árboles</span>
           </button>
 
-          {esUsuarioAdmin && (
-            <button
-              type="button"
-              className="boton-accion-arbol boton-ayuda-arbol"
-              onClick={() => establecerAyudaEdicionRapidaVisible(true)}
-              aria-label="Cómo editar el árbol"
-              title="Cómo editar el árbol"
-            >
-              <i className="bi bi-question-circle" aria-hidden="true"></i>
-              <span className="texto-control-superior">Ayuda</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="boton-accion-arbol boton-ayuda-arbol"
+            onClick={() => establecerAyudaEdicionRapidaVisible(true)}
+            aria-label="Ver instrucciones del árbol"
+            title="Ver instrucciones del árbol"
+          >
+            <i className="bi bi-question-circle" aria-hidden="true"></i>
+            <span className="texto-control-superior">Ayuda</span>
+          </button>
 
           <button
             type="button"
@@ -7534,16 +8161,19 @@ La persona seguirá dentro del árbol como miembro normal.`
             </div>
           </div>
 
-          {/* CONTROLES ZOOM Y EXPORTAR */}
+          {/* EXPORTACIÓN */}
           <div
-            className="controles-zoom"
+            className="control-exportar-flotante"
           >
             <div style={{ position: 'relative' }}>
               <button
-                className="boton-zoom mb-2"
+                type="button"
+                className="boton-zoom"
                 style={{ backgroundColor: 'var(--fondo-tarjeta)', color: 'var(--texto-principal)' }}
                 onClick={() => establecerMostrarMenuExportar(!mostrarMenuExportar)}
                 title="Exportar Árbol"
+                aria-label="Exportar árbol"
+                aria-expanded={mostrarMenuExportar}
                 disabled={exportandoArbol}
               >
                 <i className={`bi ${exportandoArbol ? 'bi-arrow-repeat exportando-icono' : 'bi-download'}`}></i>
@@ -7551,6 +8181,10 @@ La persona seguirá dentro del árbol como miembro normal.`
 
               {mostrarMenuExportar && (
                 <div className="menu-exportar" onClick={(e) => e.stopPropagation()}>
+                  <div className="menu-exportar-titulo">
+                    <span>Formato de exportación</span>
+                    <small>Después podrás elegir nombre y carpeta</small>
+                  </div>
                   <button
                     type="button"
                     className="item-exportar"
@@ -7558,22 +8192,37 @@ La persona seguirá dentro del árbol como miembro normal.`
                     disabled={exportandoArbol}
                   >
                     <i className="bi bi-file-earmark-pdf text-danger"></i>
-                    <span>{exportandoArbol ? 'Preparando archivo...' : 'Descargar como PDF'}</span>
+                    <span>{exportandoArbol ? 'Preparando archivo...' : 'Exportar como PDF'}</span>
                   </button>
 
                   <button
                     type="button"
                     className="item-exportar"
-                    onClick={() => exportarArbol('imagen')}
+                    onClick={() => exportarArbol('jpg')}
                     disabled={exportandoArbol}
                   >
-                    <i className="bi bi-image text-primary"></i>
-                    <span>{exportandoArbol ? 'Preparando archivo...' : 'Descargar como Imagen'}</span>
+                    <i className="bi bi-file-earmark-image text-primary"></i>
+                    <span>{exportandoArbol ? 'Preparando archivo...' : 'Exportar como JPG'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="item-exportar"
+                    onClick={() => exportarArbol('png')}
+                    disabled={exportandoArbol}
+                  >
+                    <i className="bi bi-image text-success"></i>
+                    <span>{exportandoArbol ? 'Preparando archivo...' : 'Exportar como PNG'}</span>
                   </button>
                 </div>
               )}
             </div>
+          </div>
 
+          {/* CONTROLES DEL MAPA */}
+          <div
+            className={`controles-zoom controles-mapa-izquierda ${leyendaAbierta ? 'con-leyenda-abierta' : 'con-leyenda-minimizada'}`}
+          >
             <button
               type="button"
               className={`boton-zoom boton-filtros-flotante ${((mostrarFiltros && !nodoSeleccionado && !mostrarInvitar && !mostrarEventos) || hayFiltrosAplicados) ? 'activo' : ''}`}
@@ -7587,7 +8236,7 @@ La persona seguirá dentro del árbol como miembro normal.`
 
             <button className="boton-zoom" onClick={acercarZoom} title="Acercar" aria-label="Acercar"><i className="bi bi-plus"></i></button>
             <button className="boton-zoom" onClick={alejarZoom} title="Alejar" aria-label="Alejar"><i className="bi bi-dash"></i></button>
-            <button className="boton-zoom cuadrado" onClick={restablecerZoom} title="Restablecer vista" aria-label="Restablecer vista"><i className="bi bi-arrows-fullscreen" style={{ fontSize: '0.9rem' }}></i></button>
+            <button className="boton-zoom cuadrado" onClick={restablecerZoom} title="Restablecer y centrar vista" aria-label="Restablecer y centrar vista"><i className="bi bi-arrows-fullscreen" style={{ fontSize: '0.9rem' }}></i></button>
           </div>
 
         </div>
@@ -7646,6 +8295,13 @@ La persona seguirá dentro del árbol como miembro normal.`
                           ? `Falleció a los ${nodoSeleccionado.edad} años`
                           : `Edad: ${nodoSeleccionado.edad} años`}
                       </p>
+                    )}
+
+                    {nodoSeleccionado.posicionManual && (
+                      <span className="estado-posicion-manual-arbol mt-2">
+                        <i className="bi bi-pin-angle-fill"></i>
+                        Posición manual fijada
+                      </span>
                     )}
 
                     {puedeGestionarAdminNodo(nodoSeleccionado) && (() => {
@@ -7708,6 +8364,18 @@ La persona seguirá dentro del árbol como miembro normal.`
                         >
                           <i className="bi bi-pencil"></i>
                           Editar datos
+                        </button>
+                      )}
+
+                      {esUsuarioAdmin && nodoSeleccionado.posicionManual && (
+                        <button
+                          type="button"
+                          className="orden-automatico"
+                          onClick={() => restablecerPosicionAutomaticaNodo(nodoSeleccionado)}
+                          disabled={procesandoAccionEstructural}
+                        >
+                          <i className="bi bi-magic"></i>
+                          Volver al orden automático
                         </button>
                       )}
 

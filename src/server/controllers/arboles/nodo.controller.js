@@ -659,6 +659,16 @@ const actualizarNodo = async (req, res) => {
             nodo.fila = resultadoFila.valor;
         }
 
+        if (req.body.posicionManual !== undefined) {
+            if (typeof req.body.posicionManual !== 'boolean') {
+                return res.status(400).json({
+                    mensaje: 'posicionManual debe ser un valor booleano.'
+                });
+            }
+
+            nodo.posicionManual = req.body.posicionManual;
+        }
+
         if (req.body.fotoPerfilNodo !== undefined) {
             nodo.fotoPerfilNodo = normalizarFotoPerfilNodo(req.body.fotoPerfilNodo);
             nodo.fotoPerfilNodoActualizadaEn = nodo.fotoPerfilNodo ? new Date() : null;
@@ -703,12 +713,25 @@ const moverNodo = async (req, res) => {
         const {
             generacionDestino,
             filaDestino = null,
-            parejaDestinoId = null
+            parejaDestinoId = null,
+            moverParejaCompleta = false
         } = req.body;
 
         if (generacionDestino === undefined && !parejaDestinoId) {
             return res.status(400).json({
                 mensaje: 'Selecciona una generación o una persona para completar el movimiento.'
+            });
+        }
+
+        if (typeof moverParejaCompleta !== 'boolean') {
+            return res.status(400).json({
+                mensaje: 'moverParejaCompleta debe ser un valor booleano.'
+            });
+        }
+
+        if (moverParejaCompleta && parejaDestinoId) {
+            return res.status(400).json({
+                mensaje: 'No puedes mover una pareja completa y crear otra unión en la misma operación.'
             });
         }
 
@@ -733,13 +756,16 @@ const moverNodo = async (req, res) => {
             generacionDestino,
             filaDestino,
             parejaDestinoId,
+            moverParejaCompleta,
             creadoPor: req.usuario.id
         });
 
         return res.status(200).json({
-            mensaje: resultado.movidoComoPareja
-                ? 'Familiar movido y relación de pareja actualizada correctamente.'
-                : 'Familiar movido correctamente.',
+            mensaje: resultado.parejaMovidaCompleta
+                ? 'Pareja movida correctamente sin modificar su relación.'
+                : resultado.movidoComoPareja
+                    ? 'Familiar movido y relación de pareja actualizada correctamente.'
+                    : 'Familiar movido correctamente.',
             nodo: resultado.nodo,
             union: resultado.union,
             relacionesEliminadas: resultado.relacionesEliminadas

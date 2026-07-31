@@ -91,6 +91,20 @@ const poblarHilo = async (hiloId) => {
         .populate('nodoDestino');
 };
 
+const anclarParejaEnNodoDestino = async ({ nodoOrigen, nodoDestino, tipoRelacion }) => {
+    if (!TIPOS_RELACION_PAREJA.includes(tipoRelacion) || !nodoOrigen || !nodoDestino) return;
+
+    // El destino es la casilla elegida por el usuario. Ambos integrantes comparten
+    // esa fila y quedan protegidos frente al reordenamiento automático.
+    nodoOrigen.generacion = Number(nodoDestino.generacion);
+    nodoOrigen.fila = Number(nodoDestino.fila);
+    nodoOrigen.posicionManual = true;
+    nodoDestino.posicionManual = true;
+
+    await nodoOrigen.save();
+    await nodoDestino.save();
+};
+
 const crearHilo = async (req, res) => {
     try {
         const {
@@ -186,6 +200,7 @@ const crearHilo = async (req, res) => {
             if (descripcion !== undefined) relacionExistente.descripcion = descripcion;
 
             await relacionExistente.save();
+            await anclarParejaEnNodoDestino({ nodoOrigen, nodoDestino, tipoRelacion });
 
             const hiloPoblado = await poblarHilo(relacionExistente._id);
 
@@ -207,6 +222,8 @@ const crearHilo = async (req, res) => {
             fechaFin,
             descripcion
         });
+
+        await anclarParejaEnNodoDestino({ nodoOrigen, nodoDestino, tipoRelacion });
 
         const hiloPoblado = await poblarHilo(nuevoHilo._id);
 

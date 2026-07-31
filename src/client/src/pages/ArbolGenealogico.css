@@ -650,12 +650,28 @@
 /* CONTROLES ZOOM (Actualizado para el botón Exportar) */
 .controles-zoom {
     position: absolute;
-    right: 1.5rem;
-    bottom: 1.5rem;
+    left: 1.5rem;
+    right: auto;
+    bottom: 5.5rem;
     display: flex;
     flex-direction: column;
     gap: 8px;
     z-index: 5;
+}
+
+.controles-mapa-izquierda.con-leyenda-abierta {
+    bottom: 14.5rem;
+}
+
+.controles-mapa-izquierda.con-leyenda-minimizada {
+    bottom: 5.5rem;
+}
+
+.control-exportar-flotante {
+    position: absolute;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 6;
 }
 
 .boton-zoom {
@@ -714,9 +730,30 @@
     border-radius: 12px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
     padding: 8px 0;
-    min-width: 200px;
+    min-width: 260px;
     z-index: 100;
     animation: deslizarArribaCorto 0.2s ease-out;
+}
+
+.menu-exportar-titulo {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 16px 10px;
+    border-bottom: 1px solid var(--borde-color);
+    margin-bottom: 4px;
+}
+
+.menu-exportar-titulo span {
+    color: var(--texto-principal);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.menu-exportar-titulo small {
+    color: var(--texto-secundario);
+    font-size: 0.66rem;
+    line-height: 1.25;
 }
 
 @keyframes deslizarArribaCorto {
@@ -1462,6 +1499,18 @@
     }
 
     .controles-zoom {
+        left: max(1rem, env(safe-area-inset-left, 0px));
+        right: auto;
+        bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+        z-index: 25;
+    }
+
+    .controles-mapa-izquierda.con-leyenda-abierta,
+    .controles-mapa-izquierda.con-leyenda-minimizada {
+        bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .control-exportar-flotante {
         right: max(1rem, env(safe-area-inset-right, 0px));
         bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
         z-index: 25;
@@ -1472,6 +1521,11 @@
     }
 
     .controles-zoom .boton-zoom {
+        width: 40px;
+        height: 40px;
+    }
+
+    .control-exportar-flotante .boton-zoom {
         width: 40px;
         height: 40px;
     }
@@ -1514,7 +1568,8 @@
     }
 
     .controles-zoom {
-        right: max(1rem, env(safe-area-inset-right, 0px));
+        left: max(1rem, env(safe-area-inset-left, 0px));
+        right: auto;
     }
 }
 
@@ -2587,6 +2642,15 @@
     outline-offset: 3px;
 }
 
+.tarjeta-nodo-unificada.pareja-en-movimiento {
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 4px rgba(203, 164, 52, 0.18), 0 12px 28px rgba(15, 23, 42, 0.16);
+}
+
+.tarjeta-nodo-unificada.pareja-en-movimiento .control-union-relacion {
+    filter: drop-shadow(0 0 5px rgba(203, 164, 52, 0.55));
+}
+
 .fila-persona.destino-mover {
     border-radius: 16px;
 }
@@ -2620,6 +2684,10 @@
 [data-tema="oscuro"] .fila-persona.nodo-en-movimiento {
     background-color: rgba(234, 179, 8, 0.14);
     outline-color: rgba(234, 179, 8, 0.45);
+}
+
+[data-tema="oscuro"] .tarjeta-nodo-unificada.pareja-en-movimiento {
+    box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.20), 0 12px 30px rgba(0, 0, 0, 0.34);
 }
 
 [data-tema="oscuro"] .fila-persona.destino-mover:hover {
@@ -3350,6 +3418,24 @@
 .modo-exportacion-arbol .boton-editar-union,
 .modo-exportacion-arbol .menu-tipo-union {
     display: none !important;
+}
+
+/* html2canvas 1.x no interpreta CSS Color 4. Estas reglas solo se aplican a
+   la copia temporal de exportación y evitan serializaciones color(srgb ...). */
+.modo-exportacion-arbol .linea-vertical-sobre-cruce {
+    filter: drop-shadow(0 0 0.35px rgba(203, 164, 52, 0.72)) !important;
+}
+
+.modo-exportacion-arbol .placeholder-generacion-nueva,
+.modo-exportacion-arbol .placeholder-arbol-vacio,
+.modo-exportacion-arbol .placeholder-generacion-vacia {
+    background-color: var(--fondo-tarjeta) !important;
+    background-image: none !important;
+}
+
+.modo-exportacion-arbol .posicion-insercion-movimiento {
+    border-color: rgba(203, 164, 52, 0.78) !important;
+    background-color: var(--fondo-tarjeta) !important;
 }
 
 
@@ -6129,6 +6215,30 @@
     border-color: rgba(220, 38, 38, 0.25);
 }
 
+.acciones-perfil-sin-cuenta-panel .orden-automatico {
+    grid-column: 1 / -1;
+    color: var(--dorado-oscuro);
+    border-color: color-mix(in srgb, var(--dorado) 42%, var(--borde-color));
+    background: color-mix(in srgb, var(--fondo-app) 88%, var(--dorado) 12%);
+}
+
+.estado-posicion-manual-arbol {
+    width: fit-content;
+    margin-inline: auto;
+    min-height: 28px;
+    padding: 5px 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid color-mix(in srgb, var(--dorado) 42%, var(--borde-color));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--fondo-app) 88%, var(--dorado) 12%);
+    color: var(--dorado-oscuro);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
 @media (max-width: 768px) {
     .columna-generacion {
         min-width: 210px;
@@ -6289,16 +6399,16 @@
     left: 50%;
     z-index: 32;
     width: calc(100% - 30px);
-    min-height: 28px;
-    padding: 4px 12px;
+    min-height: 44px;
+    padding: 6px 13px;
     transform: translate(-50%, -50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
-    border: 1px dashed color-mix(in srgb, var(--dorado) 72%, var(--borde-color));
-    border-radius: 999px;
-    background-color: color-mix(in srgb, var(--fondo-tarjeta) 88%, var(--dorado) 12%);
+    gap: 9px;
+    border: 2px dashed color-mix(in srgb, var(--dorado) 78%, var(--borde-color));
+    border-radius: 14px;
+    background-color: color-mix(in srgb, var(--fondo-tarjeta) 82%, var(--dorado) 18%);
     color: var(--dorado-oscuro);
     font: inherit;
     font-size: 0.72rem;
@@ -6306,7 +6416,7 @@
     line-height: 1;
     cursor: pointer;
     box-shadow: 0 5px 14px rgba(15, 23, 42, 0.12);
-    opacity: 0.9;
+    opacity: 0.96;
     transition:
         transform 0.18s ease,
         opacity 0.18s ease,
@@ -6329,7 +6439,32 @@
 }
 
 .posicion-insercion-movimiento i {
-    font-size: 0.82rem;
+    font-size: 1rem;
+}
+
+.posicion-insercion-contenido {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    line-height: 1.05;
+    text-align: left;
+}
+
+.posicion-insercion-contenido strong {
+    color: inherit;
+    font-size: 0.73rem;
+}
+
+.posicion-insercion-contenido small {
+    max-width: 150px;
+    overflow: hidden;
+    color: var(--texto-secundario);
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .placeholder-generacion-vacia {
@@ -6349,6 +6484,23 @@
 
 [data-tema="oscuro"] .posicion-insercion-movimiento {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+[data-tema="oscuro"] .estado-posicion-manual-arbol,
+[data-tema="oscuro"] .acciones-perfil-sin-cuenta-panel .orden-automatico {
+    color: #fde68a;
+}
+
+@media (max-width: 576px) {
+    .posicion-insercion-movimiento {
+        width: calc(100% - 18px);
+        min-height: 40px;
+        padding: 5px 9px;
+    }
+
+    .posicion-insercion-contenido small {
+        max-width: 122px;
+    }
 }
 
 /* En móvil y tablet se mantiene una separación útil sin alargar demasiado el scroll horizontal. */
