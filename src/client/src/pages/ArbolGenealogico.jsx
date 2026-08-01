@@ -109,6 +109,7 @@ const FILTROS_ARBOL_DEFECTO = {
 
 const FORMULARIO_PERFIL_SIN_CUENTA_INICIAL = {
   nombre: '',
+  genero: '',
   fechaNacimiento: '',
   fechaFallecimiento: '',
   descripcion: '',
@@ -866,6 +867,8 @@ const normalizarHilo = (hilo) => ({
   id: obtenerId(hilo),
   nodoOrigenId: obtenerId(hilo.nodoOrigen),
   nodoDestinoId: obtenerId(hilo.nodoDestino),
+  nodoSuperiorId: obtenerId(hilo.nodoSuperior),
+  ordenVisualManual: Boolean(hilo.ordenVisualManual),
   estado: hilo.estado || 'Activa'
 });
 
@@ -1132,9 +1135,11 @@ const TarjetaPareja = ({
   unionId,
   puedeEditarUnion,
   puedeEliminarUnion,
+  puedeIntercambiarOrden,
   puedeRelacionar,
   puedeMover,
   alCambiarTipoUnion,
+  alIntercambiarOrden,
   alSeleccionar,
   modoRelacionar,
   esDestinoValido,
@@ -1266,6 +1271,21 @@ const TarjetaPareja = ({
                   <span>{opcion.etiqueta}</span>
                 </button>
               ))}
+
+              {puedeIntercambiarOrden && unionId && (
+                <button
+                  type="button"
+                  className="opcion-tipo-union opcion-intercambiar-pareja"
+                  onClick={(evento) => {
+                    evento.stopPropagation();
+                    establecerMenuUnionAbierto(false);
+                    alIntercambiarOrden({ unionId, pareja1, pareja2 });
+                  }}
+                >
+                  <span className="opcion-tipo-union-icono"><i className="bi bi-arrow-down-up"></i></span>
+                  <span>Intercambiar posiciones</span>
+                </button>
+              )}
 
               {puedeEliminarUnion && unionId && (
                 <button
@@ -1659,6 +1679,12 @@ export default function ArbolGenealogico() {
   const [exportandoArbol, establecerExportandoArbol] = useState(false);
   const lienzoExportableRef = useRef(null);
   const contenidoExportableRef = useRef(null);
+
+  // Acomodo automático global
+  const [modalAcomodoAutomaticoVisible, establecerModalAcomodoAutomaticoVisible] = useState(false);
+  const [preferenciaAcomodoGenero, establecerPreferenciaAcomodoGenero] = useState('masculino_arriba');
+  const [conservarPosicionesManuales, establecerConservarPosicionesManuales] = useState(true);
+  const [reorganizandoArbol, establecerReorganizandoArbol] = useState(false);
 
   const [esModoEdicion, establecerModoEdicion] = useState(false);
   const [nivelZoom, establecerNivelZoom] = useState(1);
@@ -4549,6 +4575,14 @@ export default function ArbolGenealogico() {
       if (!origen || !destino) return;
       if (idsUsados.has(String(origen.id)) || idsUsados.has(String(destino.id))) return;
 
+      const superiorId = String(hilo.nodoSuperiorId || '');
+      const parejaSuperior = superiorId === String(destino.id)
+        ? destino
+        : origen;
+      const parejaInferior = String(parejaSuperior.id) === String(origen.id)
+        ? destino
+        : origen;
+
       const generacion = Math.min(Number(origen.generacion), Number(destino.generacion));
       const fila = Math.min(Number(origen.fila), Number(destino.fila));
 
@@ -4561,14 +4595,14 @@ export default function ArbolGenealogico() {
         unionId: hilo.id,
         tipoUnion: hilo.tipoRelacion,
         hilo,
-        pareja1: origen,
-        pareja2: destino,
+        pareja1: parejaSuperior,
+        pareja2: parejaInferior,
         generacion,
         fila,
         filaOriginal: fila,
         posicionManual: Boolean(origen.posicionManual || destino.posicionManual),
-        nodoPrincipalId: origen.id,
-        nodosIds: [origen.id, destino.id]
+        nodoPrincipalId: parejaSuperior.id,
+        nodosIds: [parejaSuperior.id, parejaInferior.id]
       });
     });
 
@@ -5280,6 +5314,7 @@ La persona seguirá dentro del árbol como miembro normal.`
     establecerNodoEditandoPerfilSinCuenta(nodo);
     establecerFormularioPerfilSinCuenta({
       nombre: nodo.nombre || '',
+      genero: nodo.genero || '',
       fechaNacimiento: formatearFechaParaInput(nodo.fechaNacimiento),
       fechaFallecimiento: formatearFechaParaInput(nodo.fechaFallecimiento),
       descripcion: nodo.biografia || '',
@@ -5331,6 +5366,7 @@ La persona seguirá dentro del árbol como miembro normal.`
 
   const construirDatosPerfilSinCuentaDesdeFormulario = () => {
     const nombre = formularioPerfilSinCuenta.nombre.trim();
+    const genero = formularioPerfilSinCuenta.genero || '';
     const descripcion = formularioPerfilSinCuenta.descripcion.trim();
     const fechaNacimiento = formularioPerfilSinCuenta.fechaNacimiento || null;
     const fechaFallecimiento = formularioPerfilSinCuenta.fechaFallecimiento || null;
@@ -5367,6 +5403,7 @@ La persona seguirá dentro del árbol como miembro normal.`
 
     return {
       nombre,
+      genero,
       iniciales: obtenerIniciales(nombre),
       color: colorPorTexto(nombre),
       colorFondo: colorPorTexto(nombre),
@@ -5396,6 +5433,7 @@ La persona seguirá dentro del árbol como miembro normal.`
     const nodoId = nodoEditandoPerfilSinCuenta.id;
     const datosActualizados = {
       nombre: datosPerfil.nombre,
+      genero: datosPerfil.genero,
       iniciales: datosPerfil.iniciales,
       colorFondo: datosPerfil.colorFondo,
       colorTexto: datosPerfil.colorTexto,
@@ -5571,6 +5609,7 @@ La persona seguirá dentro del árbol como miembro normal.`
         iniciales: persona.iniciales,
         colorFondo: persona.colorFondo,
         colorTexto: persona.colorTexto,
+        genero: persona.genero || '',
         fechaNacimiento: persona.fechaNacimiento || null,
         fechaFallecimiento: persona.fechaFallecimiento || null,
         fechaCorta: persona.fechaCorta || 'Pendiente',
@@ -6743,6 +6782,62 @@ La persona seguirá dentro del árbol como miembro normal.`
     }
   };
 
+  const intercambiarOrdenPareja = async ({ unionId, pareja1, pareja2 }) => {
+    if (!unionId || !pareja1?.id || !pareja2?.id || !arbol?._id) return;
+    if (!esUsuarioAdmin || procesandoAccionEstructural) return;
+
+    const confirmado = window.confirm(
+      `¿Deseas colocar a ${pareja2.nombre} arriba y a ${pareja1.nombre} debajo?\n\nLa relación y la casilla de la pareja se conservarán.`
+    );
+    if (!confirmado) return;
+
+    try {
+      establecerProcesandoAccionEstructural(true);
+      await apiFetch(`/api/hilos/arbol/${arbol._id}/${unionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          nodoSuperiorId: pareja2.id,
+          ordenVisualManual: true
+        })
+      });
+
+      establecerMensajeSistema('Orden de la pareja intercambiado correctamente.');
+      await cargarNodosEHilos(arbol._id);
+    } catch (error) {
+      console.error('Error al intercambiar el orden de la pareja:', error);
+      window.alert(error.message || 'No se pudo intercambiar el orden de la pareja.');
+    } finally {
+      establecerProcesandoAccionEstructural(false);
+    }
+  };
+
+  const aplicarAcomodoAutomaticoArbol = async () => {
+    if (!arbol?._id || !esUsuarioAdmin || reorganizandoArbol) return;
+
+    try {
+      establecerReorganizandoArbol(true);
+      const data = await apiFetch(`/api/nodos/arbol/${arbol._id}/reorganizar`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          preferenciaGenero: preferenciaAcomodoGenero,
+          conservarPosicionesManuales
+        })
+      });
+
+      establecerModalAcomodoAutomaticoVisible(false);
+      establecerNodoSeleccionado(null);
+      reiniciarModos();
+      establecerMensajeSistema(data.mensaje || 'Árbol reorganizado correctamente.');
+      await cargarNodosEHilos(arbol._id);
+      restablecerZoom();
+    } catch (error) {
+      console.error('Error al aplicar el acomodo automático:', error);
+      window.alert(error.message || 'No se pudo reorganizar el árbol.');
+    } finally {
+      establecerReorganizandoArbol(false);
+    }
+  };
+
   const puedeEditarEstadoFamiliarSeleccionado = (estadoFamiliar) => {
     if (!estadoFamiliar?.unionId || !usuarioActualId) return false;
 
@@ -7186,9 +7281,11 @@ La persona seguirá dentro del árbol como miembro normal.`
           unionId={card.unionId}
           puedeEditarUnion={puedeEditarUnionCard(card)}
           puedeEliminarUnion={esUsuarioAdmin}
+          puedeIntercambiarOrden={esUsuarioAdmin && !procesandoAccionEstructural}
           puedeRelacionar={esUsuarioAdmin}
           puedeMover={esUsuarioAdmin}
           alCambiarTipoUnion={(nuevoTipo) => cambiarTipoUnion(card, nuevoTipo)}
+          alIntercambiarOrden={intercambiarOrdenPareja}
           alSeleccionar={seleccionarNodo}
           modoRelacionar={modoRelacionar}
           esDestinoValido={esDestinoValido}
@@ -7911,7 +8008,8 @@ La persona seguirá dentro del árbol como miembro normal.`
                   <div><i className="bi bi-hand-index-thumb"></i><span>Mantén presionado un nodo y selecciona una <strong>casilla dorada</strong> para fijar su posición exacta dentro de una generación.</span></div>
                   <div><i className="bi bi-people"></i><span>Mantén presionado a cualquier integrante de una pareja para <strong>mover el bloque completo</strong> sin eliminar su relación.</span></div>
                   <div><i className="bi bi-caret-right-fill"></i><span>Usa la flecha del nodo para crear una relación.</span></div>
-                  <div><i className="bi bi-heart"></i><span>Toca el icono central de una pareja para cambiar su estado.</span></div>
+                  <div><i className="bi bi-arrow-down-up"></i><span>Toca el icono central de una pareja y usa <strong>Intercambiar posiciones</strong> para cambiar quién aparece arriba.</span></div>
+                  <div><i className="bi bi-magic"></i><span>El botón de varita reorganiza todo el árbol por línea masculina o femenina y puede respetar tus posiciones manuales.</span></div>
                   <div><i className="bi bi-magic"></i><span>Desde el perfil de un nodo fijado puedes usar <strong>Volver al orden automático</strong>.</span></div>
                 </>
               )}
@@ -7926,6 +8024,92 @@ La persona seguirá dentro del árbol como miembro normal.`
             >
               Entendido
             </button>
+          </section>
+        </div>
+      )}
+
+      {modalAcomodoAutomaticoVisible && (
+        <div
+          className="modal-accion-arbol-overlay"
+          role="presentation"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget && !reorganizandoArbol) {
+              establecerModalAcomodoAutomaticoVisible(false);
+            }
+          }}
+        >
+          <section className="modal-accion-arbol modal-acomodo-arbol" role="dialog" aria-modal="true" aria-labelledby="titulo-acomodo-arbol">
+            <button
+              type="button"
+              className="modal-accion-arbol-cerrar"
+              onClick={() => establecerModalAcomodoAutomaticoVisible(false)}
+              disabled={reorganizandoArbol}
+              aria-label="Cerrar acomodo automático"
+            >
+              <i className="bi bi-x-lg"></i>
+            </button>
+
+            <span className="modal-accion-arbol-etiqueta">Acomodo automático</span>
+            <h3 id="titulo-acomodo-arbol">Organiza las ramas de todo el árbol</h3>
+            <p>Elige qué línea aparecerá primero dentro de cada familia. Las parejas se tratarán como bloques y los padres se centrarán respecto a su descendencia.</p>
+
+            <div className="opciones-acomodo-genero" role="radiogroup" aria-label="Preferencia de orden por género">
+              <button
+                type="button"
+                className={preferenciaAcomodoGenero === 'masculino_arriba' ? 'activo' : ''}
+                onClick={() => establecerPreferenciaAcomodoGenero('masculino_arriba')}
+                aria-pressed={preferenciaAcomodoGenero === 'masculino_arriba'}
+                disabled={reorganizandoArbol}
+              >
+                <span className="icono-modelo-acomodo"><i className="bi bi-gender-male"></i></span>
+                <span><strong>Masculino arriba</strong><small>Varones primero; sus parejas femeninas se colocan debajo.</small></span>
+              </button>
+
+              <button
+                type="button"
+                className={preferenciaAcomodoGenero === 'femenino_arriba' ? 'activo' : ''}
+                onClick={() => establecerPreferenciaAcomodoGenero('femenino_arriba')}
+                aria-pressed={preferenciaAcomodoGenero === 'femenino_arriba'}
+                disabled={reorganizandoArbol}
+              >
+                <span className="icono-modelo-acomodo"><i className="bi bi-gender-female"></i></span>
+                <span><strong>Femenino arriba</strong><small>Mujeres primero; sus parejas masculinas se colocan debajo.</small></span>
+              </button>
+            </div>
+
+            <label className="opcion-conservar-acomodo">
+              <input
+                type="checkbox"
+                checked={conservarPosicionesManuales}
+                onChange={(evento) => establecerConservarPosicionesManuales(evento.target.checked)}
+                disabled={reorganizandoArbol}
+              />
+              <span className="control-check-acomodo"><i className="bi bi-check-lg"></i></span>
+              <span>
+                <strong>Conservar posiciones e intercambios manuales</strong>
+                <small>Los nodos fijados y parejas intercambiadas funcionarán como anclas.</small>
+              </span>
+            </label>
+
+            {!conservarPosicionesManuales && (
+              <div className="aviso-reinicio-acomodo">
+                <i className="bi bi-exclamation-triangle"></i>
+                Se reemplazarán todas las casillas e intercambios manuales del árbol.
+              </div>
+            )}
+
+            <div className="acciones-modal-acomodo">
+              <button type="button" className="btn-secundario-acomodo" onClick={() => establecerModalAcomodoAutomaticoVisible(false)} disabled={reorganizandoArbol}>
+                Cancelar
+              </button>
+              <button type="button" className="btn-confirmar-accion-arbol" onClick={aplicarAcomodoAutomaticoArbol} disabled={reorganizandoArbol}>
+                {reorganizandoArbol ? (
+                  <><span className="spinner-border spinner-border-sm" aria-hidden="true"></span> Reorganizando...</>
+                ) : (
+                  <><i className="bi bi-magic"></i> Aplicar acomodo</>
+                )}
+              </button>
+            </div>
           </section>
         </div>
       )}
@@ -8233,6 +8417,20 @@ La persona seguirá dentro del árbol como miembro normal.`
             >
               <i className={`bi ${hayFiltrosAplicados ? 'bi-funnel-fill' : 'bi-funnel'}`} aria-hidden="true"></i>
             </button>
+
+            {esUsuarioAdmin && (
+              <button
+                type="button"
+                className={`boton-zoom boton-acomodo-automatico ${modalAcomodoAutomaticoVisible ? 'activo' : ''}`}
+                onClick={() => establecerModalAcomodoAutomaticoVisible(true)}
+                title="Acomodar automáticamente todo el árbol"
+                aria-label="Acomodar automáticamente todo el árbol"
+                aria-pressed={modalAcomodoAutomaticoVisible}
+                disabled={reorganizandoArbol || procesandoAccionEstructural}
+              >
+                <i className={`bi ${reorganizandoArbol ? 'bi-arrow-repeat exportando-icono' : 'bi-magic'}`} aria-hidden="true"></i>
+              </button>
+            )}
 
             <button className="boton-zoom" onClick={acercarZoom} title="Acercar" aria-label="Acercar"><i className="bi bi-plus"></i></button>
             <button className="boton-zoom" onClick={alejarZoom} title="Alejar" aria-label="Alejar"><i className="bi bi-dash"></i></button>
@@ -8687,6 +8885,20 @@ La persona seguirá dentro del árbol como miembro normal.`
                           onChange={(e) => actualizarCampoPerfilSinCuenta('nombre', e.target.value)}
                           placeholder="Ej. Celia Gallegos"
                         />
+                      </div>
+
+                      <div className="campo-formulario-sin-cuenta">
+                        <label>Género <span>para el acomodo de ramas</span></label>
+                        <select
+                          value={formularioPerfilSinCuenta.genero}
+                          onChange={(e) => actualizarCampoPerfilSinCuenta('genero', e.target.value)}
+                        >
+                          <option value="">Sin especificar</option>
+                          <option value="Masculino">Masculino</option>
+                          <option value="Femenino">Femenino</option>
+                          <option value="Otro">Otro</option>
+                          <option value="Prefiero no decirlo">Prefiero no decirlo</option>
+                        </select>
                       </div>
 
                       <div className="grid-fechas-sin-cuenta">

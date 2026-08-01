@@ -339,6 +339,370 @@ const eliminarRelacionesPadreHijoInvalidas = async ({ arbolId, session = null })
     return idsInvalidos;
 };
 
+const PREFERENCIAS_GENERO_LAYOUT = ['masculino_arriba', 'femenino_arriba'];
+
+const normalizarGeneroLayout = (valor = '') => {
+    const genero = String(valor || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+
+    if (genero === 'masculino' || genero === 'hombre') return 'masculino';
+    if (genero === 'femenino' || genero === 'mujer') return 'femenino';
+    return 'otro';
+};
+
+const obtenerGeneroNodoLayout = (nodo = {}) => normalizarGeneroLayout(
+    nodo.usuario?.informacionPerfil?.genero || nodo.genero || ''
+);
+
+const obtenerPrioridadGeneroLayout = (nodo, preferenciaGenero) => {
+    const genero = obtenerGeneroNodoLayout(nodo);
+    const generoPreferido = preferenciaGenero === 'femenino_arriba'
+        ? 'femenino'
+        : 'masculino';
+
+    if (genero === generoPreferido) return 0;
+    if (genero === 'masculino' || genero === 'femenino') return 1;
+    return 2;
+};
+
+const promedioNumeros = (valores = []) => {
+    const numeros = valores.filter(Number.isFinite);
+    if (numeros.length === 0) return null;
+    return numeros.reduce((total, valor) => total + valor, 0) / numeros.length;
+};
+
+const reorganizarArbolCompleto = async ({
+    arbolId,
+    preferenciaGenero = 'masculino_arriba',
+    conservarPosicionesManuales = true
+}) => ejecutarOperacionLayout(async (session) => {
+    if (!PREFERENCIAS_GENERO_LAYOUT.includes(preferenciaGenero)) {
+        const error = new Error('Selecciona una preferencia de acomodo válida.');
+        error.status = 400;
+        throw error;
+    }
+
+    if (typeof conservarPosicionesManuales !== 'boolean') {
+        const error = new Error('conservarPosicionesManuales debe ser un valor booleano.');
+        error.status = 400;
+        throw error;
+    }
+
+    await normalizarGeneracionesPersistidas({ arbolId, session });
+
+    const consultaNodos = Nodo.find({
+        arbol: arbolId,
+        visible: true
+    })
+        .sort({ generacion: 1, fila: 1, createdAt: 1, _id: 1 })
+        .populate({
+            path: 'usuario',
+            select: 'informacionPerfil',
+            populate: {
+                path: 'informacionPerfil',
+                select: 'genero'
+            }
+        });
+    if (session) consultaNodos.session(session);
+    const nodos = await consultaNodos.lean();
+
+    const consultaHilos = Hilo.find({
+        arbol: arbolId,
+        estado: { $ne: 'Eliminada' }
+    }).sort({ createdAt: 1, _id: 1 });
+    if (session) consultaHilos.session(session);
+    const hilos = await consultaHilos.lean();
+
+    if (nodos.length === 0) {
+        return {
+            nodosActualizados: 0,
+            parejasOrientadas: 0,
+            preferenciaGenero,
+            conservarPosicionesManuales
+        };
+    }
+
+    const nodosPorId = new Map(nodos.map(nodo => [String(nodo._id), nodo]));
+    const relacionesPareja = hilos.filter(hilo => TIPOS_RELACION_PAREJA.includes(hilo.tipoRelacion));
+    const relacionesDescendencia = hilos.filter(hilo => hilo.tipoRelacion === 'padre_hijo');
+    const padresPorNodo = new Map();
+
+    relacionesDescendencia.forEach((hilo) => {
+        const hijoId = String(hilo.nodoDestino);
+        const padreId = String(hilo.nodoOrigen);
+        if (!nodosPorId.has(hijoId) || !nodosPorId.has(padreId)) return;
+        if (!padresPorNodo.has(hijoId)) padresPorNodo.set(hijoId, new Set());
+        padresPorNodo.get(hijoId).add(padreId);
+    });
+
+    const operacionesHilos = [];
+    let parejasOrientadas = 0;
+
+    relacionesPareja.forEach((hilo) => {
+        const origen = nodosPorId.get(String(hilo.nodoOrigen));
+        const destino = nodosPorId.get(String(hilo.nodoDestino));
+        if (!origen || !destino) return;
+
+        const idsPareja = [String(origen._id), String(destino._id)];
+        const superiorActual = hilo.nodoSuperior ? String(hilo.nodoSuperior) : null;
+        const superiorActualValido = idsPareja.includes(superiorActual);
+        const conservarOrdenManual = Boolean(
+            conservarPosicionesManuales &&
+            hilo.ordenVisualManual &&
+            superiorActualValido
+        );
+
+        let superiorId = superiorActualValido ? superiorActual : String(origen._id);
+
+        if (!conservarOrdenManual) {
+            const generoOrigen = obtenerGeneroNodoLayout(origen);
+            const generoDestino = obtenerGeneroNodoLayout(destino);
+            const generosBinariosDistintos = new Set([generoOrigen, generoDestino]);
+
+            if (
+                generosBinariosDistintos.has('masculino') &&
+                generosBinariosDistintos.has('femenino')
+            ) {
+                const generoSuperior = preferenciaGenero === 'femenino_arriba'
+                    ? 'femenino'
+                    : 'masculino';
+                superiorId = generoOrigen === generoSuperior
+                    ? String(origen._id)
+                    : String(destino._id);
+            }
+        }
+
+        const ordenManualFinal = conservarOrdenManual;
+        if (
+            superiorId !== superiorActual ||
+            Boolean(hilo.ordenVisualManual) !== ordenManualFinal
+        ) {
+            operacionesHilos.push({
+                updateOne: {
+                    filter: { _id: hilo._id },
+                    update: {
+                        $set: {
+                            nodoSuperior: superiorId,
+                            ordenVisualManual: ordenManualFinal
+                        }
+                    }
+                }
+            });
+            parejasOrientadas += 1;
+        }
+    });
+
+    const nodosAgrupados = new Set();
+    const bloques = [];
+    const bloquePorNodoId = new Map();
+
+    relacionesPareja.forEach((hilo) => {
+        const origen = nodosPorId.get(String(hilo.nodoOrigen));
+        const destino = nodosPorId.get(String(hilo.nodoDestino));
+        if (!origen || !destino) return;
+        if (Number(origen.generacion) !== Number(destino.generacion)) return;
+
+        const origenId = String(origen._id);
+        const destinoId = String(destino._id);
+        if (nodosAgrupados.has(origenId) || nodosAgrupados.has(destinoId)) return;
+
+        const bloque = {
+            id: `pareja-${hilo._id}`,
+            nodos: [origen, destino],
+            generacion: Number(origen.generacion),
+            filaActual: Math.min(Number(origen.fila), Number(destino.fila)),
+            posicionManual: Boolean(origen.posicionManual || destino.posicionManual),
+            creadoEn: Math.min(
+                new Date(origen.createdAt || 0).getTime(),
+                new Date(destino.createdAt || 0).getTime()
+            )
+        };
+
+        bloques.push(bloque);
+        nodosAgrupados.add(origenId);
+        nodosAgrupados.add(destinoId);
+        bloquePorNodoId.set(origenId, bloque);
+        bloquePorNodoId.set(destinoId, bloque);
+    });
+
+    nodos.forEach((nodo) => {
+        const nodoId = String(nodo._id);
+        if (nodosAgrupados.has(nodoId)) return;
+
+        const bloque = {
+            id: `nodo-${nodoId}`,
+            nodos: [nodo],
+            generacion: Number(nodo.generacion),
+            filaActual: Number(nodo.fila),
+            posicionManual: Boolean(nodo.posicionManual),
+            creadoEn: new Date(nodo.createdAt || 0).getTime()
+        };
+
+        bloques.push(bloque);
+        bloquePorNodoId.set(nodoId, bloque);
+    });
+
+    bloques.forEach((bloque) => {
+        const miembrosFamilia = bloque.nodos.map((nodo) => {
+            const padres = Array.from(padresPorNodo.get(String(nodo._id)) || [])
+                .sort((a, b) => a.localeCompare(b));
+            return {
+                nodo,
+                clave: padres.length > 0 ? padres.join('|') : null,
+                padres
+            };
+        });
+        const clavesFamilia = [...new Set(miembrosFamilia.map(item => item.clave).filter(Boolean))];
+
+        bloque.miembrosFamilia = miembrosFamilia;
+        bloque.clavesFamilia = clavesFamilia;
+        bloque.esPuente = bloque.nodos.length > 1 && clavesFamilia.length > 1;
+    });
+
+    const bloquesPorGeneracion = new Map();
+    bloques.forEach((bloque) => {
+        if (!bloquesPorGeneracion.has(bloque.generacion)) {
+            bloquesPorGeneracion.set(bloque.generacion, []);
+        }
+        bloquesPorGeneracion.get(bloque.generacion).push(bloque);
+    });
+
+    const indicePorBloque = new Map();
+    const ordenFinalPorGeneracion = new Map();
+    const generaciones = Array.from(bloquesPorGeneracion.keys()).sort((a, b) => a - b);
+    const compararOrdenActual = (a, b) => {
+        const diferenciaFila = Number(a.filaActual) - Number(b.filaActual);
+        if (diferenciaFila !== 0) return diferenciaFila;
+        const diferenciaCreacion = Number(a.creadoEn) - Number(b.creadoEn);
+        if (diferenciaCreacion !== 0) return diferenciaCreacion;
+        return String(a.id).localeCompare(String(b.id));
+    };
+
+    generaciones.forEach((generacion) => {
+        const lista = [...(bloquesPorGeneracion.get(generacion) || [])];
+        const ordenActual = [...lista].sort(compararOrdenActual);
+        const familias = new Map();
+        const elementosIndependientes = [];
+
+        const obtenerPosicionPadres = (idsPadres = []) => promedioNumeros(
+            [...new Set(idsPadres.map((padreId) => bloquePorNodoId.get(String(padreId))?.id))]
+                .filter(Boolean)
+                .map(bloqueId => indicePorBloque.get(String(bloqueId)))
+        );
+
+        lista.forEach((bloque) => {
+            if (bloque.clavesFamilia.length === 1) {
+                const clave = bloque.clavesFamilia[0];
+                if (!familias.has(clave)) familias.set(clave, []);
+                familias.get(clave).push(bloque);
+                return;
+            }
+
+            const posicionesFamilia = bloque.miembrosFamilia
+                .map(item => obtenerPosicionPadres(item.padres))
+                .filter(Number.isFinite);
+            elementosIndependientes.push({
+                id: `independiente-${bloque.id}`,
+                bloques: [bloque],
+                posicionIdeal: promedioNumeros(posicionesFamilia) ?? Number(bloque.filaActual),
+                filaReferencia: Number(bloque.filaActual)
+            });
+        });
+
+        const segmentosFamilia = Array.from(familias.entries()).map(([clave, bloquesFamilia]) => {
+            const idsPadres = clave.split('|').filter(Boolean);
+            const posicionFamilia = obtenerPosicionPadres(idsPadres);
+            const bloquesOrdenados = [...bloquesFamilia].sort((a, b) => {
+                const obtenerNodoLinea = (bloque) => (
+                    bloque.miembrosFamilia.find(item => item.clave === clave)?.nodo || bloque.nodos[0]
+                );
+                const prioridadA = obtenerPrioridadGeneroLayout(obtenerNodoLinea(a), preferenciaGenero);
+                const prioridadB = obtenerPrioridadGeneroLayout(obtenerNodoLinea(b), preferenciaGenero);
+                if (prioridadA !== prioridadB) return prioridadA - prioridadB;
+                return compararOrdenActual(a, b);
+            });
+
+            return {
+                id: `familia-${clave}`,
+                bloques: bloquesOrdenados,
+                posicionIdeal: posicionFamilia ?? Math.min(...bloquesFamilia.map(bloque => Number(bloque.filaActual))),
+                filaReferencia: Math.min(...bloquesFamilia.map(bloque => Number(bloque.filaActual)))
+            };
+        });
+
+        const segmentos = [...segmentosFamilia, ...elementosIndependientes]
+            .sort((a, b) => {
+                const diferenciaIdeal = Number(a.posicionIdeal) - Number(b.posicionIdeal);
+                if (diferenciaIdeal !== 0) return diferenciaIdeal;
+                const diferenciaFila = Number(a.filaReferencia) - Number(b.filaReferencia);
+                if (diferenciaFila !== 0) return diferenciaFila;
+                return String(a.id).localeCompare(String(b.id));
+            });
+
+        const ordenAutomatico = segmentos.flatMap(segmento => segmento.bloques);
+        let ordenFinal = ordenAutomatico;
+
+        if (conservarPosicionesManuales && ordenActual.some(bloque => bloque.posicionManual)) {
+            const resultado = new Array(ordenActual.length).fill(null);
+            ordenActual.forEach((bloque, indice) => {
+                if (bloque.posicionManual) resultado[indice] = bloque;
+            });
+
+            const movibles = ordenAutomatico.filter(bloque => !bloque.posicionManual);
+            let indiceMovible = 0;
+            ordenFinal = resultado.map((bloque) => bloque || movibles[indiceMovible++]);
+        }
+
+        ordenFinal.forEach((bloque, indice) => indicePorBloque.set(String(bloque.id), indice));
+        ordenFinalPorGeneracion.set(generacion, ordenFinal);
+    });
+
+    const operacionesNodos = [];
+    ordenFinalPorGeneracion.forEach((ordenFinal) => {
+        ordenFinal.forEach((bloque, fila) => {
+            bloque.nodos.forEach((nodo) => {
+                const cambios = {};
+                if (Number(nodo.fila) !== fila) cambios.fila = fila;
+                if (!conservarPosicionesManuales && nodo.posicionManual) {
+                    cambios.posicionManual = false;
+                }
+                if (Object.keys(cambios).length === 0) return;
+
+                operacionesNodos.push({
+                    updateOne: {
+                        filter: { _id: nodo._id, arbol: arbolId },
+                        update: { $set: cambios }
+                    }
+                });
+            });
+        });
+    });
+
+    if (operacionesNodos.length > 0) {
+        await Nodo.bulkWrite(
+            operacionesNodos,
+            session ? { ordered: true, session } : { ordered: true }
+        );
+    }
+
+    if (operacionesHilos.length > 0) {
+        await Hilo.bulkWrite(
+            operacionesHilos,
+            session ? { ordered: true, session } : { ordered: true }
+        );
+    }
+
+    return {
+        nodosActualizados: operacionesNodos.length,
+        parejasOrientadas,
+        preferenciaGenero,
+        conservarPosicionesManuales
+    };
+});
+
 const moverNodoAtomico = async ({
     arbolId,
     nodoId,
@@ -490,6 +854,9 @@ const moverNodoAtomico = async ({
                 sonMismoId(unionActual.nodoDestino, parejaDestinoId)
             )
         );
+        const nodoSuperiorInicialId = Number(nodo.fila) <= Number(parejaDestino.fila)
+            ? nodo._id
+            : parejaDestino._id;
 
         if (unionActual && !yaEsParejaDestino) {
             unionActual.estado = 'Eliminada';
@@ -506,6 +873,9 @@ const moverNodoAtomico = async ({
 
         if (yaEsParejaDestino) {
             unionActual.estado = 'Activa';
+            if (!unionActual.nodoSuperior) {
+                unionActual.nodoSuperior = nodoSuperiorInicialId;
+            }
             unionFinal = await unionActual.save(opcionesSesion(session));
         } else {
             const filtroUnion = {
@@ -525,12 +895,16 @@ const moverNodoAtomico = async ({
                 existente.tipoRelacion = 'pareja';
                 existente.estado = 'Activa';
                 existente.creadoPor = existente.creadoPor || creadoPor;
+                if (!existente.nodoSuperior) {
+                    existente.nodoSuperior = nodoSuperiorInicialId;
+                }
                 unionFinal = await existente.save(opcionesSesion(session));
             } else {
                 const documentos = await Hilo.create([{
                     arbol: arbolId,
                     nodoOrigen: parejaDestinoId,
                     nodoDestino: nodoId,
+                    nodoSuperior: nodoSuperiorInicialId,
                     tipoRelacion: 'pareja',
                     estado: 'Activa',
                     creadoPor
@@ -625,5 +999,6 @@ module.exports = {
     normalizarGeneracionesPersistidas,
     prepararGeneracionObjetivo,
     obtenerSiguienteFila,
+    reorganizarArbolCompleto,
     moverNodoAtomico
 };

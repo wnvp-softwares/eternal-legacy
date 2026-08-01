@@ -719,6 +719,13 @@
     background-color: var(--dorado);
 }
 
+.boton-acomodo-automatico.activo {
+    border: 1px solid var(--dorado);
+    background-color: var(--dorado);
+    color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(203, 164, 52, 0.18), 0 4px 8px rgba(0, 0, 0, 0.12);
+}
+
 /* Menú Desplegable de Exportación */
 .menu-exportar {
     position: absolute;
@@ -2345,7 +2352,7 @@
     position: absolute;
     top: 38px;
     right: 0;
-    width: 190px;
+    width: 224px;
     background-color: var(--fondo-tarjeta);
     border: 1px solid var(--borde-color);
     border-radius: 16px;
@@ -2397,6 +2404,18 @@
 
 .opcion-tipo-union:hover {
     background-color: var(--hover-menu);
+}
+
+.opcion-tipo-union:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.opcion-intercambiar-pareja {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--borde-color);
+    border-radius: 0 0 12px 12px;
 }
 
 .opcion-tipo-union.activo {
@@ -2808,7 +2827,8 @@
 }
 
 .campo-formulario-sin-cuenta input,
-.campo-formulario-sin-cuenta textarea {
+.campo-formulario-sin-cuenta textarea,
+.campo-formulario-sin-cuenta select {
     width: 100%;
     border: 1px solid var(--borde-color);
     border-radius: 14px;
@@ -2829,7 +2849,8 @@
 }
 
 .campo-formulario-sin-cuenta input:focus,
-.campo-formulario-sin-cuenta textarea:focus {
+.campo-formulario-sin-cuenta textarea:focus,
+.campo-formulario-sin-cuenta select:focus {
     border-color: var(--dorado);
     box-shadow: 0 0 0 3px rgba(203, 164, 52, 0.15);
     background-color: var(--fondo-tarjeta);
@@ -2993,7 +3014,8 @@
 }
 
 [data-tema="oscuro"] .campo-formulario-sin-cuenta input,
-[data-tema="oscuro"] .campo-formulario-sin-cuenta textarea {
+[data-tema="oscuro"] .campo-formulario-sin-cuenta textarea,
+[data-tema="oscuro"] .campo-formulario-sin-cuenta select {
     background-color: rgba(15, 23, 42, 0.55);
 }
 
@@ -6132,6 +6154,167 @@
     cursor: pointer;
 }
 
+.modal-acomodo-arbol {
+    width: min(590px, 100%);
+}
+
+.opciones-acomodo-genero {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 20px 0 14px;
+}
+
+.opciones-acomodo-genero > button {
+    min-width: 0;
+    min-height: 128px;
+    border: 1px solid var(--borde-color);
+    border-radius: 18px;
+    background: var(--fondo-app);
+    color: var(--texto-principal);
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.opciones-acomodo-genero > button:hover {
+    border-color: var(--dorado);
+    transform: translateY(-1px);
+}
+
+.opciones-acomodo-genero > button.activo {
+    border-color: var(--dorado);
+    box-shadow: 0 0 0 3px rgba(203, 164, 52, 0.16);
+}
+
+.opciones-acomodo-genero > button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.icono-modelo-acomodo {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(203, 164, 52, 0.14);
+    color: var(--dorado-oscuro);
+    font-size: 1.12rem;
+}
+
+.opciones-acomodo-genero > button > span:last-child {
+    display: grid;
+    gap: 5px;
+}
+
+.opciones-acomodo-genero strong,
+.opcion-conservar-acomodo strong {
+    font-size: 0.86rem;
+}
+
+.opciones-acomodo-genero small,
+.opcion-conservar-acomodo small {
+    color: var(--texto-secundario);
+    font-size: 0.74rem;
+    line-height: 1.4;
+}
+
+.opcion-conservar-acomodo {
+    min-height: 68px;
+    border: 1px solid var(--borde-color);
+    border-radius: 17px;
+    background: var(--fondo-app);
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.opcion-conservar-acomodo > input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.control-check-acomodo {
+    width: 26px;
+    height: 26px;
+    border: 2px solid var(--borde-color);
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    transition: all 0.18s ease;
+}
+
+.opcion-conservar-acomodo > input:checked + .control-check-acomodo {
+    border-color: var(--dorado);
+    background: var(--dorado);
+    color: #ffffff;
+}
+
+.opcion-conservar-acomodo > input:focus-visible + .control-check-acomodo {
+    box-shadow: 0 0 0 3px rgba(203, 164, 52, 0.20);
+}
+
+.opcion-conservar-acomodo > span:last-child {
+    display: grid;
+    gap: 3px;
+}
+
+.aviso-reinicio-acomodo {
+    margin-top: 10px;
+    border: 1px solid rgba(220, 38, 38, 0.28);
+    border-radius: 14px;
+    background: rgba(220, 38, 38, 0.08);
+    color: #b91c1c;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.acciones-modal-acomodo {
+    display: grid;
+    grid-template-columns: minmax(110px, 0.7fr) minmax(190px, 1.3fr);
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.acciones-modal-acomodo .btn-confirmar-accion-arbol {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-secundario-acomodo {
+    min-height: 44px;
+    border: 1px solid var(--borde-color);
+    border-radius: 14px;
+    background: var(--fondo-app);
+    color: var(--texto-principal);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.acciones-modal-acomodo button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 .opciones-relacion-arbol {
     display: grid;
     gap: 10px;
@@ -6293,6 +6476,17 @@
     .acciones-perfil-sin-cuenta-panel {
         grid-template-columns: 1fr;
     }
+
+    .opciones-acomodo-genero {
+        grid-template-columns: 1fr;
+    }
+
+    .opciones-acomodo-genero > button {
+        min-height: 88px;
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        align-items: center;
+    }
 }
 
 @media (max-width: 576px) {
@@ -6331,6 +6525,10 @@
     .lista-ayuda-edicion-rapida i {
         width: 38px;
         height: 38px;
+    }
+
+    .acciones-modal-acomodo {
+        grid-template-columns: 1fr;
     }
 }
 

@@ -114,7 +114,8 @@ const crearHilo = async (req, res) => {
             tipoRelacion,
             fechaInicio = null,
             fechaFin = null,
-            descripcion = ''
+            descripcion = '',
+            nodoSuperiorId = null
         } = req.body;
 
         if (!arbolId || !nodoOrigenId || !nodoDestinoId || !tipoRelacion) {
@@ -186,6 +187,15 @@ const crearHilo = async (req, res) => {
         });
 
         const relacionExistente = await Hilo.findOne(filtroRelacion);
+        const idsPareja = [String(nodoOrigen._id), String(nodoDestino._id)];
+        const superiorSolicitado = nodoSuperiorId && idsPareja.includes(String(nodoSuperiorId))
+            ? nodoSuperiorId
+            : null;
+        const nodoSuperiorInicial = superiorSolicitado || (
+            Number(nodoOrigen.fila) <= Number(nodoDestino.fila)
+                ? nodoOrigen._id
+                : nodoDestino._id
+        );
 
         if (relacionExistente) {
             relacionExistente.estado = 'Activa';
@@ -193,6 +203,9 @@ const crearHilo = async (req, res) => {
 
             if (TIPOS_RELACION_PAREJA.includes(tipoRelacion)) {
                 relacionExistente.tipoRelacion = tipoRelacion;
+                if (!relacionExistente.nodoSuperior || superiorSolicitado) {
+                    relacionExistente.nodoSuperior = nodoSuperiorInicial;
+                }
             }
 
             if (fechaInicio !== undefined) relacionExistente.fechaInicio = fechaInicio || null;
@@ -215,6 +228,9 @@ const crearHilo = async (req, res) => {
             arbol: arbolId,
             nodoOrigen: nodoOrigenId,
             nodoDestino: nodoDestinoId,
+            nodoSuperior: TIPOS_RELACION_PAREJA.includes(tipoRelacion)
+                ? nodoSuperiorInicial
+                : null,
             tipoRelacion,
             estado: 'Activa',
             creadoPor: req.usuario.id,
@@ -244,7 +260,8 @@ const crearHilo = async (req, res) => {
                     tipoRelacion,
                     fechaInicio = null,
                     fechaFin = null,
-                    descripcion = ''
+                    descripcion = '',
+                    nodoSuperiorId = null
                 } = req.body;
 
                 const filtroRelacion = construirFiltroRelacionExacta({
@@ -261,6 +278,10 @@ const crearHilo = async (req, res) => {
 
                     if (TIPOS_RELACION_PAREJA.includes(tipoRelacion)) {
                         relacionExistente.tipoRelacion = tipoRelacion;
+                        const idsIntegrantes = [String(nodoOrigenId), String(nodoDestinoId)];
+                        if (nodoSuperiorId && idsIntegrantes.includes(String(nodoSuperiorId))) {
+                            relacionExistente.nodoSuperior = nodoSuperiorId;
+                        }
                     }
 
                     if (fechaInicio !== undefined) relacionExistente.fechaInicio = fechaInicio || null;
@@ -342,7 +363,9 @@ const actualizarHilo = async (req, res) => {
             estado,
             fechaInicio,
             fechaFin,
-            descripcion
+            descripcion,
+            nodoSuperiorId,
+            ordenVisualManual
         } = req.body;
 
         const arbol = await Arbol.findOne({
@@ -365,6 +388,7 @@ const actualizarHilo = async (req, res) => {
         }
 
         const esEditorGlobal = usuarioPuedeEditarArbol(arbol, req.usuario.id);
+        const solicitaOrdenVisual = nodoSuperiorId !== undefined || ordenVisualManual !== undefined;
 
         const esRelacionDeParejaActual = TIPOS_RELACION_PAREJA.includes(hilo.tipoRelacion);
         const tipoRelacionFinal = tipoRelacion !== undefined ? tipoRelacion : hilo.tipoRelacion;
@@ -387,6 +411,12 @@ const actualizarHilo = async (req, res) => {
             });
         }
 
+        if (solicitaOrdenVisual && !esEditorGlobal) {
+            return res.status(403).json({
+                mensaje: 'Solo un administrador puede cambiar el orden visual de una pareja.'
+            });
+        }
+
         if (tipoRelacion !== undefined && !TIPOS_RELACION_VALIDOS.includes(tipoRelacion)) {
             return res.status(400).json({
                 mensaje: 'Tipo de relación no válido.'
@@ -405,6 +435,31 @@ const actualizarHilo = async (req, res) => {
                     mensaje: 'Solo puedes cambiar tu relación a pareja, matrimonio o divorcio.'
                 });
             }
+        }
+
+        if (solicitaOrdenVisual && !esRelacionDeParejaFinal) {
+            return res.status(400).json({
+                mensaje: 'El orden visual solo puede aplicarse a una relación de pareja.'
+            });
+        }
+
+        if (nodoSuperiorId !== undefined) {
+            const idsIntegrantes = [String(hilo.nodoOrigen), String(hilo.nodoDestino)];
+            if (!idsIntegrantes.includes(String(nodoSuperiorId))) {
+                return res.status(400).json({
+                    mensaje: 'La persona superior debe pertenecer a esta pareja.'
+                });
+            }
+            hilo.nodoSuperior = nodoSuperiorId;
+        }
+
+        if (ordenVisualManual !== undefined) {
+            if (typeof ordenVisualManual !== 'boolean') {
+                return res.status(400).json({
+                    mensaje: 'ordenVisualManual debe ser un valor booleano.'
+                });
+            }
+            hilo.ordenVisualManual = ordenVisualManual;
         }
 
         if (tipoRelacion !== undefined) {

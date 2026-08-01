@@ -19,6 +19,22 @@ const hiloSchema = new mongoose.Schema({
         required: true
     },
 
+    // Define qué integrante se muestra arriba dentro del bloque visual de pareja.
+    // Es independiente de nodoOrigen/nodoDestino, que se normalizan por id para
+    // impedir relaciones duplicadas.
+    nodoSuperior: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Nodo',
+        default: null
+    },
+
+    // Evita que el acomodo automático reemplace un intercambio solicitado por
+    // el usuario cuando se conservan las excepciones manuales.
+    ordenVisualManual: {
+        type: Boolean,
+        default: false
+    },
+
     tipoRelacion: {
         type: String,
         enum: ['padre_hijo', 'pareja', 'matrimonio', 'divorcio'],
@@ -80,6 +96,16 @@ hiloSchema.pre('validate', function () {
             this.nodoOrigen = this.nodoDestino;
             this.nodoDestino = temp;
         }
+
+        const superior = this.nodoSuperior ? String(this.nodoSuperior) : null;
+        const idsIntegrantes = [String(this.nodoOrigen), String(this.nodoDestino)];
+
+        if (!superior || !idsIntegrantes.includes(superior)) {
+            this.nodoSuperior = this.nodoOrigen;
+        }
+    } else {
+        this.nodoSuperior = null;
+        this.ordenVisualManual = false;
     }
 });
 

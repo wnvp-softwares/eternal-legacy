@@ -68,6 +68,14 @@ const nodoSchema = new mongoose.Schema({
         default: null
     },
 
+    // Se utiliza en perfiles sin cuenta para el acomodo visual por rama.
+    // Los nodos vinculados a usuarios toman el género de InformacionPerfil.
+    genero: {
+        type: String,
+        enum: ['', 'Masculino', 'Femenino', 'Otro', 'Prefiero no decirlo'],
+        default: ''
+    },
+
     tipo: {
         type: String,
         enum: ['creador', 'admin', 'normal'],

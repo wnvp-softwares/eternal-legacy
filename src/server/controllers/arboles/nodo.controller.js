@@ -4,6 +4,7 @@ const {
     ejecutarOperacionLayout,
     normalizarGeneracionesPersistidas: normalizarGeneracionesPersistidasCentral,
     prepararGeneracionObjetivo,
+    reorganizarArbolCompleto,
     moverNodoAtomico
 } = require('../../services/layoutArbol.service');
 
@@ -476,6 +477,7 @@ const crearPerfilSinCuenta = async (req, res) => {
             fechaCorta = 'Pendiente',
             estaFallecido = false,
             edad = null,
+            genero = '',
             tipo = 'normal',
             estado = 'Incompleto',
             generacion,
@@ -537,6 +539,7 @@ const crearPerfilSinCuenta = async (req, res) => {
                 fechaCorta,
                 estaFallecido,
                 edad,
+                genero,
                 tipo,
                 estado,
                 origen: 'perfil_sin_cuenta',
@@ -624,6 +627,7 @@ const actualizarNodo = async (req, res) => {
             'fechaCorta',
             'estaFallecido',
             'edad',
+            'genero',
             'tipo',
             'estado',
             'biografia',
@@ -778,6 +782,49 @@ const moverNodo = async (req, res) => {
     }
 };
 
+const reorganizarArbol = async (req, res) => {
+    try {
+        const { arbolId } = req.params;
+        const {
+            preferenciaGenero = 'masculino_arriba',
+            conservarPosicionesManuales = true
+        } = req.body || {};
+
+        const arbol = await Arbol.findOne({
+            _id: arbolId,
+            activo: true
+        });
+
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado' });
+        }
+
+        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para reorganizar este árbol.'
+            });
+        }
+
+        const resultado = await reorganizarArbolCompleto({
+            arbolId,
+            preferenciaGenero,
+            conservarPosicionesManuales
+        });
+
+        return res.status(200).json({
+            mensaje: conservarPosicionesManuales
+                ? 'Árbol reorganizado respetando las posiciones manuales.'
+                : 'Árbol reorganizado completamente.',
+            resultado
+        });
+    } catch (error) {
+        console.error('❌ Error al reorganizar el árbol:', error);
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'No se pudo reorganizar el árbol.'
+        });
+    }
+};
+
 const eliminarNodo = async (req, res) => {
     try {
         const { arbolId, nodoId } = req.params;
@@ -881,5 +928,6 @@ module.exports = {
     crearPerfilSinCuenta,
     actualizarNodo,
     moverNodo,
+    reorganizarArbol,
     eliminarNodo
 };

@@ -12,6 +12,7 @@ const {
     crearPerfilSinCuenta,
     actualizarNodo,
     moverNodo,
+    reorganizarArbol,
     eliminarNodo
 } = require('../../controllers/arboles/nodo.controller');
 
@@ -39,6 +40,9 @@ router.get('/arbol/:arbolId/:nodoId/detalle', verificarToken, obtenerDetalleNodo
 
 // Crear persona sin cuenta dentro del árbol
 router.post('/perfil-sin-cuenta', verificarToken, crearPerfilSinCuenta);
+
+// Reorganizar todas las familias del árbol con una preferencia vertical de género.
+router.patch('/arbol/:arbolId/reorganizar', verificarToken, reorganizarArbol);
 
 // Actualizar datos de una persona/nodo
 router.patch('/arbol/:arbolId/:nodoId', verificarToken, actualizarNodo);
