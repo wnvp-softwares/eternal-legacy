@@ -6936,6 +6936,10 @@ html[data-theme="dark"] .boton-camara-avatar-nodo {
         grid-template-columns: 1fr;
     }
 }
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> e3aa9df92abc103fcf92b33f2e0eae2ef371c2b3
 
 /* ===== Árbol a pantalla completa ===== */
 .contenedor-arbol {
@@ -7008,3 +7012,8 @@ html[data-theme="dark"] .boton-camara-avatar-nodo {
     .barra-controles-superior { max-width: calc(100vw - 16px); }
     .lienzo-arbol { padding: 7rem 1rem 4rem; }
 }
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> ff12bff02b5f522e89a7927d2515708e307c284d
+>>>>>>> e3aa9df92abc103fcf92b33f2e0eae2ef371c2b3

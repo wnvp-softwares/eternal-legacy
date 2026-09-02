@@ -219,7 +219,14 @@ export default function Layout() {
   const [onboardingAbierto, setOnboardingAbierto] = useState(false);
   const [pasoOnboarding, setPasoOnboarding] = useState(0);
   const [guardandoOnboarding, setGuardandoOnboarding] = useState(false);
+<<<<<<< HEAD
   const [menuArbolCompactoAbierto, setMenuArbolCompactoAbierto] = useState(false);
+=======
+<<<<<<< HEAD
+  const [menuArbolCompactoAbierto, setMenuArbolCompactoAbierto] = useState(false);
+=======
+>>>>>>> ff12bff02b5f522e89a7927d2515708e307c284d
+>>>>>>> e3aa9df92abc103fcf92b33f2e0eae2ef371c2b3
 
   const token = localStorage.getItem('token');
   const queryBusqueda = textoBusqueda.trim();
