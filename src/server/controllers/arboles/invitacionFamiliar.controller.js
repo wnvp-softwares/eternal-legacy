@@ -14,7 +14,8 @@ const {
 const {
     ejecutarOperacionLayout,
     normalizarGeneracionesPersistidas,
-    prepararGeneracionObjetivo
+    prepararGeneracionObjetivo,
+    reorganizarArbolCompleto
 } = require('../../services/layoutArbol.service');
 
 const retirarNotificacionInvitacion = async (invitacionId) => {
@@ -458,7 +459,16 @@ const aceptarInvitacionFamiliar = async (req, res) => {
                 await arbol.save();
             }
 
-            invitacion.estado = 'Aceptada';
+            try {
+            await reorganizarArbolCompleto({
+                arbolId: invitacion.arbol,
+                conservarPosicionesManuales: true
+            });
+        } catch (errorLayout) {
+            console.error('⚠️ No se pudo reorganizar el árbol tras aceptar la invitación:', errorLayout);
+        }
+
+        invitacion.estado = 'Aceptada';
             invitacion.respondidaEn = new Date();
             await invitacion.save();
             await retirarNotificacionInvitacion(invitacion._id);

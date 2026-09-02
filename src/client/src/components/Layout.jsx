@@ -9,6 +9,35 @@ import { trackearEvento } from '../utils/telemetria';
 
 const CLAVE_BUSQUEDAS_RECIENTES = 'legacy_busquedas_recientes';
 const CLAVE_BIENVENIDA_SESION_PENDIENTE = 'legacy_bienvenida_sesion_pendiente';
+const VERSION_ONBOARDING = 'legacy-2026-09';
+
+const PASOS_ONBOARDING = [
+  {
+    icono: 'bi-diagram-3-fill',
+    titulo: 'Tu árbol es el punto de partida',
+    descripcion: 'Construye tu historia desde el árbol. Selecciona a una persona y agrega padre, madre, hijo, hija o pareja para que Legacy coloque la relación automáticamente.'
+  },
+  {
+    icono: 'bi-images',
+    titulo: 'Conserva recuerdos',
+    descripcion: 'Guarda publicaciones, fotografías y momentos importantes para mantener la historia familiar ligada a las personas que la vivieron.'
+  },
+  {
+    icono: 'bi-calendar-heart',
+    titulo: 'Organiza eventos familiares',
+    descripcion: 'Consulta y crea eventos para reunir fechas y recuerdos relevantes de tu familia en un mismo lugar.'
+  },
+  {
+    icono: 'bi-shield-lock-fill',
+    titulo: 'Controla privacidad y seguridad',
+    descripcion: 'Desde Configuración puedes revisar privacidad, cambiar tu contraseña, activar el código de verificación en dos pasos y administrar la sucesión de tu cuenta.'
+  },
+  {
+    icono: 'bi-chat-heart-fill',
+    titulo: 'Conecta y pide ayuda',
+    descripcion: 'Usa mensajes para conversar con tus contactos y abre esta guía nuevamente desde tu perfil cuando necesites recordar alguna función.'
+  }
+];
 
 const normalizarTexto = (texto = '') => String(texto || '').trim();
 
@@ -187,12 +216,17 @@ export default function Layout() {
   const [enviandoSoporte, setEnviandoSoporte] = useState(false);
   const [mensajeSoporte, setMensajeSoporte] = useState('');
   const [errorSoporte, setErrorSoporte] = useState('');
+  const [onboardingAbierto, setOnboardingAbierto] = useState(false);
+  const [pasoOnboarding, setPasoOnboarding] = useState(0);
+  const [guardandoOnboarding, setGuardandoOnboarding] = useState(false);
+  const [menuArbolCompactoAbierto, setMenuArbolCompactoAbierto] = useState(false);
 
   const token = localStorage.getItem('token');
   const queryBusqueda = textoBusqueda.trim();
   const invitacionesArbolPendientes = Number(indicadoresNavegacion?.arbol?.invitacionesPendientes) || 0;
   const totalIndicadoresRed = Number(indicadoresNavegacion?.red?.total) || 0;
   const totalNotificacionesNoLeidas = Number(indicadoresNavegacion?.notificaciones?.totalNoLeidas) || 0;
+  const esVistaArbol = location.pathname.startsWith('/arbol-genealogico');
 
   const esActiva = (ruta) => location.pathname.includes(ruta);
 
@@ -219,6 +253,16 @@ export default function Layout() {
       window.removeEventListener('storage', manejarCambioStorage);
     };
   }, []);
+
+  useEffect(() => {
+    if (!token || !usuarioLogueado?._id) return;
+
+    const versionVista = usuarioLogueado?.onboarding?.versionVista || '';
+    if (versionVista !== VERSION_ONBOARDING) {
+      setPasoOnboarding(0);
+      setOnboardingAbierto(true);
+    }
+  }, [token, usuarioLogueado?._id, usuarioLogueado?.onboarding?.versionVista]);
 
   const guardarBusquedasRecientes = (nuevasBusquedas) => {
     const limitadas = nuevasBusquedas.slice(0, 8);
@@ -329,6 +373,58 @@ export default function Layout() {
       setErrorSoporte(error.message || 'No pudimos enviar tu mensaje.');
     } finally {
       setEnviandoSoporte(false);
+    }
+  };
+
+  const abrirGuiaUso = () => {
+    setDropdownAbierto(false);
+    setPasoOnboarding(0);
+    setOnboardingAbierto(true);
+  };
+
+  const completarOnboarding = async () => {
+    if (guardandoOnboarding) return;
+
+    try {
+      setGuardandoOnboarding(true);
+
+      if (token) {
+        const respuesta = await fetch(`${API_BASE_URL}/usuarios/onboarding`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ version: VERSION_ONBOARDING })
+        });
+
+        if (!respuesta.ok) {
+          const datos = await respuesta.json().catch(() => ({}));
+          throw new Error(datos.mensaje || 'No se pudo guardar el progreso de la guía.');
+        }
+      }
+
+      const usuarioActualizado = {
+        ...usuarioLogueado,
+        onboarding: {
+          ...(usuarioLogueado?.onboarding || {}),
+          versionVista: VERSION_ONBOARDING,
+          completadoEn: new Date().toISOString()
+        }
+      };
+
+      localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
+      setUsuarioLogueado(usuarioActualizado);
+      window.dispatchEvent(new CustomEvent('legacy:usuario-actualizado', { detail: usuarioActualizado }));
+      setOnboardingAbierto(false);
+      setPasoOnboarding(0);
+    } catch (error) {
+      console.error('No se pudo guardar el onboarding:', error);
+      // La guía sigue siendo utilizable aunque falle la sincronización; no se
+      // marca como completada para que pueda reintentarse en la siguiente sesión.
+      setOnboardingAbierto(false);
+    } finally {
+      setGuardandoOnboarding(false);
     }
   };
 
@@ -764,7 +860,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="layout-principal">
+    <div className={`layout-principal ${esVistaArbol ? 'vista-arbol-inmersiva' : ''}`}>
       {/* NAVBAR SUPERIOR */}
       <nav className="navbar-superior d-flex align-items-center justify-content-between px-3 px-md-4 border-bottom">
         <div className="marca-nav-principal d-flex align-items-center gap-2">
@@ -889,6 +985,10 @@ export default function Layout() {
                   <i className="bi bi-gear"></i> Configuración
                 </Link>
 
+                <button type="button" className="item-dropdown border-0 w-100 text-start" onClick={abrirGuiaUso}>
+                  <i className="bi bi-compass"></i> Guía de uso
+                </button>
+
                 <button
                   className="item-dropdown text-danger border-0 w-100 text-start"
                   onClick={() => {
@@ -939,10 +1039,59 @@ export default function Layout() {
         </div>
       )}
 
+      {esVistaArbol && (
+        <>
+          <div className="dock-arbol-compacto" aria-label="Navegación compacta del árbol">
+            <button
+              type="button"
+              className={`boton-dock-arbol ${menuArbolCompactoAbierto ? 'activo' : ''}`}
+              onClick={() => setMenuArbolCompactoAbierto(abierto => !abierto)}
+              aria-expanded={menuArbolCompactoAbierto}
+              aria-controls="panel-navegacion-arbol"
+              title={menuArbolCompactoAbierto ? 'Cerrar navegación' : 'Abrir navegación'}
+            >
+              <i className={`bi ${menuArbolCompactoAbierto ? 'bi-x-lg' : 'bi-list'}`}></i>
+            </button>
+            <Link to="/mensajes" className="boton-dock-arbol" title="Mensajes" aria-label={`Mensajes: ${mensajesNoLeidos} no leídos`}>
+              <i className="bi bi-chat"></i>
+              {mensajesNoLeidos > 0 && <span className="badge-dock-arbol">{formatearCantidadIndicador(mensajesNoLeidos)}</span>}
+            </Link>
+            <Link to="/notificaciones" className="boton-dock-arbol" title="Notificaciones" aria-label={`Notificaciones: ${totalNotificacionesNoLeidas} no leídas`}>
+              <i className="bi bi-bell"></i>
+              {totalNotificacionesNoLeidas > 0 && <span className="badge-dock-arbol">{formatearCantidadIndicador(totalNotificacionesNoLeidas)}</span>}
+            </Link>
+            <button type="button" className="boton-dock-arbol" onClick={() => setDropdownAbierto(!dropdownAbierto)} title="Perfil" aria-label="Abrir perfil">
+              <img src={obtenerUrlImagenPerfil(usuarioLogueado?.imagenPerfil, usuarioLogueado?.nombreUsuario)} alt="" className="avatar-dock-arbol" />
+            </button>
+          </div>
+
+          <aside id="panel-navegacion-arbol" className={`panel-colapsable-arbol ${menuArbolCompactoAbierto ? 'abierto' : ''}`} aria-hidden={!menuArbolCompactoAbierto}>
+            <div className="panel-colapsable-arbol-cabecera">
+              <div>
+                <span className="panel-colapsable-eyebrow">Legacy</span>
+                <strong>Navegación</strong>
+              </div>
+              <button type="button" onClick={() => setMenuArbolCompactoAbierto(false)} aria-label="Cerrar navegación"><i className="bi bi-x-lg"></i></button>
+            </div>
+            <nav className="panel-colapsable-arbol-links">
+              <Link to="/inicio"><i className="bi bi-house-door"></i><span>Inicio</span></Link>
+              <Link to="/arbol-genealogico" className="activo"><i className="bi bi-diagram-3"></i><span>Árbol Genealógico</span></Link>
+              <Link to="/mensajes"><i className="bi bi-chat-dots"></i><span>Mensajes</span></Link>
+              <Link to="/red"><i className="bi bi-people"></i><span>Red</span></Link>
+              <Link to="/notificaciones"><i className="bi bi-bell"></i><span>Notificaciones</span></Link>
+              <Link to="/perfil"><i className="bi bi-person"></i><span>Perfil</span></Link>
+              <Link to="/configuracion"><i className="bi bi-gear"></i><span>Configuración</span></Link>
+              <button type="button" onClick={abrirModalSoporte}><i className="bi bi-life-preserver"></i><span>Soporte</span></button>
+            </nav>
+          </aside>
+          {menuArbolCompactoAbierto && <button type="button" className="backdrop-panel-arbol" onClick={() => setMenuArbolCompactoAbierto(false)} aria-label="Cerrar navegación"></button>}
+        </>
+      )}
+
       {/* CONTENEDOR PRINCIPAL */}
       <div className="contenedor-contenido d-flex">
         {/* --- SIDEBAR IZQUIERDA --- */}
-        <aside className="sidebar-izquierda d-none d-xl-flex flex-column border-end py-4">
+        {!esVistaArbol && <aside className="sidebar-izquierda d-none d-xl-flex flex-column border-end py-4">
           <Link to="/inicio" className={`item-menu ${esActiva('/inicio') ? 'activo' : ''}`}><i className="bi bi-house-door"></i> Inicio</Link>
           <Link to="/arbol-genealogico" className={`item-menu ${esActiva('/arbol-genealogico') ? 'activo' : ''} d-flex align-items-center justify-content-between w-100`}>
             <span><i className="bi bi-diagram-3"></i> Árbol Genealógico</span>
@@ -990,7 +1139,7 @@ export default function Layout() {
             <i className="bi bi-chat-right-heart" aria-hidden="true"></i>
             Soporte y sugerencias
           </button>
-        </aside>
+        </aside>}
 
         {/* MENÚ INFERIOR MÓVIL */}
         <div className="navegacion-inferior-movil d-xl-none bg-white border-top w-100 position-fixed bottom-0 start-0 d-flex justify-content-around py-2" style={{ zIndex: 1000 }}>
@@ -1037,10 +1186,84 @@ export default function Layout() {
           </Link>
         </div>
 
-        <main className="contenido-central flex-grow-1 p-3 p-md-4 mb-5 mb-xl-0 position-relative">
+        <main className={`contenido-central flex-grow-1 position-relative ${esVistaArbol ? 'contenido-central-arbol' : 'p-3 p-md-4 mb-5 mb-xl-0'}`}>
           <Outlet context={{ textoBusqueda }} />
         </main>
       </div>
+
+      {onboardingAbierto && createPortal(
+        <div className="onboarding-global-backdrop" role="presentation">
+          <section
+            className="onboarding-global"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-onboarding-global"
+          >
+            <div className="onboarding-progreso" aria-label={`Paso ${pasoOnboarding + 1} de ${PASOS_ONBOARDING.length}`}>
+              {PASOS_ONBOARDING.map((_, indice) => (
+                <span
+                  key={indice}
+                  className={`onboarding-progreso-punto ${indice <= pasoOnboarding ? 'activo' : ''}`}
+                  aria-hidden="true"
+                ></span>
+              ))}
+            </div>
+
+            <div className="onboarding-icono" aria-hidden="true">
+              <i className={`bi ${PASOS_ONBOARDING[pasoOnboarding].icono}`}></i>
+            </div>
+
+            <span className="onboarding-eyebrow">Guía de Legacy · {pasoOnboarding + 1}/{PASOS_ONBOARDING.length}</span>
+            <h2 id="titulo-onboarding-global">{PASOS_ONBOARDING[pasoOnboarding].titulo}</h2>
+            <p>{PASOS_ONBOARDING[pasoOnboarding].descripcion}</p>
+
+            <div className="onboarding-global-acciones">
+              {pasoOnboarding > 0 ? (
+                <button
+                  type="button"
+                  className="boton-onboarding-secundario"
+                  onClick={() => setPasoOnboarding(prev => Math.max(0, prev - 1))}
+                  disabled={guardandoOnboarding}
+                >
+                  <i className="bi bi-arrow-left" aria-hidden="true"></i>
+                  Anterior
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="boton-onboarding-secundario"
+                  onClick={completarOnboarding}
+                  disabled={guardandoOnboarding}
+                >
+                  Omitir
+                </button>
+              )}
+
+              {pasoOnboarding < PASOS_ONBOARDING.length - 1 ? (
+                <button
+                  type="button"
+                  className="boton-onboarding-primario"
+                  onClick={() => setPasoOnboarding(prev => Math.min(PASOS_ONBOARDING.length - 1, prev + 1))}
+                >
+                  Siguiente
+                  <i className="bi bi-arrow-right" aria-hidden="true"></i>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="boton-onboarding-primario"
+                  onClick={completarOnboarding}
+                  disabled={guardandoOnboarding}
+                >
+                  {guardandoOnboarding ? 'Guardando...' : 'Empezar'}
+                  {!guardandoOnboarding && <i className="bi bi-check-lg" aria-hidden="true"></i>}
+                </button>
+              )}
+            </div>
+          </section>
+        </div>,
+        document.body
+      )}
 
       {modalSoporteAbierto && createPortal(
         <div

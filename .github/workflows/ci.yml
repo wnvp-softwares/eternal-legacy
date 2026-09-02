@@ -1,0 +1,33 @@
+name: Legacy CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar backend
+        run: npm ci
+
+      - name: Validar servidor y pruebas unitarias
+        run: npm run verify
+
+      - name: Instalar frontend
+        working-directory: src/client
+        run: npm install --no-audit --no-fund
+
+      - name: Compilar frontend
+        working-directory: src/client
+        run: npm run build

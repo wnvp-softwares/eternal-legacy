@@ -138,6 +138,16 @@ export default function Configuracion() {
   const [cambiando2FA, setCambiando2FA] = useState(false);
   const [mensajeSeguridad, setMensajeSeguridad] = useState('');
   const [errorSeguridad, setErrorSeguridad] = useState('');
+  const [sucesionCuenta, setSucesionCuenta] = useState({
+    deseaDesignar: false,
+    sucesorEmail: '',
+    instrucciones: '',
+    estado: 'NO_CONFIGURADA'
+  });
+  const [cargandoSucesion, setCargandoSucesion] = useState(false);
+  const [guardandoSucesion, setGuardandoSucesion] = useState(false);
+  const [mensajeSucesion, setMensajeSucesion] = useState('');
+  const [errorSucesion, setErrorSucesion] = useState('');
 
   // Estados de Región y Formatos
   const [guardandoRegion, setGuardandoRegion] = useState(false);
@@ -379,6 +389,57 @@ export default function Configuracion() {
     }
   };
 
+
+  const cargarSucesionCuenta = async () => {
+    if (!token) return;
+    try {
+      setCargandoSucesion(true);
+      setErrorSucesion('');
+      const data = await apiFetch('/api/usuarios/sucesion');
+      const sucesion = data.sucesion || {};
+      setSucesionCuenta({
+        deseaDesignar: Boolean(sucesion.deseaDesignar),
+        sucesorEmail: sucesion.sucesorEmail || '',
+        instrucciones: sucesion.instrucciones || '',
+        estado: sucesion.estado || 'NO_CONFIGURADA'
+      });
+    } catch (error) {
+      setErrorSucesion(error.message || 'No se pudo cargar la configuración de sucesión.');
+    } finally {
+      setCargandoSucesion(false);
+    }
+  };
+
+  const guardarSucesionCuenta = async (e) => {
+    e.preventDefault();
+    setMensajeSucesion('');
+    setErrorSucesion('');
+
+    if (sucesionCuenta.deseaDesignar && !sucesionCuenta.sucesorEmail.trim()) {
+      setErrorSucesion('Ingresa el correo de la persona sucesora.');
+      return;
+    }
+
+    try {
+      setGuardandoSucesion(true);
+      const data = await apiFetch('/api/usuarios/sucesion', {
+        method: 'PUT',
+        body: JSON.stringify({
+          deseaDesignar: sucesionCuenta.deseaDesignar,
+          sucesorEmail: sucesionCuenta.sucesorEmail.trim(),
+          instrucciones: sucesionCuenta.instrucciones.trim()
+        })
+      });
+      const sucesion = data.sucesion || {};
+      setSucesionCuenta(prev => ({ ...prev, ...sucesion }));
+      setMensajeSucesion(data.mensaje || 'Configuración de sucesión actualizada.');
+    } catch (error) {
+      setErrorSucesion(error.message || 'No se pudo guardar la sucesión de cuenta.');
+    } finally {
+      setGuardandoSucesion(false);
+    }
+  };
+
   const guardarRegionYFormatos = async (e) => {
     e.preventDefault();
     try {
@@ -542,6 +603,7 @@ export default function Configuracion() {
   useEffect(() => {
     if (seccionActiva === 'seguridad') {
       verificarEstado2FA();
+      cargarSucesionCuenta();
     }
   }, [seccionActiva]);
 
@@ -656,6 +718,25 @@ export default function Configuracion() {
                 </button>
               </div>
             </form>
+
+            <section className="resumen-protecciones-legacy" aria-labelledby="titulo-protecciones-legacy">
+              <div className="resumen-protecciones-cabecera">
+                <i className="bi bi-shield-check" aria-hidden="true"></i>
+                <div>
+                  <h5 id="titulo-protecciones-legacy">Cómo protegemos tu cuenta y tus datos</h5>
+                  <p>Resumen técnico de las protecciones activas en esta versión de Legacy.</p>
+                </div>
+              </div>
+              <div className="resumen-protecciones-grid">
+                <div><i className="bi bi-key-fill"></i><span><strong>Contraseñas protegidas.</strong> Se almacenan mediante hash seguro, no como texto legible.</span></div>
+                <div><i className="bi bi-envelope-lock-fill"></i><span><strong>Códigos temporales.</strong> Registro, recuperación y 2FA usan códigos con expiración y límites de intentos.</span></div>
+                <div><i className="bi bi-chat-square-lock-fill"></i><span><strong>Mensajería privada.</strong> La mensajería compatible utiliza cifrado de extremo a extremo para proteger el contenido durante el intercambio.</span></div>
+                <div><i className="bi bi-person-lock"></i><span><strong>Privacidad por audiencia.</strong> El perfil puede limitarse y el árbol permanece restringido a integrantes autorizados.</span></div>
+                <div><i className="bi bi-clock-history"></i><span><strong>Sesiones controladas.</strong> Las sesiones expiran y pueden invalidarse cuando cambian credenciales sensibles.</span></div>
+                <div><i className="bi bi-person-check-fill"></i><span><strong>Sucesión revisada.</strong> Designar un sucesor no entrega acceso automático; cualquier solicitud requiere un proceso de revisión.</span></div>
+              </div>
+              <p className="resumen-protecciones-nota">Estas medidas técnicas no sustituyen el Aviso de Privacidad ni las condiciones legales aplicables al servicio.</p>
+            </section>
           </>
         );
 
@@ -685,7 +766,7 @@ export default function Configuracion() {
       case 'seguridad':
         return (
           <>
-            <h3 className="fuente-elegante titulo-panel fs-4">Security</h3>
+            <h3 className="fuente-elegante titulo-panel fs-4">Seguridad</h3>
             {mensajeSeguridad && <div className="alerta-configuracion exito"><i className="bi bi-check-circle-fill"></i><span>{mensajeSeguridad}</span></div>}
             {errorSeguridad && <div className="alerta-configuracion error"><i className="bi bi-exclamation-triangle-fill"></i><span>{errorSeguridad}</span></div>}
 
@@ -780,7 +861,7 @@ export default function Configuracion() {
                     <span className="badge bg-secondary ms-2 fs-7">Desactivado</span>
                   )}
                 </h6>
-                <p>Añade una capa extra de seguridad a tu cuenta usando una app de autenticación.</p>
+                <p>Añade una capa extra de seguridad a tu cuenta mediante un código temporal enviado a tu correo.</p>
               </div>
               <button
                 type="button"
@@ -791,6 +872,74 @@ export default function Configuracion() {
                 {cambiando2FA ? 'Procesando...' : twoFactorEnabled ? 'Desactivar 2FA' : 'Configurar 2FA'}
               </button>
             </div>
+
+            <hr className="my-4" style={{ borderColor: 'var(--borde-color)' }} />
+            <section className="bloque-sucesion-configuracion">
+              <div className="mb-3">
+                <h5 className="fw-bold mb-1">Sucesión de cuenta</h5>
+                <p className="text-muted small mb-0">
+                  Designa un contacto para un eventual proceso de sucesión por fallecimiento. La designación no concede acceso automático; cualquier solicitud deberá ser revisada antes de cambiar el control de la cuenta.
+                </p>
+              </div>
+
+              {mensajeSucesion && <div className="alerta-configuracion exito"><i className="bi bi-check-circle-fill"></i><span>{mensajeSucesion}</span></div>}
+              {errorSucesion && <div className="alerta-configuracion error"><i className="bi bi-exclamation-triangle-fill"></i><span>{errorSucesion}</span></div>}
+
+              {cargandoSucesion ? (
+                <div className="estado-configuracion-cargando"><div className="spinner-border spinner-border-sm text-warning"></div><p>Consultando sucesión...</p></div>
+              ) : (
+                <form onSubmit={guardarSucesionCuenta}>
+                  <div className="opcion-switch mb-3">
+                    <div className="opcion-textos">
+                      <h6>Designar persona sucesora</h6>
+                      <p>Estado actual: <strong>{sucesionCuenta.estado === 'CONFIGURADA' ? 'Configurada' : 'No configurada'}</strong></p>
+                    </div>
+                    <div className="form-check form-switch fs-4 m-0">
+                      <input
+                        className="form-check-input mt-0"
+                        type="checkbox"
+                        checked={sucesionCuenta.deseaDesignar}
+                        onChange={(e) => setSucesionCuenta(prev => ({ ...prev, deseaDesignar: e.target.checked }))}
+                      />
+                    </div>
+                  </div>
+
+                  {sucesionCuenta.deseaDesignar && (
+                    <>
+                      <div className="grupo-form">
+                        <label className="label-form" htmlFor="sucesor-email-config">Correo del contacto sucesor</label>
+                        <input
+                          id="sucesor-email-config"
+                          type="email"
+                          className="input-config"
+                          value={sucesionCuenta.sucesorEmail}
+                          onChange={(e) => setSucesionCuenta(prev => ({ ...prev, sucesorEmail: e.target.value }))}
+                          placeholder="persona@ejemplo.com"
+                        />
+                      </div>
+                      <div className="grupo-form">
+                        <label className="label-form" htmlFor="sucesor-instrucciones-config">Instrucciones privadas opcionales</label>
+                        <textarea
+                          id="sucesor-instrucciones-config"
+                          className="input-config"
+                          rows="3"
+                          maxLength="1000"
+                          value={sucesionCuenta.instrucciones}
+                          onChange={(e) => setSucesionCuenta(prev => ({ ...prev, instrucciones: e.target.value }))}
+                          placeholder="Notas para el proceso de revisión; no incluyas contraseñas."
+                        ></textarea>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="d-flex justify-content-end mt-3">
+                    <button className="boton-guardar" type="submit" disabled={guardandoSucesion}>
+                      {guardandoSucesion ? 'Guardando...' : 'Guardar sucesión'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </section>
           </>
         );
 

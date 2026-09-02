@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -1159,6 +1159,7 @@ const TarjetaPareja = ({
 }) => {
   const [menuUnionAbierto, establecerMenuUnionAbierto] = useState(false);
   const claseDestino = esDestinoValido ? 'tarjeta-destino-valido' : '';
+  const contieneUsuarioActual = Boolean(pareja1?.esUsuarioActual || pareja2?.esUsuarioActual);
 
   const manejarClicTarjeta = (evento) => {
     if (esDestinoValido) {
@@ -1215,7 +1216,11 @@ const TarjetaPareja = ({
   );
 
   return (
-    <div className={`tarjeta-nodo-unificada ${claseDestino} ${esParejaEnMovimiento ? 'pareja-en-movimiento' : ''}`} onClick={manejarClicTarjeta}>
+    <div
+      className={`tarjeta-nodo-unificada ${claseDestino} ${esParejaEnMovimiento ? 'pareja-en-movimiento' : ''} ${contieneUsuarioActual ? 'usuario-principal-arbol' : ''}`}
+      data-usuario-principal={contieneUsuarioActual ? 'true' : undefined}
+      onClick={manejarClicTarjeta}
+    >
       {renderPersona(pareja1)}
       {pareja2 && renderPersona(pareja2)}
 
@@ -1352,7 +1357,8 @@ const TarjetaIndividual = ({
 
   return (
     <div
-      className={`tarjeta-nodo-unificada ${clasePendiente} ${claseDestino}`}
+      className={`tarjeta-nodo-unificada ${clasePendiente} ${claseDestino} ${persona.esUsuarioActual ? 'usuario-principal-arbol' : ''}`}
+      data-usuario-principal={persona.esUsuarioActual ? 'true' : undefined}
       onClick={(evento) => {
         if (esDestinoValido) {
           evento.stopPropagation();
@@ -1605,6 +1611,7 @@ export default function ArbolGenealogico() {
   const [modoFormularioPerfilSinCuenta, establecerModoFormularioPerfilSinCuenta] = useState('crear');
   const [nodoEditandoPerfilSinCuenta, establecerNodoEditandoPerfilSinCuenta] = useState(null);
   const [generacionObjetivoAgregar, establecerGeneracionObjetivoAgregar] = useState(null);
+  const [relacionAltaPendiente, establecerRelacionAltaPendiente] = useState(null);
   const [procesandoAccionEstructural, establecerProcesandoAccionEstructural] = useState(false);
   const [relacionPendiente, establecerRelacionPendiente] = useState(null);
   const [nodoDestinoFotoPendiente, establecerNodoDestinoFotoPendiente] = useState(null);
@@ -1679,6 +1686,7 @@ export default function ArbolGenealogico() {
   const [exportandoArbol, establecerExportandoArbol] = useState(false);
   const lienzoExportableRef = useRef(null);
   const contenidoExportableRef = useRef(null);
+  const arbolCentradoInicialRef = useRef(null);
 
   // Acomodo automático global
   const [modalAcomodoAutomaticoVisible, establecerModalAcomodoAutomaticoVisible] = useState(false);
@@ -3457,6 +3465,26 @@ export default function ArbolGenealogico() {
     establecerMostrarEventos(false);
   };
 
+
+  const abrirPanelAnadirFamiliarRelacionado = (nodoReferencia, tipoParentesco) => {
+    if (!esUsuarioAdmin || !nodoReferencia?.id) return;
+
+    const tipo = String(tipoParentesco || '').toLowerCase();
+    const generacionReferencia = Number(nodoReferencia.generacion);
+    const generacionSugerida = tipo === 'progenitor'
+      ? generacionReferencia - 1
+      : tipo === 'hijo'
+        ? generacionReferencia + 1
+        : generacionReferencia;
+
+    establecerRelacionAltaPendiente({
+      nodoRelacionadoId: nodoReferencia.id,
+      nombreRelacionado: nodoReferencia.nombre,
+      tipoParentesco: tipo
+    });
+    abrirPanelAnadirFamiliar(generacionSugerida);
+  };
+
   const cargarAmigosDisponibles = async (arbolId) => {
     if (!arbolId || !token) return;
 
@@ -3871,22 +3899,58 @@ export default function ArbolGenealogico() {
 
   const acercarZoom = () => establecerNivelZoom(prev => Math.min(prev + 0.2, 1.8));
   const alejarZoom = () => establecerNivelZoom(prev => Math.max(prev - 0.2, 0.4));
+
+  const centrarUsuarioPrincipal = useCallback((behavior = 'smooth') => {
+    const lienzo = lienzoExportableRef.current;
+    if (!lienzo) return false;
+
+    const usuarioPrincipal = lienzo.querySelector('[data-usuario-principal="true"]');
+    if (usuarioPrincipal) {
+      const contenedorRect = lienzo.getBoundingClientRect();
+      const usuarioRect = usuarioPrincipal.getBoundingClientRect();
+      const izquierdaObjetivo = lienzo.scrollLeft + (usuarioRect.left - contenedorRect.left) - (lienzo.clientWidth / 2) + (usuarioRect.width / 2);
+      const arribaObjetivo = lienzo.scrollTop + (usuarioRect.top - contenedorRect.top) - (lienzo.clientHeight / 2) + (usuarioRect.height / 2);
+
+      lienzo.scrollTo({
+        left: Math.max(0, izquierdaObjetivo),
+        top: Math.max(0, arribaObjetivo),
+        behavior
+      });
+      return true;
+    }
+
+    lienzo.scrollTo({
+      left: Math.max(0, (lienzo.scrollWidth - lienzo.clientWidth) / 2),
+      top: Math.max(0, (lienzo.scrollHeight - lienzo.clientHeight) / 2),
+      behavior
+    });
+    return false;
+  }, []);
+
   const restablecerZoom = () => {
     establecerNivelZoom(1);
-
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const lienzo = lienzoExportableRef.current;
-        if (!lienzo) return;
-
-        lienzo.scrollTo({
-          left: Math.max(0, (lienzo.scrollWidth - lienzo.clientWidth) / 2),
-          top: Math.max(0, (lienzo.scrollHeight - lienzo.clientHeight) / 2),
-          behavior: 'smooth'
-        });
-      });
+      window.requestAnimationFrame(() => centrarUsuarioPrincipal('smooth'));
     });
   };
+
+  useEffect(() => {
+    const arbolId = arbol?._id;
+    if (!arbolId || nodos.length === 0 || arbolCentradoInicialRef.current === String(arbolId)) return undefined;
+    if (!nodos.some(nodo => nodo.esUsuarioActual)) return undefined;
+
+    const temporizador = window.setTimeout(() => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          if (centrarUsuarioPrincipal('auto')) {
+            arbolCentradoInicialRef.current = String(arbolId);
+          }
+        });
+      });
+    }, 120);
+
+    return () => window.clearTimeout(temporizador);
+  }, [arbol?._id, nodos, centrarUsuarioPrincipal]);
 
   const obtenerFiltrosSeleccionados = () => ({
     vista: filtroVista,
@@ -5346,6 +5410,7 @@ La persona seguirá dentro del árbol como miembro normal.`
     establecerMostrarInvitar(false);
     establecerMostrandoFormularioPerfilSinCuenta(false);
     establecerGeneracionObjetivoAgregar(null);
+    establecerRelacionAltaPendiente(null);
     restablecerFormularioPerfilSinCuenta();
   };
 
@@ -5481,20 +5546,33 @@ La persona seguirá dentro del árbol como miembro normal.`
 
     try {
       establecerProcesandoAccionEstructural(true);
-      await crearNodoSinCuenta({
-        persona: datosPerfil,
-        generacion,
-        fila
-      });
+      if (relacionAltaPendiente?.nodoRelacionadoId) {
+        const data = await apiFetch(`/api/nodos/arbol/${arbol._id}/familiares-relacionados`, {
+          method: 'POST',
+          body: JSON.stringify({
+            nodoRelacionadoId: relacionAltaPendiente.nodoRelacionadoId,
+            tipoParentesco: relacionAltaPendiente.tipoParentesco,
+            persona: datosPerfil
+          })
+        });
+        establecerMensajeSistema(data.mensaje || 'Familiar relacionado y acomodado automáticamente.');
+      } else {
+        await crearNodoSinCuenta({
+          persona: datosPerfil,
+          generacion,
+          fila
+        });
 
-      establecerMensajeSistema(
-        generacion < 0
-          ? 'Familiar agregado como nuevo antepasado. Las generaciones se recorrieron automáticamente.'
-          : 'Familiar agregado correctamente.'
-      );
+        establecerMensajeSistema(
+          generacion < 0
+            ? 'Familiar agregado como nuevo antepasado. Las generaciones se recorrieron automáticamente.'
+            : 'Familiar agregado correctamente.'
+        );
+      }
       establecerMostrandoFormularioPerfilSinCuenta(false);
       establecerMostrarInvitar(false);
       establecerGeneracionObjetivoAgregar(null);
+      establecerRelacionAltaPendiente(null);
       restablecerFormularioPerfilSinCuenta();
       await cargarNodosEHilos(arbol._id);
     } catch (error) {
@@ -5535,15 +5613,26 @@ La persona seguirá dentro del árbol como miembro normal.`
 
     try {
       establecerProcesandoAccionEstructural(true);
+      const tipoParentesco = relacionAltaPendiente?.tipoParentesco;
+      const relacionPropuesta = relacionAltaPendiente?.nodoRelacionadoId
+        ? {
+          nodoRelacionado: relacionAltaPendiente.nodoRelacionadoId,
+          tipoRelacion: tipoParentesco === 'pareja' ? 'pareja' : 'padre_hijo',
+          rolDelInvitado: tipoParentesco === 'progenitor' ? 'padre' : tipoParentesco === 'hijo' ? 'hijo' : 'conyuge'
+        }
+        : {};
+
       await enviarInvitacion({
         persona: { ...amigo, origen: 'usuario_real' },
         generacion,
-        fila
+        fila,
+        relacionPropuesta
       });
 
       establecerMensajeSistema('Solicitud enviada correctamente.');
       establecerMostrarInvitar(false);
       establecerGeneracionObjetivoAgregar(null);
+      establecerRelacionAltaPendiente(null);
       await cargarAmigosDisponibles(arbol._id);
       await cargarNodosEHilos(arbol._id);
     } catch (error) {
@@ -8554,6 +8643,23 @@ La persona seguirá dentro del árbol como miembro normal.`
 
                   {(esUsuarioAdmin || puedeEditarImagenesNodo(nodoSeleccionado)) && (
                     <div className="acciones-perfil-sin-cuenta-panel">
+                      {esUsuarioAdmin && (
+                        <div className="acciones-agregar-parentesco">
+                          <span>Agregar familiar de {nodoSeleccionado.nombre.replace(' (Yo)', '')}</span>
+                          <div>
+                            <button type="button" onClick={() => abrirPanelAnadirFamiliarRelacionado(nodoSeleccionado, 'progenitor')} disabled={procesandoAccionEstructural}>
+                              <i className="bi bi-arrow-up-circle"></i> Padre / madre
+                            </button>
+                            <button type="button" onClick={() => abrirPanelAnadirFamiliarRelacionado(nodoSeleccionado, 'hijo')} disabled={procesandoAccionEstructural}>
+                              <i className="bi bi-arrow-down-circle"></i> Hijo / hija
+                            </button>
+                            <button type="button" onClick={() => abrirPanelAnadirFamiliarRelacionado(nodoSeleccionado, 'pareja')} disabled={procesandoAccionEstructural}>
+                              <i className="bi bi-heart"></i> Pareja
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {esUsuarioAdmin && nodoSeleccionado.origen === 'perfil_sin_cuenta' && (
                         <button
                           type="button"
@@ -8830,16 +8936,20 @@ La persona seguirá dentro del árbol como miembro normal.`
                     <h6 className="fw-bold m-0" style={{ color: 'var(--texto-principal)', fontSize: '0.95rem' }}>
                       {mostrandoFormularioPerfilSinCuenta
                         ? (modoFormularioPerfilSinCuenta === 'editar' ? 'Editar perfil sin cuenta' : 'Crear perfil sin cuenta')
-                        : (Number(generacionObjetivoAgregar) < 0
-                          ? 'Agregar antepasado'
-                          : `Agregar en Generación ${romano(Number(generacionObjetivoAgregar) || 0)}`)}
+                        : (relacionAltaPendiente
+                          ? `Agregar ${relacionAltaPendiente.tipoParentesco === 'progenitor' ? 'padre/madre' : relacionAltaPendiente.tipoParentesco === 'hijo' ? 'hijo/hija' : 'pareja'} de ${relacionAltaPendiente.nombreRelacionado?.replace(' (Yo)', '')}`
+                          : Number(generacionObjetivoAgregar) < 0
+                            ? 'Agregar antepasado'
+                            : `Agregar en Generación ${romano(Number(generacionObjetivoAgregar) || 0)}`)}
                     </h6>
                     <p className="text-muted small mb-0 mt-1">
                       {mostrandoFormularioPerfilSinCuenta
                         ? (modoFormularioPerfilSinCuenta === 'editar'
                           ? 'Actualiza la información, fechas y recuerdos de este familiar.'
                           : 'Agrega familiares sin necesidad de cuenta o verificación.')
-                        : 'Elige una persona con perfil o crea un familiar sin cuenta. La acción se guardará al instante.'}
+                        : (relacionAltaPendiente
+                          ? 'La relación, la generación y la ubicación se calcularán automáticamente al guardar.'
+                          : 'Elige una persona con perfil o crea un familiar sin cuenta. La acción se guardará al instante.')}
                     </p>
                   </div>
 

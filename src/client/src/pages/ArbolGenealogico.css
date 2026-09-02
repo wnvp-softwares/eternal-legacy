@@ -6773,3 +6773,238 @@ html[data-theme="dark"] .boton-camara-avatar-nodo {
         font-size: 0.72rem;
     }
 }
+
+/* =========================================================
+   MINUTA 09/08/2026 · ÁRBOL COMO EXPERIENCIA PRINCIPAL
+   ========================================================= */
+@media (min-width: 1200px) {
+    .layout-principal.vista-arbol-inmersiva .contenedor-arbol {
+        height: calc(100vh - 70px);
+    }
+}
+
+.layout-principal.vista-arbol-inmersiva .contenedor-arbol {
+    background: var(--fondo-tarjeta);
+}
+
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    padding: 0.85rem 1rem;
+    pointer-events: none;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--fondo-tarjeta) 94%, transparent), transparent);
+}
+
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol > * {
+    pointer-events: auto;
+}
+
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol .antetitulo-familia,
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol .text-muted {
+    display: none;
+}
+
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol .titulo-seccion {
+    font-size: 1.15rem;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--borde-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--fondo-tarjeta) 92%, transparent);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.layout-principal.vista-arbol-inmersiva .area-trabajo {
+    padding: 0;
+    gap: 0;
+    margin: 0 !important;
+    height: 100%;
+}
+
+.layout-principal.vista-arbol-inmersiva .contenedor-lienzo {
+    border: 0;
+    border-radius: 0;
+    background: var(--fondo-tarjeta);
+}
+
+.layout-principal.vista-arbol-inmersiva .lienzo-arbol {
+    padding: 6.5rem 4rem 5rem;
+}
+
+/* Los accesos secundarios pasan a ser iconos compactos. */
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior {
+    gap: 0.45rem;
+    padding: 0.3rem;
+    border: 1px solid var(--borde-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--fondo-tarjeta) 94%, transparent);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .boton-accion-arbol {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    padding: 0;
+    border-radius: 50%;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .texto-control-superior,
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .leyenda-roles-superior {
+    display: none !important;
+}
+
+/* El titular del árbol siempre sobresale visualmente. */
+.tarjeta-nodo-unificada.usuario-principal-arbol {
+    position: relative;
+    z-index: 6;
+    border-color: var(--dorado) !important;
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--dorado) 28%, transparent),
+        0 12px 30px rgba(15, 23, 42, 0.16) !important;
+}
+
+.tarjeta-nodo-unificada.usuario-principal-arbol::before {
+    content: 'Tú';
+    position: absolute;
+    top: -11px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 8;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--dorado);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.acciones-agregar-parentesco {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--dorado) 38%, var(--borde-color));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--dorado) 7%, var(--fondo-tarjeta));
+}
+
+.acciones-agregar-parentesco > span {
+    display: block;
+    margin-bottom: 0.55rem;
+    color: var(--texto-secundario);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.acciones-agregar-parentesco > div {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+}
+
+.acciones-agregar-parentesco button {
+    min-width: 0;
+    padding: 0.5rem 0.35rem !important;
+    justify-content: center;
+    gap: 0.3rem;
+    font-size: 0.7rem !important;
+}
+
+@media (max-width: 767px) {
+    .layout-principal.vista-arbol-inmersiva .cabecera-arbol {
+        padding: 0.55rem;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .cabecera-arbol > div:first-child {
+        display: none;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .barra-controles-superior {
+        margin-left: auto;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .lienzo-arbol {
+        padding: 5rem 2rem 6rem;
+    }
+
+    .acciones-agregar-parentesco > div {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===== Árbol a pantalla completa ===== */
+.contenedor-arbol {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+}
+
+/* La cabecera deja de consumir una franja grande del viewport. */
+.cabecera-arbol {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 230px;
+    z-index: 50;
+    width: auto;
+    padding: 0;
+    pointer-events: none;
+}
+
+.cabecera-arbol > * { pointer-events: auto; }
+.cabecera-arbol .antetitulo-familia,
+.cabecera-arbol .titulo-seccion { display: none; }
+
+.barra-controles-superior {
+    display: inline-flex;
+    width: auto;
+    max-width: min(760px, calc(100vw - 280px));
+    gap: 6px;
+    padding: 6px;
+    border: 1px solid color-mix(in srgb, var(--borde-color) 82%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--fondo-tarjeta) 91%, transparent);
+    box-shadow: 0 9px 28px rgba(15, 23, 42, .10);
+    backdrop-filter: blur(12px);
+}
+
+.area-trabajo {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0 !important;
+    gap: 0;
+}
+
+.contenedor-lienzo {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+}
+
+.lienzo-arbol {
+    min-width: 100%;
+    min-height: 100%;
+    padding: 7rem 4rem 5rem;
+}
+
+@media (max-width: 991.98px) {
+    .cabecera-arbol { top: 8px; left: 8px; right: 178px; }
+    .barra-controles-superior { max-width: calc(100vw - 200px); overflow-x: auto; flex-wrap: nowrap; }
+    .leyenda-roles-superior { display: none; }
+    .lienzo-arbol { padding: 6rem 2rem 4rem; }
+}
+
+@media (max-width: 575.98px) {
+    .cabecera-arbol { right: 8px; top: 58px; }
+    .barra-controles-superior { max-width: calc(100vw - 16px); }
+    .lienzo-arbol { padding: 7rem 1rem 4rem; }
+}

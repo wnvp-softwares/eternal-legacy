@@ -4,9 +4,15 @@ const {
     ejecutarOperacionLayout,
     normalizarGeneracionesPersistidas: normalizarGeneracionesPersistidasCentral,
     prepararGeneracionObjetivo,
+    obtenerSiguienteFila,
     reorganizarArbolCompleto,
     moverNodoAtomico
 } = require('../../services/layoutArbol.service');
+const {
+    TIPOS_PARENTESCO_ALTA,
+    normalizarTipoParentescoAlta,
+    resolverAltaParentesco
+} = require('../../services/parentescoArbol.service');
 
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
@@ -28,6 +34,8 @@ const sonMismoId = (id1, id2) => {
 
     return valor1 === valor2;
 };
+
+
 
 const obtenerIniciales = (nombre = '') => {
     const partes = nombre.trim().split(' ').filter(Boolean);
@@ -571,6 +579,197 @@ const crearPerfilSinCuenta = async (req, res) => {
     }
 };
 
+
+
+// Crea un familiar sin cuenta y su relación en una sola operación lógica.
+// El cliente solo indica el parentesco respecto a un nodo existente; la generación,
+// fila y orientación del hilo se calculan en el servidor.
+const crearFamiliarRelacionado = async (req, res) => {
+    let nodoCreadoId = null;
+
+    try {
+        const { arbolId } = req.params;
+        const {
+            nodoRelacionadoId,
+            tipoParentesco,
+            persona = {}
+        } = req.body || {};
+
+        const tipoNormalizado = normalizarTipoParentescoAlta(tipoParentesco);
+        const nombre = String(persona.nombre || '').trim();
+
+        if (!arbolId || !nodoRelacionadoId || !TIPOS_PARENTESCO_ALTA.has(tipoNormalizado) || !nombre) {
+            return res.status(400).json({
+                mensaje: 'Indica el familiar de referencia, el parentesco y el nombre de la nueva persona.'
+            });
+        }
+
+        const arbol = await Arbol.findOne({ _id: arbolId, activo: true });
+        if (!arbol) {
+            return res.status(404).json({ mensaje: 'Árbol no encontrado.' });
+        }
+
+        if (!usuarioPuedeEditarArbol(arbol, req.usuario.id)) {
+            return res.status(403).json({
+                mensaje: 'No tienes permiso para agregar familiares a este árbol.'
+            });
+        }
+
+        const resultado = await ejecutarOperacionLayout(async (session) => {
+            await normalizarGeneracionesPersistidasCentral({ arbolId, session });
+
+            const consultaRelacionado = Nodo.findOne({
+                _id: nodoRelacionadoId,
+                arbol: arbolId,
+                visible: true
+            });
+            if (session) consultaRelacionado.session(session);
+            const nodoRelacionado = await consultaRelacionado;
+
+            if (!nodoRelacionado) {
+                const error = new Error('El familiar de referencia ya no existe en el árbol.');
+                error.status = 404;
+                throw error;
+            }
+
+            const parentescoResuelto = resolverAltaParentesco({
+                tipoParentesco: tipoNormalizado,
+                generacionReferencia: nodoRelacionado.generacion
+            });
+
+            if (!parentescoResuelto) {
+                const error = new Error('No fue posible resolver la ubicación del parentesco solicitado.');
+                error.status = 400;
+                throw error;
+            }
+
+            const resultadoGeneracion = await prepararGeneracionObjetivo({
+                arbolId,
+                generacion: parentescoResuelto.generacionSolicitada,
+                session
+            });
+
+            // Si al agregar un antepasado se recorrió el árbol, el nodo de referencia
+            // ya fue desplazado en BD; se vuelve a leer para conservar la relación correcta.
+            let nodoRelacionadoActual = nodoRelacionado;
+            if (resultadoGeneracion.desplazamiento > 0) {
+                const consultaActualizada = Nodo.findById(nodoRelacionadoId);
+                if (session) consultaActualizada.session(session);
+                nodoRelacionadoActual = await consultaActualizada;
+            }
+
+            const generacionDestino = tipoNormalizado === 'pareja'
+                ? Number(nodoRelacionadoActual.generacion)
+                : resultadoGeneracion.generacion;
+
+            const filaDestino = tipoNormalizado === 'pareja'
+                ? Number(nodoRelacionadoActual.fila)
+                : await obtenerSiguienteFila({
+                    arbolId,
+                    generacion: generacionDestino,
+                    session
+                });
+
+            const fotosFormateadas = normalizarFotosNodo(persona.fotos || []);
+
+            let nuevoNodo;
+            try {
+                const documentos = await Nodo.create([{
+                    arbol: arbolId,
+                    usuario: null,
+                    creadoPor: req.usuario.id,
+                    nombre,
+                    iniciales: persona.iniciales || obtenerIniciales(nombre),
+                    colorFondo: persona.colorFondo || '#e2e8f0',
+                    colorTexto: persona.colorTexto || '#0f172a',
+                    fechaNacimiento: persona.fechaNacimiento || null,
+                    fechaFallecimiento: persona.fechaFallecimiento || null,
+                    fechaCorta: persona.fechaCorta || 'Pendiente',
+                    estaFallecido: Boolean(persona.estaFallecido),
+                    edad: persona.edad ?? null,
+                    genero: persona.genero || '',
+                    tipo: 'normal',
+                    estado: persona.estado || 'Incompleto',
+                    origen: 'perfil_sin_cuenta',
+                    generacion: generacionDestino,
+                    fila: filaDestino,
+                    fotoPerfilNodo: normalizarFotoPerfilNodo(persona.fotoPerfilNodo),
+                    fotoPerfilNodoActualizadaEn: persona.fotoPerfilNodo ? new Date() : null,
+                    fotos: fotosFormateadas,
+                    biografia: persona.biografia || '',
+                    perfilPrivado: Boolean(persona.perfilPrivado),
+                    visible: true
+                }], session ? { session } : {});
+                nuevoNodo = documentos[0];
+                nodoCreadoId = nuevoNodo._id;
+
+                let nodoOrigen = parentescoResuelto.nuevoNodoEsOrigen
+                    ? nuevoNodo._id
+                    : nodoRelacionadoActual._id;
+                let nodoDestino = parentescoResuelto.nuevoNodoEsOrigen
+                    ? nodoRelacionadoActual._id
+                    : nuevoNodo._id;
+                const tipoRelacion = parentescoResuelto.tipoRelacion;
+
+                const hilos = await Hilo.create([{
+                    arbol: arbolId,
+                    nodoOrigen,
+                    nodoDestino,
+                    nodoSuperior: tipoRelacion === 'pareja' ? nodoRelacionadoActual._id : null,
+                    tipoRelacion,
+                    estado: 'Activa',
+                    creadoPor: req.usuario.id
+                }], session ? { session } : {});
+
+                return {
+                    nodo: nuevoNodo,
+                    hilo: hilos[0],
+                    tipoParentesco: tipoNormalizado,
+                    arbolDesplazado: resultadoGeneracion.desplazamiento > 0
+                };
+            } catch (errorOperacion) {
+                // En Mongo local sin replica set, ejecutarOperacionLayout usa fallback sin transacción.
+                // Evitamos dejar un nodo huérfano si falla la creación de la relación.
+                if (!session && nodoCreadoId) {
+                    await Nodo.deleteOne({ _id: nodoCreadoId }).catch(() => undefined);
+                    nodoCreadoId = null;
+                }
+                throw errorOperacion;
+            }
+        });
+
+        // La relación ya quedó guardada; el acomodo automático es parte del flujo normal.
+        // Si el layout falla por un dato legado, la relación no se pierde y puede repararse después.
+        let layout = null;
+        try {
+            layout = await reorganizarArbolCompleto({
+                arbolId,
+                conservarPosicionesManuales: true
+            });
+        } catch (errorLayout) {
+            console.error('⚠️ Familiar creado, pero no se pudo completar el acomodo automático:', errorLayout);
+        }
+
+        return res.status(201).json({
+            mensaje: resultado.arbolDesplazado
+                ? 'Familiar y relación creados. Las generaciones se recorrieron y el árbol se reacomodó automáticamente.'
+                : 'Familiar y relación creados y acomodados automáticamente.',
+            ...resultado,
+            layout
+        });
+    } catch (error) {
+        console.error('❌ Error al crear familiar relacionado:', error);
+        if (error?.code === 11000 || error?.name === 'ValidationError') {
+            return res.status(400).json({
+                mensaje: error.message || 'No se pudo crear la relación familiar.'
+            });
+        }
+        return res.status(error.status || 500).json({
+            mensaje: error.message || 'Error interno al crear el familiar relacionado.'
+        });
+    }
+};
+
 const actualizarNodo = async (req, res) => {
     try {
         const { arbolId, nodoId } = req.params;
@@ -926,6 +1125,7 @@ module.exports = {
     obtenerNodosPorArbol,
     obtenerDetalleNodo,
     crearPerfilSinCuenta,
+    crearFamiliarRelacionado,
     actualizarNodo,
     moverNodo,
     reorganizarArbol,
