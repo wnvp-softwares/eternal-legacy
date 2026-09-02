@@ -10,7 +10,14 @@ const {
     enviarConfirmacionCambioContrasena
 } = mailer;
 
+const DURACION_CODIGO_VERIFICACION_MS = 10 * 60 * 1000;
+const MAX_INTENTOS_VERIFICACION = 5;
+const ESPERA_REENVIO_VERIFICACION_MS = 60 * 1000;
 const DURACION_CODIGO_2FA_MS = 5 * 60 * 1000;
+const MAX_INTENTOS_2FA = 5;
+const ESPERA_REENVIO_2FA_MS = 60 * 1000;
+const VERSION_TERMINOS = process.env.VERSION_TERMINOS || '2026-09-02';
+const VERSION_PRIVACIDAD = process.env.VERSION_PRIVACIDAD || '2026-09-02';
 const DURACION_TOKEN_2FA = '10m';
 const DURACION_CODIGO_RESTABLECIMIENTO_MS = 5 * 60 * 1000;
 const DURACION_TOKEN_RESTABLECIMIENTO_MS = 10 * 60 * 1000;
@@ -44,6 +51,24 @@ const generarCodigoSeisDigitos = () => {
     return crypto.randomInt(100000, 1000000).toString();
 };
 
+const obtenerSecretoCodigosTemporales = () => {
+    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET no está configurado.');
+    return process.env.JWT_SECRET;
+};
+
+const crearHashCodigoTemporal = (valor = '') => crypto
+    .createHmac('sha256', obtenerSecretoCodigosTemporales())
+    .update(String(valor || ''))
+    .digest('hex');
+
+const compararHashCodigoTemporal = (valor, hashGuardado) => {
+    if (!valor || !hashGuardado) return false;
+    const calculado = Buffer.from(crearHashCodigoTemporal(valor), 'hex');
+    const guardado = Buffer.from(String(hashGuardado), 'hex');
+    return calculado.length === guardado.length && crypto.timingSafeEqual(calculado, guardado);
+};
+
+
 const crearTokenSesion = (usuario) => {
     const usuarioId = usuario?._id || usuario?.id || usuario;
     const sessionVersion = Number(usuario?.sessionVersion || 0);
@@ -54,7 +79,7 @@ const crearTokenSesion = (usuario) => {
             sessionVersion
         },
         process.env.JWT_SECRET,
-        { expiresIn: '30d' }
+        { expiresIn: process.env.JWT_SESSION_EXPIRES_IN || '7d' }
     );
 };
 
@@ -308,7 +333,15 @@ const formatearUsuarioSesion = (usuario, req) => ({
 
     idioma: usuario.idioma || 'es-MX',
     zonaHoraria: usuario.zonaHoraria || 'America/Mexico_City',
-    formatoFecha: usuario.formatoFecha || 'DD/MM/AAAA'
+    formatoFecha: usuario.formatoFecha || 'DD/MM/AAAA',
+
+    onboarding: usuario.onboarding || { versionVista: '', completadoEn: null },
+    sucesionCuenta: {
+        deseaDesignar: Boolean(usuario.sucesionCuenta?.deseaDesignar),
+        sucesorEmail: usuario.sucesionCuenta?.sucesorEmail || '',
+        estado: usuario.sucesionCuenta?.estado || 'NO_CONFIGURADA',
+        configuradaEn: usuario.sucesionCuenta?.configuradaEn || null
+    }
 });
 
 const crearPerfilSiNoExiste = async (usuario) => {
@@ -333,7 +366,17 @@ const crearPerfilSiNoExiste = async (usuario) => {
 const enviarCodigo2FA = async (usuario) => {
     const codigo = generarCodigoSeisDigitos();
 
-    usuario.twoFactorCode = codigo;
+    if (
+        usuario.twoFactorLastSentAt &&
+        Date.now() - new Date(usuario.twoFactorLastSentAt).getTime() < ESPERA_REENVIO_2FA_MS
+    ) {
+        throw new Error('Espera un momento antes de solicitar otro código de seguridad.');
+    }
+
+    usuario.twoFactorCode = null;
+    usuario.twoFactorCodeHash = crearHashCodigoTemporal(codigo);
+    usuario.twoFactorAttempts = 0;
+    usuario.twoFactorLastSentAt = new Date();
     usuario.twoFactorCodeExpires = new Date(Date.now() + DURACION_CODIGO_2FA_MS);
     await usuario.save();
 
@@ -385,11 +428,21 @@ const crearUsuario = async (req, res) => {
     let nuevoPerfil = null;
 
     try {
-        const { nombre, nickname, fechaNacimiento, email, password } = req.body;
+        const {
+            nombre, nickname, fechaNacimiento, email, password,
+            aceptaTerminos, aceptaPrivacidad, mayorEdadDeclarado,
+            sucesion = {}
+        } = req.body;
 
         if (!nombre || !nickname || !fechaNacimiento || !email || !password) {
             return res.status(400).json({
                 mensaje: 'Todos los campos son obligatorios.'
+            });
+        }
+
+        if (aceptaTerminos !== true || aceptaPrivacidad !== true || mayorEdadDeclarado !== true) {
+            return res.status(400).json({
+                mensaje: 'Debes declarar mayoría de edad y aceptar los Términos y el Aviso de Privacidad.'
             });
         }
 
@@ -458,11 +511,32 @@ const crearUsuario = async (req, res) => {
             nickname: nicknameLimpio,
             email: emailLimpio,
             contrasena: contrasenaEncriptada,
-            verificationCode: codigo,
+            verificationCode: null,
+            verificationCodeHash: crearHashCodigoTemporal(codigo),
+            verificationCodeExpires: new Date(Date.now() + DURACION_CODIGO_VERIFICACION_MS),
+            verificationAttempts: 0,
+            verificationLastSentAt: new Date(),
             isVerified: false,
             esBetaTester: REGISTRO_BETA_ACTIVO,
             betaTesterDesde: REGISTRO_BETA_ACTIVO ? new Date() : null,
-            informacionPerfil: nuevoPerfil._id
+            informacionPerfil: nuevoPerfil._id,
+            aceptacionesLegales: {
+                mayorEdadDeclarada: true,
+                terminosVersion: VERSION_TERMINOS,
+                terminosAceptadosEn: new Date(),
+                privacidadVersion: VERSION_PRIVACIDAD,
+                privacidadAceptadaEn: new Date()
+            },
+            sucesionCuenta: {
+                deseaDesignar: Boolean(sucesion?.deseaDesignar),
+                sucesorEmail: sucesion?.deseaDesignar ? normalizarEmail(sucesion?.sucesorEmail) : '',
+                estado: sucesion?.deseaDesignar && normalizarEmail(sucesion?.sucesorEmail)
+                    ? 'CONFIGURADA'
+                    : 'NO_CONFIGURADA',
+                configuradaEn: sucesion?.deseaDesignar && normalizarEmail(sucesion?.sucesorEmail)
+                    ? new Date()
+                    : null
+            }
         });
 
         await nuevoUsuario.save();
@@ -511,6 +585,51 @@ const crearUsuario = async (req, res) => {
     }
 };
 
+const reenviarCodigoRegistro = async (req, res) => {
+    try {
+        const emailLimpio = normalizarEmail(req.body?.email);
+        if (!emailLimpio) {
+            return res.status(400).json({ mensaje: 'El correo es obligatorio.' });
+        }
+
+        const usuario = await Usuario.findOne({ email: emailLimpio });
+        if (!usuario) {
+            return res.status(404).json({ mensaje: 'No encontramos una cuenta pendiente con ese correo.' });
+        }
+
+        if (usuario.isVerified) {
+            return res.status(400).json({ mensaje: 'Esta cuenta ya fue verificada. Inicia sesión.' });
+        }
+
+        if (
+            usuario.verificationLastSentAt &&
+            Date.now() - new Date(usuario.verificationLastSentAt).getTime() < ESPERA_REENVIO_VERIFICACION_MS
+        ) {
+            return res.status(429).json({ mensaje: 'Espera un momento antes de solicitar otro código.' });
+        }
+
+        const codigo = generarCodigoSeisDigitos();
+        usuario.verificationCode = null;
+        usuario.verificationCodeHash = crearHashCodigoTemporal(codigo);
+        usuario.verificationCodeExpires = new Date(Date.now() + DURACION_CODIGO_VERIFICACION_MS);
+        usuario.verificationAttempts = 0;
+        usuario.verificationLastSentAt = new Date();
+        await usuario.save();
+
+        await enviarCodigoVerificacion(emailLimpio, codigo, {
+            asunto: 'Nuevo código de verificación',
+            titulo: 'Confirma tu cuenta en Legacy',
+            descripcion: 'Solicitaste un nuevo código para completar tu registro.',
+            accion: 'Tu nuevo código de verificación es:'
+        });
+
+        return res.status(200).json({ mensaje: 'Te enviamos un nuevo código de verificación.' });
+    } catch (error) {
+        console.error('❌ Error al reenviar código de registro:', error);
+        return res.status(500).json({ mensaje: 'No se pudo reenviar el código.' });
+    }
+};
+
 // 2. VERIFICACIÓN DEL CÓDIGO POR EMAIL PARA REGISTRO
 const verificarCodigo = async (req, res) => {
     try {
@@ -535,14 +654,43 @@ const verificarCodigo = async (req, res) => {
             });
         }
 
-        if (usuario.verificationCode !== codigo) {
+        if (usuario.isVerified) {
+            return res.status(200).json({
+                mensaje: 'La cuenta ya estaba verificada.',
+                usuario: formatearUsuarioSesion(usuario, req),
+                token: crearTokenSesion(usuario)
+            });
+        }
+
+        if (usuario.verificationCodeExpires && usuario.verificationCodeExpires < new Date()) {
+            return res.status(400).json({
+                mensaje: 'El código de verificación expiró. Solicita un código nuevo.'
+            });
+        }
+
+        if (Number(usuario.verificationAttempts || 0) >= MAX_INTENTOS_VERIFICACION) {
+            return res.status(429).json({
+                mensaje: 'Se alcanzó el máximo de intentos para este código.'
+            });
+        }
+
+        const codigoValido = usuario.verificationCodeHash
+            ? compararHashCodigoTemporal(codigo, usuario.verificationCodeHash)
+            : String(usuario.verificationCode || '') === String(codigo);
+
+        if (!codigoValido) {
+            usuario.verificationAttempts = Number(usuario.verificationAttempts || 0) + 1;
+            await usuario.save();
             return res.status(400).json({
                 mensaje: 'El código ingresado es incorrecto.'
             });
         }
 
         usuario.isVerified = true;
-        usuario.verificationCode = undefined;
+        usuario.verificationCode = null;
+        usuario.verificationCodeHash = null;
+        usuario.verificationCodeExpires = null;
+        usuario.verificationAttempts = 0;
         await crearPerfilSiNoExiste(usuario);
         await usuario.save();
 
@@ -639,6 +787,40 @@ const loginUsuario = async (req, res) => {
     }
 };
 
+const reenviarCodigo2FALogin = async (req, res) => {
+    try {
+        const { twoFactorLoginToken } = req.body || {};
+        if (!twoFactorLoginToken) {
+            return res.status(400).json({ mensaje: 'El token temporal es obligatorio.' });
+        }
+
+        let payload;
+        try {
+            payload = jwt.verify(twoFactorLoginToken, process.env.JWT_SECRET);
+        } catch (error) {
+            return res.status(401).json({ mensaje: 'La verificación expiró. Vuelve a iniciar sesión.' });
+        }
+
+        if (payload.tipo !== 'login_2fa' || !payload.id) {
+            return res.status(401).json({ mensaje: 'Verificación inválida. Vuelve a iniciar sesión.' });
+        }
+
+        const usuario = await Usuario.findById(payload.id);
+        if (!usuario || !usuario.twoFactorEnabled) {
+            return res.status(400).json({ mensaje: 'La autenticación en dos pasos no está disponible.' });
+        }
+
+        await enviarCodigo2FA(usuario);
+        return res.status(200).json({ mensaje: 'Te enviamos un nuevo código de seguridad.' });
+    } catch (error) {
+        if (String(error.message || '').includes('Espera un momento')) {
+            return res.status(429).json({ mensaje: error.message });
+        }
+        console.error('❌ Error al reenviar código 2FA:', error);
+        return res.status(500).json({ mensaje: 'No se pudo reenviar el código de seguridad.' });
+    }
+};
+
 // 4. VERIFICAR CÓDIGO 2FA AL INICIAR SESIÓN
 const verificarCodigo2FALogin = async (req, res) => {
     try {
@@ -683,7 +865,7 @@ const verificarCodigo2FALogin = async (req, res) => {
             });
         }
 
-        if (!usuario.twoFactorCode || !usuario.twoFactorCodeExpires) {
+        if ((!usuario.twoFactorCode && !usuario.twoFactorCodeHash) || !usuario.twoFactorCodeExpires) {
             return res.status(400).json({
                 mensaje: 'No hay un código activo. Vuelve a iniciar sesión.'
             });
@@ -691,6 +873,8 @@ const verificarCodigo2FALogin = async (req, res) => {
 
         if (usuario.twoFactorCodeExpires < new Date()) {
             usuario.twoFactorCode = null;
+            usuario.twoFactorCodeHash = null;
+            usuario.twoFactorAttempts = 0;
             usuario.twoFactorCodeExpires = null;
             await usuario.save();
 
@@ -699,13 +883,27 @@ const verificarCodigo2FALogin = async (req, res) => {
             });
         }
 
-        if (String(usuario.twoFactorCode) !== String(codigo)) {
+        if (Number(usuario.twoFactorAttempts || 0) >= MAX_INTENTOS_2FA) {
+            return res.status(429).json({
+                mensaje: 'Se alcanzó el máximo de intentos. Vuelve a iniciar sesión.'
+            });
+        }
+
+        const codigo2FAValido = usuario.twoFactorCodeHash
+            ? compararHashCodigoTemporal(codigo, usuario.twoFactorCodeHash)
+            : String(usuario.twoFactorCode || '') === String(codigo);
+
+        if (!codigo2FAValido) {
+            usuario.twoFactorAttempts = Number(usuario.twoFactorAttempts || 0) + 1;
+            await usuario.save();
             return res.status(400).json({
                 mensaje: 'El código ingresado es incorrecto.'
             });
         }
 
         usuario.twoFactorCode = null;
+        usuario.twoFactorCodeHash = null;
+        usuario.twoFactorAttempts = 0;
         usuario.twoFactorCodeExpires = null;
         await crearPerfilSiNoExiste(usuario);
         await usuario.save();
@@ -1094,6 +1292,8 @@ const toggle2FA = async (req, res) => {
 
         if (!usuario.twoFactorEnabled) {
             usuario.twoFactorCode = null;
+            usuario.twoFactorCodeHash = null;
+            usuario.twoFactorAttempts = 0;
             usuario.twoFactorCodeExpires = null;
         }
 
@@ -1157,6 +1357,97 @@ const actualizarPreferencias = async (req, res) => {
     } catch (error) {
         console.error('❌ Error en actualizarPreferencias:', error);
         res.status(500).json({ mensaje: 'Error interno del servidor.' });
+    }
+};
+
+
+const obtenerSucesionCuenta = async (req, res) => {
+    try {
+        const usuario = await Usuario.findById(req.usuario.id)
+            .select('sucesionCuenta');
+        if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+
+        return res.status(200).json({
+            sucesion: usuario.sucesionCuenta || {
+                deseaDesignar: false,
+                sucesorEmail: '',
+                estado: 'NO_CONFIGURADA'
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener sucesión de cuenta:', error);
+        return res.status(500).json({ mensaje: 'No se pudo consultar la sucesión de cuenta.' });
+    }
+};
+
+const actualizarSucesionCuenta = async (req, res) => {
+    try {
+        const { deseaDesignar, sucesorEmail = '', instrucciones = '' } = req.body || {};
+        if (typeof deseaDesignar !== 'boolean') {
+            return res.status(400).json({ mensaje: 'Indica si deseas designar una persona sucesora.' });
+        }
+
+        const emailLimpio = normalizarEmail(sucesorEmail);
+        if (deseaDesignar && !emailLimpio) {
+            return res.status(400).json({ mensaje: 'Ingresa el correo de la persona sucesora.' });
+        }
+
+        const usuario = await Usuario.findById(req.usuario.id).select('email sucesionCuenta');
+        if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        if (deseaDesignar && emailLimpio === normalizarEmail(usuario.email)) {
+            return res.status(400).json({ mensaje: 'La persona sucesora debe ser distinta al titular de la cuenta.' });
+        }
+
+        const sucesorUsuario = deseaDesignar
+            ? await Usuario.findOne({ email: emailLimpio }).select('_id')
+            : null;
+
+        usuario.sucesionCuenta = {
+            ...usuario.sucesionCuenta?.toObject?.(),
+            deseaDesignar,
+            sucesorEmail: deseaDesignar ? emailLimpio : '',
+            sucesorUsuario: sucesorUsuario?._id || null,
+            estado: deseaDesignar ? 'CONFIGURADA' : 'NO_CONFIGURADA',
+            instrucciones: String(instrucciones || '').trim().slice(0, 1000),
+            configuradaEn: deseaDesignar ? new Date() : null,
+            solicitadaEn: null,
+            revisadaEn: null
+        };
+        await usuario.save();
+
+        return res.status(200).json({
+            mensaje: deseaDesignar
+                ? 'Persona sucesora guardada. La transferencia nunca será automática y requerirá revisión.'
+                : 'La designación de sucesión fue desactivada.',
+            sucesion: usuario.sucesionCuenta
+        });
+    } catch (error) {
+        console.error('❌ Error al actualizar sucesión de cuenta:', error);
+        return res.status(500).json({ mensaje: 'No se pudo actualizar la sucesión de cuenta.' });
+    }
+};
+
+const actualizarOnboarding = async (req, res) => {
+    try {
+        const version = String(req.body?.version || '').trim();
+        if (!version) return res.status(400).json({ mensaje: 'La versión del onboarding es obligatoria.' });
+
+        const usuario = await Usuario.findByIdAndUpdate(
+            req.usuario.id,
+            {
+                $set: {
+                    'onboarding.versionVista': version,
+                    'onboarding.completadoEn': new Date()
+                }
+            },
+            { new: true }
+        ).select('onboarding');
+
+        if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
+        return res.status(200).json({ mensaje: 'Onboarding marcado como visto.', onboarding: usuario.onboarding });
+    } catch (error) {
+        console.error('❌ Error al actualizar onboarding:', error);
+        return res.status(500).json({ mensaje: 'No se pudo guardar el estado del onboarding.' });
     }
 };
 
@@ -1309,16 +1600,21 @@ module.exports = {
     obtenerDisponibilidadNickname,
     crearUsuario,
     loginUsuario,
+    verificarCodigo,
+    reenviarCodigoRegistro,
     verificarCodigo2FALogin,
+    reenviarCodigo2FALogin,
     solicitarRestablecimiento,
     verificarCodigoRestablecimiento,
     restablecerContrasena,
     actualizarFotoPerfil,
     actualizarImagenesPerfil,
-    verificarCodigo,
     actualizarContrasena,
     toggle2FA,
     actualizarPreferencias,
+    obtenerSucesionCuenta,
+    actualizarSucesionCuenta,
+    actualizarOnboarding,
     actualizarClavePublica,
     obtenerConfiguracionE2E,
     actualizarConfiguracionE2E,

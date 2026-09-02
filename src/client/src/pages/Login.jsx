@@ -124,6 +124,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   const [mostrarModalReglas, setMostrarModalReglas] = useState(false);
   const [aceptoMayorEdad, setAceptoMayorEdad] = useState(false);
   const [aceptoPrivacidad, setAceptoPrivacidad] = useState(false);
+  const [sucesionRegistro, setSucesionRegistro] = useState({ deseaDesignar: false, sucesorEmail: '' });
 
   const [codigo, setCodigo] = useState(['', '', '', '', '', '']);
   const [tipoVerificacion, setTipoVerificacion] = useState('registro');
@@ -384,6 +385,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
           setTwoFactorLoginToken(datos.twoFactorLoginToken || '');
           setCodigo(['', '', '', '', '', '']);
           setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
+          setTiempoReenvio(ESPERA_REENVIO_SEGUNDOS);
           setPaso('verificacion');
           return;
         }
@@ -453,6 +455,16 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
       return;
     }
 
+    if (!aceptoMayorEdad || !aceptoPrivacidad) {
+      setError('Debes aceptar los Términos y el Aviso de Privacidad antes de crear la cuenta.');
+      return;
+    }
+
+    if (sucesionRegistro.deseaDesignar && !sucesionRegistro.sucesorEmail.trim()) {
+      setError('Ingresa el correo de la persona que deseas designar como sucesora.');
+      return;
+    }
+
     setPaso('espera_correo');
 
     try {
@@ -464,7 +476,14 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
           nickname: nicknameLimpio,
           fechaNacimiento: fechaNacimientoLimpia,
           email: emailLimpio,
-          password: formulario.password
+          password: formulario.password,
+          mayorEdadDeclarado: aceptoMayorEdad,
+          aceptaTerminos: aceptoMayorEdad,
+          aceptaPrivacidad: aceptoPrivacidad,
+          sucesion: {
+            deseaDesignar: sucesionRegistro.deseaDesignar,
+            sucesorEmail: sucesionRegistro.deseaDesignar ? sucesionRegistro.sucesorEmail.trim() : ''
+          }
         })
       });
 
@@ -479,6 +498,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
       setCodigo(['', '', '', '', '', '']);
       setPaso('verificacion');
       setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
+      setTiempoReenvio(ESPERA_REENVIO_SEGUNDOS);
     } catch (err) {
       setError(err.message);
       setPaso('formulario');
@@ -523,16 +543,41 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
   };
 
   const reenviarCodigo = async () => {
+    if (tiempoReenvio > 0) return;
+
     if (tipoVerificacion === 'recuperacion') {
-      if (tiempoReenvio > 0) return;
       await solicitarRestablecimiento();
       return;
     }
 
-    // Se conserva el comportamiento existente de registro y 2FA.
-    setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
-    setCodigo(['', '', '', '', '', '']);
-    setError('');
+    try {
+      setError('');
+      const es2FA = tipoVerificacion === '2fa_login';
+      const respuesta = await fetch(
+        es2FA
+          ? `${API_BASE_URL}/usuarios/reenviar-2fa-login`
+          : `${API_BASE_URL}/usuarios/reenviar-codigo-registro`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            es2FA
+              ? { twoFactorLoginToken }
+              : { email: formulario.email.trim().toLowerCase() }
+          )
+        }
+      );
+
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.mensaje || 'No se pudo reenviar el código.');
+
+      setTiempoRestante(DURACION_CODIGO_SEGUNDOS);
+      setTiempoReenvio(ESPERA_REENVIO_SEGUNDOS);
+      setCodigo(['', '', '', '', '', '']);
+      setMensajeExito(datos.mensaje || 'Te enviamos un código nuevo.');
+    } catch (err) {
+      setError(err.message || 'No se pudo reenviar el código.');
+    }
   };
 
   const verificarCuenta = async (e) => {
@@ -755,7 +800,7 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
       </div>
     );
   } else if (paso === 'verificacion') {
-    const reenvioBloqueado = tipoVerificacion === 'recuperacion' && tiempoReenvio > 0;
+    const reenvioBloqueado = tiempoReenvio > 0;
 
     contenidoDerecha = (
       <div className="animacion-formulario login-verificacion">
@@ -1397,6 +1442,40 @@ export default function Login({ rutaInicial = '/arbol-genealogico' }) {
                       <label className="form-check-label modal-login-label" htmlFor="checkPrivacidad">
                         He leído y acepto el <a href="#" onClick={(e) => { e.preventDefault(); setMostrarModalPrivacidad(true); }} className="texto-dorado fw-bold text-decoration-none">Aviso de Privacidad</a> sobre el tratamiento de mis datos personales.
                       </label>
+                    </div>
+
+                    <div className="bloque-sucesion-registro mt-4">
+                      <h6 className="fw-bold mb-1 modal-login-subtitulo">Sucesión de cuenta</h6>
+                      <p className="small mb-3">
+                        En caso de fallecimiento, puedes dejar designado un contacto sucesor. Esta designación no entrega acceso automático: cualquier solicitud deberá pasar por un proceso de revisión.
+                      </p>
+
+                      <div className="form-check mb-2">
+                        <input
+                          className="form-check-input modal-login-check"
+                          type="checkbox"
+                          id="checkSucesion"
+                          checked={sucesionRegistro.deseaDesignar}
+                          onChange={(e) => setSucesionRegistro(prev => ({ ...prev, deseaDesignar: e.target.checked }))}
+                        />
+                        <label className="form-check-label modal-login-label" htmlFor="checkSucesion">
+                          Quiero designar una persona sucesora ahora.
+                        </label>
+                      </div>
+
+                      {sucesionRegistro.deseaDesignar && (
+                        <div className="grupo-input-personalizado mt-2">
+                          <i className="bi bi-envelope-heart icono-input" aria-hidden="true"></i>
+                          <input
+                            type="email"
+                            className="input-personalizado"
+                            placeholder="correo.del.sucesor@ejemplo.com"
+                            value={sucesionRegistro.sucesorEmail}
+                            onChange={(e) => setSucesionRegistro(prev => ({ ...prev, sucesorEmail: e.target.value }))}
+                            autoComplete="email"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 
