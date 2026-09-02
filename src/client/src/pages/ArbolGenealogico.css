@@ -6936,6 +6936,7 @@ html[data-theme="dark"] .boton-camara-avatar-nodo {
         grid-template-columns: 1fr;
     }
 }
+<<<<<<< HEAD
 
 /* ===== Árbol a pantalla completa ===== */
 .contenedor-arbol {
@@ -7008,3 +7009,5 @@ html[data-theme="dark"] .boton-camara-avatar-nodo {
     .barra-controles-superior { max-width: calc(100vw - 16px); }
     .lienzo-arbol { padding: 7rem 1rem 4rem; }
 }
+=======
+>>>>>>> ff12bff02b5f522e89a7927d2515708e307c284d

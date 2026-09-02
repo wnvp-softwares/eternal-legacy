@@ -219,7 +219,10 @@ export default function Layout() {
   const [onboardingAbierto, setOnboardingAbierto] = useState(false);
   const [pasoOnboarding, setPasoOnboarding] = useState(0);
   const [guardandoOnboarding, setGuardandoOnboarding] = useState(false);
+<<<<<<< HEAD
   const [menuArbolCompactoAbierto, setMenuArbolCompactoAbierto] = useState(false);
+=======
+>>>>>>> ff12bff02b5f522e89a7927d2515708e307c284d
 
   const token = localStorage.getItem('token');
   const queryBusqueda = textoBusqueda.trim();

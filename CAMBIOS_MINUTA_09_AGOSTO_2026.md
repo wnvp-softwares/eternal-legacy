@@ -196,6 +196,7 @@ La minuta del 09 de agosto indica concluir compromisos incompletos de la minuta 
 ### Monetización / ingresos
 
 El comentario de analistas recomienda definir ingresos, pero la minuta no define el modelo de monetización. No se implementaron cobros ni suscripciones sin una decisión de negocio.
+<<<<<<< HEAD
 
 ## Ajuste visual adicional — árbol como superficie principal
 
@@ -211,3 +212,5 @@ Se reforzó el modo inmersivo del Árbol Genealógico para que la vista del árb
 - En móvil se mantiene el mismo principio: árbol dominante y controles compactos superpuestos.
 
 La intención visual es que el usuario perciba el Árbol Genealógico como la ventana principal de Legacy/Eternal y que el resto del sistema aparezca únicamente cuando sea necesario.
+=======
+>>>>>>> ff12bff02b5f522e89a7927d2515708e307c284d
