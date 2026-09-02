@@ -10,6 +10,7 @@ const {
     obtenerNodosPorArbol,
     obtenerDetalleNodo,
     crearPerfilSinCuenta,
+    crearFamiliarRelacionado,
     actualizarNodo,
     moverNodo,
     reorganizarArbol,
@@ -40,6 +41,10 @@ router.get('/arbol/:arbolId/:nodoId/detalle', verificarToken, obtenerDetalleNodo
 
 // Crear persona sin cuenta dentro del árbol
 router.post('/perfil-sin-cuenta', verificarToken, crearPerfilSinCuenta);
+
+// Crear un familiar indicando su parentesco respecto a una persona existente.
+// El backend crea Nodo + Hilo y calcula su ubicación automáticamente.
+router.post('/arbol/:arbolId/familiares-relacionados', verificarToken, crearFamiliarRelacionado);
 
 // Reorganizar todas las familias del árbol con una preferencia vertical de género.
 router.patch('/arbol/:arbolId/reorganizar', verificarToken, reorganizarArbol);

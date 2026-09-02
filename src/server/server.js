@@ -2,10 +2,12 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const { aplicarCabecerasSeguridad } = require('./middlewares/security.middleware');
 
 const conectarDB = require('./configs/database.config');
 
 const app = express();
+app.set('trust proxy', 1);
 
 const CLIENT_URLS = (
     process.env.CLIENT_URLS ||
@@ -18,6 +20,8 @@ const CLIENT_URLS = (
 
 conectarDB();
 
+app.use(aplicarCabecerasSeguridad);
+
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin || CLIENT_URLS.includes(origin)) {
@@ -29,8 +33,8 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }));
+app.use(express.urlencoded({ limit: process.env.FORM_BODY_LIMIT || '2mb', extended: true }));
 
 const rutasPrincipales = require('./routes/index.routes');
 
@@ -50,7 +54,4 @@ app.listen(PORT, () => {
     );
     console.log(`Clientes permitidos por CORS: ${CLIENT_URLS.join(', ')}`);
 
-    console.log("Temporal debug:\n")
-    console.log("EMAIL_USER:", process.env.EMAIL_USER);
-    console.log("EMAIL_PASSWORD existe:", !!process.env.EMAIL_PASSWORD);
 });

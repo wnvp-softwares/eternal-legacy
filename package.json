@@ -5,7 +5,11 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/server/server.js",
-    "dev": "nodemon src/server/server.js"
+    "dev": "nodemon src/server/server.js",
+    "check:server": "node scripts/check-server-syntax.js",
+    "test": "node --test tests/*.test.js",
+    "verify": "npm run check:server && npm run check:routes && npm test",
+    "check:routes": "node scripts/check-route-handlers.js"
   },
   "repository": {
     "type": "git",

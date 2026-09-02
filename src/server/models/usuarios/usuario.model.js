@@ -34,6 +34,56 @@ const indicadoresVistosSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
+
+const sucesionCuentaSchema = new mongoose.Schema({
+    deseaDesignar: {
+        type: Boolean,
+        default: false
+    },
+    sucesorEmail: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        default: ''
+    },
+    sucesorUsuario: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        default: null
+    },
+    estado: {
+        type: String,
+        enum: ['NO_CONFIGURADA', 'CONFIGURADA', 'SOLICITADA', 'EN_REVISION', 'APROBADA', 'RECHAZADA'],
+        default: 'NO_CONFIGURADA'
+    },
+    instrucciones: {
+        type: String,
+        trim: true,
+        maxlength: 1000,
+        default: ''
+    },
+    configuradaEn: {
+        type: Date,
+        default: null
+    },
+    solicitadaEn: {
+        type: Date,
+        default: null
+    },
+    revisadaEn: {
+        type: Date,
+        default: null
+    }
+}, { _id: false });
+
+const aceptacionesLegalesSchema = new mongoose.Schema({
+    mayorEdadDeclarada: { type: Boolean, default: false },
+    terminosVersion: { type: String, default: '' },
+    terminosAceptadosEn: { type: Date, default: null },
+    privacidadVersion: { type: String, default: '' },
+    privacidadAceptadaEn: { type: Date, default: null }
+}, { _id: false });
+
 const usuarioSchema = new mongoose.Schema({
     nombreUsuario: {
         type: String,
@@ -61,9 +111,12 @@ const usuarioSchema = new mongoose.Schema({
     },
 
     // Verificación inicial de cuenta por correo
-    verificationCode: {
-        type: String
-    },
+    // Campo legado conservado temporalmente para cuentas pendientes creadas por versiones anteriores.
+    verificationCode: { type: String, default: null },
+    verificationCodeHash: { type: String, default: null },
+    verificationCodeExpires: { type: Date, default: null },
+    verificationAttempts: { type: Number, default: 0, min: 0 },
+    verificationLastSentAt: { type: Date, default: null },
     isVerified: {
         type: Boolean,
         default: false
@@ -74,10 +127,11 @@ const usuarioSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    twoFactorCode: {
-        type: String,
-        default: null
-    },
+    // twoFactorCode queda solo para compatibilidad con sesiones iniciadas antes de esta versión.
+    twoFactorCode: { type: String, default: null },
+    twoFactorCodeHash: { type: String, default: null },
+    twoFactorAttempts: { type: Number, default: 0, min: 0 },
+    twoFactorLastSentAt: { type: Date, default: null },
     twoFactorCodeExpires: {
         type: Date,
         default: null
@@ -177,6 +231,22 @@ const usuarioSchema = new mongoose.Schema({
     e2eConfigUpdatedAt: {
         type: Date,
         default: null
+    },
+
+
+    aceptacionesLegales: {
+        type: aceptacionesLegalesSchema,
+        default: () => ({})
+    },
+
+    sucesionCuenta: {
+        type: sucesionCuentaSchema,
+        default: () => ({})
+    },
+
+    onboarding: {
+        versionVista: { type: String, default: '' },
+        completadoEn: { type: Date, default: null }
     },
 
     // Fechas privadas usadas para calcular novedades de Red entre dispositivos.

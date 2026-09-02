@@ -942,3 +942,10 @@ html[data-bs-theme="dark"] .contenedor-login .input-fecha-registro,
     font-size: 1rem;
     line-height: 1;
 }
+
+.bloque-sucesion-registro {
+  padding: 14px;
+  border: 1px solid var(--borde-color, #e2e8f0);
+  border-radius: 14px;
+  background: rgba(205, 164, 52, 0.06);
+}

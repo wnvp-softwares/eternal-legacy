@@ -1,4 +1,5 @@
 const { Arbol, Nodo, Hilo } = require('../../models/index.model');
+const { reorganizarArbolCompleto } = require('../../services/layoutArbol.service');
 
 const obtenerIdSeguro = (valor) => {
     if (!valor) return null;
@@ -105,6 +106,20 @@ const anclarParejaEnNodoDestino = async ({ nodoOrigen, nodoDestino, tipoRelacion
     await nodoDestino.save();
 };
 
+
+const reorganizarDespuesDeRelacion = async (arbolId) => {
+    try {
+        return await reorganizarArbolCompleto({
+            arbolId,
+            conservarPosicionesManuales: true
+        });
+    } catch (error) {
+        // La relación ya quedó persistida. El fallo de layout no debe dejar
+        // al usuario sin respuesta ni obligarlo a repetir la operación.
+        console.error('⚠️ No se pudo reorganizar automáticamente el árbol:', error);
+        return null;
+    }
+};
 const crearHilo = async (req, res) => {
     try {
         const {
@@ -214,6 +229,7 @@ const crearHilo = async (req, res) => {
 
             await relacionExistente.save();
             await anclarParejaEnNodoDestino({ nodoOrigen, nodoDestino, tipoRelacion });
+            await reorganizarDespuesDeRelacion(arbolId);
 
             const hiloPoblado = await poblarHilo(relacionExistente._id);
 
@@ -240,6 +256,7 @@ const crearHilo = async (req, res) => {
         });
 
         await anclarParejaEnNodoDestino({ nodoOrigen, nodoDestino, tipoRelacion });
+        await reorganizarDespuesDeRelacion(arbolId);
 
         const hiloPoblado = await poblarHilo(nuevoHilo._id);
 
@@ -289,6 +306,7 @@ const crearHilo = async (req, res) => {
                     if (descripcion !== undefined) relacionExistente.descripcion = descripcion;
 
                     await relacionExistente.save();
+                    await reorganizarDespuesDeRelacion(arbolId);
 
                     const hiloPoblado = await poblarHilo(relacionExistente._id);
 
@@ -483,6 +501,7 @@ const actualizarHilo = async (req, res) => {
         }
 
         await hilo.save();
+        await reorganizarDespuesDeRelacion(arbolId);
 
         const hiloActualizado = await poblarHilo(hilo._id);
 
@@ -540,6 +559,7 @@ const eliminarHilo = async (req, res) => {
 
         hilo.estado = 'Eliminada';
         await hilo.save();
+        await reorganizarDespuesDeRelacion(arbolId);
 
         res.status(200).json({
             mensaje: 'Relación eliminada correctamente'

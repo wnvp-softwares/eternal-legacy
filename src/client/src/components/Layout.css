@@ -1475,3 +1475,191 @@ html[data-vista-mensajes-activa="true"][data-teclado-mensajes="abierto"] .navega
         transform: none;
     }
 }
+
+
+/* Vista inmersiva del árbol: conserva la navegación superior, pero entrega el resto
+   del viewport al lienzo genealógico en escritorio. */
+.layout-principal.vista-arbol-inmersiva .contenedor-contenido {
+    flex: 1;
+    min-height: 0;
+}
+
+.layout-principal.vista-arbol-inmersiva .contenido-central-arbol {
+    padding: 0 !important;
+    margin: 0 !important;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+@media (min-width: 1200px) {
+    .layout-principal.vista-arbol-inmersiva .contenido-central-arbol {
+        width: 100%;
+    }
+}
+\n\n/* ===== Onboarding global (minuta 09-08-2026) ===== */\n.onboarding-global-backdrop {\n  position: fixed;\n  inset: 0;\n  z-index: 13000;\n  display: grid;\n  place-items: center;\n  padding: 24px;\n  background: rgba(13, 27, 42, 0.66);\n  backdrop-filter: blur(8px);\n}\n\n.onboarding-global {\n  width: min(520px, 100%);\n  border: 1px solid rgba(255, 193, 7, 0.3);\n  border-radius: 28px;\n  background: var(--fondo-principal, #fff);\n  color: var(--texto-principal, #17202a);\n  padding: 34px;\n  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);\n  text-align: center;\n}\n\n.onboarding-progreso {\n  display: flex;\n  justify-content: center;\n  gap: 7px;\n  margin-bottom: 26px;\n}\n\n.onboarding-progreso-punto {\n  width: 30px;\n  height: 5px;\n  border-radius: 999px;\n  background: rgba(127, 127, 127, 0.24);\n}\n\n.onboarding-progreso-punto.activo {\n  background: #ffc107;\n}\n\n.onboarding-icono {\n  width: 72px;\n  height: 72px;\n  margin: 0 auto 18px;\n  border-radius: 22px;\n  display: grid;\n  place-items: center;\n  font-size: 30px;\n  color: #0d1b2a;\n  background: linear-gradient(145deg, #ffd75e, #ffc107);\n  box-shadow: 0 14px 30px rgba(255, 193, 7, 0.22);\n}\n\n.onboarding-eyebrow {\n  display: block;\n  margin-bottom: 8px;\n  color: #9b7200;\n  font-size: 0.76rem;\n  font-weight: 800;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n}\n\n.onboarding-global h2 {\n  margin: 0 0 12px;\n  font-size: clamp(1.45rem, 3vw, 2rem);\n}\n\n.onboarding-global > p {\n  margin: 0 auto;\n  max-width: 430px;\n  color: var(--texto-secundario, #667085);\n  line-height: 1.65;\n}\n\n.onboarding-global-acciones {\n  display: flex;\n  justify-content: space-between;\n  gap: 12px;\n  margin-top: 30px;\n}\n\n.boton-onboarding-secundario,\n.boton-onboarding-primario {\n  min-height: 44px;\n  border-radius: 13px;\n  padding: 0 18px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  font-weight: 800;\n}\n\n.boton-onboarding-secundario {\n  border: 1px solid rgba(127, 127, 127, 0.28);\n  background: transparent;\n  color: inherit;\n}\n\n.boton-onboarding-primario {\n  border: 0;\n  margin-left: auto;\n  background: #ffc107;\n  color: #0d1b2a;\n}\n\n@media (max-width: 575.98px) {\n  .onboarding-global-backdrop { padding: 14px; }\n  .onboarding-global { padding: 28px 20px 22px; border-radius: 22px; }\n  .onboarding-global-acciones { margin-top: 24px; }\n  .boton-onboarding-secundario, .boton-onboarding-primario { flex: 1; padding: 0 12px; }\n}\n
+/* ===== Vista árbol dominante: el árbol es la aplicación principal ===== */
+.layout-principal.vista-arbol-inmersiva {
+    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* En la vista del árbol desaparece el chrome tradicional. Se recupera desde el dock. */
+.layout-principal.vista-arbol-inmersiva > .navbar-superior,
+.layout-principal.vista-arbol-inmersiva .navegacion-inferior-movil {
+    display: none !important;
+}
+
+.layout-principal.vista-arbol-inmersiva .contenedor-contenido {
+    height: 100vh;
+    min-height: 100vh;
+    width: 100%;
+    overflow: hidden;
+}
+
+.layout-principal.vista-arbol-inmersiva .contenido-central-arbol {
+    width: 100%;
+    height: 100vh;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+}
+
+.dock-arbol-compacto {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 1210;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    border: 1px solid color-mix(in srgb, var(--borde-color) 82%, transparent);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--fondo-tarjeta) 91%, transparent);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(14px);
+}
+
+.boton-dock-arbol {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: 13px;
+    background: transparent;
+    color: var(--texto-secundario);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color .18s ease, color .18s ease, transform .18s ease;
+}
+
+.boton-dock-arbol:hover,
+.boton-dock-arbol.activo {
+    background: var(--hover-menu);
+    color: var(--texto-principal);
+}
+
+.boton-dock-arbol:focus-visible {
+    outline: 2px solid var(--dorado);
+    outline-offset: 2px;
+}
+
+.boton-dock-arbol i { font-size: 1.15rem; }
+.avatar-dock-arbol { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
+.badge-dock-arbol {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--dorado);
+    color: #fff;
+    font-size: .62rem;
+    font-weight: 800;
+}
+
+.panel-colapsable-arbol {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1230;
+    width: min(320px, calc(100vw - 56px));
+    padding: 18px 14px;
+    background: var(--fondo-tarjeta);
+    border-right: 1px solid var(--borde-color);
+    box-shadow: 18px 0 48px rgba(15, 23, 42, .16);
+    transform: translateX(-104%);
+    visibility: hidden;
+    transition: transform .22s ease, visibility .22s step-end;
+}
+
+.panel-colapsable-arbol.abierto {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform .22s ease, visibility 0s;
+}
+
+.panel-colapsable-arbol-cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 8px 18px;
+}
+
+.panel-colapsable-arbol-cabecera > div { display: flex; flex-direction: column; }
+.panel-colapsable-eyebrow { color: var(--dorado-oscuro); font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.panel-colapsable-arbol-cabecera strong { color: var(--texto-principal); font-size: 1.18rem; }
+.panel-colapsable-arbol-cabecera button {
+    width: 38px; height: 38px; border: 0; border-radius: 12px;
+    color: var(--texto-secundario); background: var(--hover-menu); cursor: pointer;
+}
+
+.panel-colapsable-arbol-links { display: flex; flex-direction: column; gap: 4px; }
+.panel-colapsable-arbol-links a,
+.panel-colapsable-arbol-links button {
+    width: 100%;
+    min-height: 46px;
+    border: 0;
+    border-radius: 14px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    color: var(--texto-secundario);
+    background: transparent;
+    text-decoration: none;
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+    text-align: left;
+}
+.panel-colapsable-arbol-links a:hover,
+.panel-colapsable-arbol-links button:hover,
+.panel-colapsable-arbol-links a.activo { background: var(--hover-menu); color: var(--texto-principal); }
+.panel-colapsable-arbol-links a.activo i { color: var(--dorado-oscuro); }
+.panel-colapsable-arbol-links i { width: 22px; text-align: center; font-size: 1.08rem; }
+
+.backdrop-panel-arbol {
+    position: fixed;
+    inset: 0;
+    z-index: 1220;
+    border: 0;
+    background: rgba(15, 23, 42, .22);
+    backdrop-filter: blur(2px);
+}
+
+@media (max-width: 575.98px) {
+    .dock-arbol-compacto { top: 8px; right: 8px; gap: 2px; padding: 4px; border-radius: 15px; }
+    .boton-dock-arbol { width: 38px; height: 38px; border-radius: 11px; }
+}
