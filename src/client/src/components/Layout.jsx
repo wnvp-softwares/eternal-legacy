@@ -14,28 +14,33 @@ const VERSION_ONBOARDING = 'legacy-2026-09';
 const PASOS_ONBOARDING = [
   {
     icono: 'bi-diagram-3-fill',
-    titulo: 'Tu árbol es el punto de partida',
-    descripcion: 'Construye tu historia desde el árbol. Selecciona a una persona y agrega padre, madre, hijo, hija o pareja para que Legacy coloque la relación automáticamente.'
+    titulo: 'El árbol es Legacy',
+    descripcion: 'Al iniciar sesión entras directamente al árbol genealógico a pantalla completa. Es la vista principal y siempre debe tener la mayor superficie disponible.'
+  },
+  {
+    icono: 'bi-grid',
+    titulo: 'Los demás módulos son secundarios',
+    descripcion: 'El pequeño dock lateral abre paneles individuales para navegar, buscar, revisar actividad, administrar tu cuenta o pedir ayuda sin mantener barras grandes alrededor del árbol.'
+  },
+  {
+    icono: 'bi-person-plus-fill',
+    titulo: 'Agrega familiares desde su parentesco',
+    descripcion: 'Selecciona a una persona y agrega Padre/Madre, Hijo/Hija o Pareja. Legacy calcula la generación, crea la línea correcta y reorganiza la rama automáticamente.'
   },
   {
     icono: 'bi-images',
-    titulo: 'Conserva recuerdos',
-    descripcion: 'Guarda publicaciones, fotografías y momentos importantes para mantener la historia familiar ligada a las personas que la vivieron.'
-  },
-  {
-    icono: 'bi-calendar-heart',
-    titulo: 'Organiza eventos familiares',
-    descripcion: 'Consulta y crea eventos para reunir fechas y recuerdos relevantes de tu familia en un mismo lugar.'
+    titulo: 'Conserva recuerdos y eventos',
+    descripcion: 'Fotografías, publicaciones y eventos familiares siguen disponibles como herramientas secundarias desde los controles compactos del árbol.'
   },
   {
     icono: 'bi-shield-lock-fill',
-    titulo: 'Controla privacidad y seguridad',
-    descripcion: 'Desde Configuración puedes revisar privacidad, cambiar tu contraseña, activar el código de verificación en dos pasos y administrar la sucesión de tu cuenta.'
+    titulo: 'Privacidad, seguridad y sucesión',
+    descripcion: 'Desde tu cuenta puedes revisar las medidas de seguridad, cambiar tu contraseña, activar verificación en dos pasos y designar una persona sucesora.'
   },
   {
-    icono: 'bi-chat-heart-fill',
-    titulo: 'Conecta y pide ayuda',
-    descripcion: 'Usa mensajes para conversar con tus contactos y abre esta guía nuevamente desde tu perfil cuando necesites recordar alguna función.'
+    icono: 'bi-question-circle-fill',
+    titulo: 'La guía siempre está disponible',
+    descripcion: 'Puedes volver a abrir esta introducción y la ayuda específica del árbol en cualquier momento desde el control de Ayuda.'
   }
 ];
 
@@ -219,14 +224,7 @@ export default function Layout() {
   const [onboardingAbierto, setOnboardingAbierto] = useState(false);
   const [pasoOnboarding, setPasoOnboarding] = useState(0);
   const [guardandoOnboarding, setGuardandoOnboarding] = useState(false);
-<<<<<<< HEAD
-  const [menuArbolCompactoAbierto, setMenuArbolCompactoAbierto] = useState(false);
-=======
-<<<<<<< HEAD
-  const [menuArbolCompactoAbierto, setMenuArbolCompactoAbierto] = useState(false);
-=======
->>>>>>> ff12bff02b5f522e89a7927d2515708e307c284d
->>>>>>> e3aa9df92abc103fcf92b33f2e0eae2ef371c2b3
+  const [panelArbolActivo, setPanelArbolActivo] = useState(null);
 
   const token = localStorage.getItem('token');
   const queryBusqueda = textoBusqueda.trim();
@@ -234,6 +232,17 @@ export default function Layout() {
   const totalIndicadoresRed = Number(indicadoresNavegacion?.red?.total) || 0;
   const totalNotificacionesNoLeidas = Number(indicadoresNavegacion?.notificaciones?.totalNoLeidas) || 0;
   const esVistaArbol = location.pathname.startsWith('/arbol-genealogico');
+
+  useEffect(() => {
+    setPanelArbolActivo(null);
+    setDropdownAbierto(false);
+    setBusquedaAbierta(false);
+  }, [location.pathname]);
+
+  const alternarPanelArbol = (panel) => {
+    setPanelArbolActivo(actual => actual === panel ? null : panel);
+    setDropdownAbierto(false);
+  };
 
   const esActiva = (ruta) => location.pathname.includes(ruta);
 
@@ -324,6 +333,7 @@ export default function Layout() {
   const abrirModalSoporte = (evento) => {
     botonSoporteOrigenRef.current = evento?.currentTarget || document.activeElement;
     setDropdownAbierto(false);
+    setPanelArbolActivo(null);
     cerrarBuscador();
     setMensajeSoporte('');
     setErrorSoporte('');
@@ -385,6 +395,7 @@ export default function Layout() {
 
   const abrirGuiaUso = () => {
     setDropdownAbierto(false);
+    setPanelArbolActivo(null);
     setPasoOnboarding(0);
     setOnboardingAbierto(true);
   };
@@ -868,7 +879,8 @@ export default function Layout() {
 
   return (
     <div className={`layout-principal ${esVistaArbol ? 'vista-arbol-inmersiva' : ''}`}>
-      {/* NAVBAR SUPERIOR */}
+      {/* NAVBAR SUPERIOR: no se renderiza en el shell Tree-first */}
+      {!esVistaArbol && (
       <nav className="navbar-superior d-flex align-items-center justify-content-between px-3 px-md-4 border-bottom">
         <div className="marca-nav-principal d-flex align-items-center gap-2">
           <i className="bi bi-infinity icono-logo"></i>
@@ -1013,8 +1025,9 @@ export default function Layout() {
           </div>
         </div>
       </nav>
+      )}
 
-      {busquedaMovilAbierta && (
+      {!esVistaArbol && busquedaMovilAbierta && (
         <div className="modal-busqueda-movil">
           <div className="cabecera-busqueda-movil">
             <button type="button" className="boton-volver-busqueda" onClick={() => cerrarBuscador()}>
@@ -1047,56 +1060,247 @@ export default function Layout() {
       )}
 
       {esVistaArbol && (
-        <>
-          <div className="dock-arbol-compacto" aria-label="Navegación compacta del árbol">
+        <div className="navegacion-tree-first" aria-label="Controles secundarios de Legacy">
+          <nav className="rail-global-arbol" aria-label="Paneles de navegación">
             <button
               type="button"
-              className={`boton-dock-arbol ${menuArbolCompactoAbierto ? 'activo' : ''}`}
-              onClick={() => setMenuArbolCompactoAbierto(abierto => !abierto)}
-              aria-expanded={menuArbolCompactoAbierto}
-              aria-controls="panel-navegacion-arbol"
-              title={menuArbolCompactoAbierto ? 'Cerrar navegación' : 'Abrir navegación'}
+              className={`boton-rail-arbol ${panelArbolActivo === 'navegacion' ? 'activo' : ''}`}
+              onClick={() => alternarPanelArbol('navegacion')}
+              aria-expanded={panelArbolActivo === 'navegacion'}
+              aria-controls="panel-global-arbol"
+              aria-label="Navegar por Legacy"
+              data-tooltip="Navegar"
             >
-              <i className={`bi ${menuArbolCompactoAbierto ? 'bi-x-lg' : 'bi-list'}`}></i>
+              <i className="bi bi-grid" aria-hidden="true"></i>
             </button>
-            <Link to="/mensajes" className="boton-dock-arbol" title="Mensajes" aria-label={`Mensajes: ${mensajesNoLeidos} no leídos`}>
-              <i className="bi bi-chat"></i>
-              {mensajesNoLeidos > 0 && <span className="badge-dock-arbol">{formatearCantidadIndicador(mensajesNoLeidos)}</span>}
-            </Link>
-            <Link to="/notificaciones" className="boton-dock-arbol" title="Notificaciones" aria-label={`Notificaciones: ${totalNotificacionesNoLeidas} no leídas`}>
-              <i className="bi bi-bell"></i>
-              {totalNotificacionesNoLeidas > 0 && <span className="badge-dock-arbol">{formatearCantidadIndicador(totalNotificacionesNoLeidas)}</span>}
-            </Link>
-            <button type="button" className="boton-dock-arbol" onClick={() => setDropdownAbierto(!dropdownAbierto)} title="Perfil" aria-label="Abrir perfil">
-              <img src={obtenerUrlImagenPerfil(usuarioLogueado?.imagenPerfil, usuarioLogueado?.nombreUsuario)} alt="" className="avatar-dock-arbol" />
-            </button>
-          </div>
 
-          <aside id="panel-navegacion-arbol" className={`panel-colapsable-arbol ${menuArbolCompactoAbierto ? 'abierto' : ''}`} aria-hidden={!menuArbolCompactoAbierto}>
-            <div className="panel-colapsable-arbol-cabecera">
-              <div>
-                <span className="panel-colapsable-eyebrow">Legacy</span>
-                <strong>Navegación</strong>
+            <button
+              type="button"
+              className={`boton-rail-arbol ${panelArbolActivo === 'buscar' ? 'activo' : ''}`}
+              onClick={() => alternarPanelArbol('buscar')}
+              aria-expanded={panelArbolActivo === 'buscar'}
+              aria-controls="panel-global-arbol"
+              aria-label="Buscar en Legacy"
+              data-tooltip="Buscar"
+            >
+              <i className="bi bi-search" aria-hidden="true"></i>
+            </button>
+
+            <button
+              type="button"
+              className={`boton-rail-arbol ${panelArbolActivo === 'actividad' ? 'activo' : ''}`}
+              onClick={() => alternarPanelArbol('actividad')}
+              aria-expanded={panelArbolActivo === 'actividad'}
+              aria-controls="panel-global-arbol"
+              aria-label="Actividad y comunicaciones"
+              data-tooltip="Actividad"
+            >
+              <i className="bi bi-bell" aria-hidden="true"></i>
+              {(mensajesNoLeidos + totalNotificacionesNoLeidas + totalIndicadoresRed) > 0 && (
+                <span className="badge-rail-arbol">
+                  {formatearCantidadIndicador(mensajesNoLeidos + totalNotificacionesNoLeidas + totalIndicadoresRed)}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`boton-rail-arbol boton-cuenta-rail ${panelArbolActivo === 'cuenta' ? 'activo' : ''}`}
+              onClick={() => alternarPanelArbol('cuenta')}
+              aria-expanded={panelArbolActivo === 'cuenta'}
+              aria-controls="panel-global-arbol"
+              aria-label="Cuenta y configuración"
+              data-tooltip="Cuenta"
+            >
+              <img
+                src={obtenerUrlImagenPerfil(usuarioLogueado?.imagenPerfil, usuarioLogueado?.nombreUsuario)}
+                alt=""
+                className="avatar-rail-arbol"
+              />
+            </button>
+
+            <button
+              type="button"
+              className={`boton-rail-arbol ${panelArbolActivo === 'ayuda' ? 'activo' : ''}`}
+              onClick={() => alternarPanelArbol('ayuda')}
+              aria-expanded={panelArbolActivo === 'ayuda'}
+              aria-controls="panel-global-arbol"
+              aria-label="Ayuda y soporte"
+              data-tooltip="Ayuda"
+            >
+              <i className="bi bi-question-circle" aria-hidden="true"></i>
+            </button>
+          </nav>
+
+          <aside
+            id="panel-global-arbol"
+            className={`panel-global-arbol ${panelArbolActivo ? 'abierto' : ''}`}
+            aria-hidden={!panelArbolActivo}
+          >
+            <header className="panel-global-arbol-cabecera">
+              <div className="marca-panel-tree-first">
+                <i className="bi bi-infinity" aria-hidden="true"></i>
+                <div>
+                  <span>Legacy</span>
+                  <strong>
+                    {panelArbolActivo === 'buscar' && 'Buscar'}
+                    {panelArbolActivo === 'actividad' && 'Actividad'}
+                    {panelArbolActivo === 'cuenta' && 'Tu cuenta'}
+                    {panelArbolActivo === 'ayuda' && 'Ayuda'}
+                    {(!panelArbolActivo || panelArbolActivo === 'navegacion') && 'Navegación'}
+                  </strong>
+                </div>
               </div>
-              <button type="button" onClick={() => setMenuArbolCompactoAbierto(false)} aria-label="Cerrar navegación"><i className="bi bi-x-lg"></i></button>
-            </div>
-            <nav className="panel-colapsable-arbol-links">
-              <Link to="/inicio"><i className="bi bi-house-door"></i><span>Inicio</span></Link>
-              <Link to="/arbol-genealogico" className="activo"><i className="bi bi-diagram-3"></i><span>Árbol Genealógico</span></Link>
-              <Link to="/mensajes"><i className="bi bi-chat-dots"></i><span>Mensajes</span></Link>
-              <Link to="/red"><i className="bi bi-people"></i><span>Red</span></Link>
-              <Link to="/notificaciones"><i className="bi bi-bell"></i><span>Notificaciones</span></Link>
-              <Link to="/perfil"><i className="bi bi-person"></i><span>Perfil</span></Link>
-              <Link to="/configuracion"><i className="bi bi-gear"></i><span>Configuración</span></Link>
-              <button type="button" onClick={abrirModalSoporte}><i className="bi bi-life-preserver"></i><span>Soporte</span></button>
-            </nav>
+              <button
+                type="button"
+                className="cerrar-panel-global-arbol"
+                onClick={() => setPanelArbolActivo(null)}
+                aria-label="Cerrar panel"
+              >
+                <i className="bi bi-x-lg" aria-hidden="true"></i>
+              </button>
+            </header>
+
+            {panelArbolActivo === 'navegacion' && (
+              <nav className="panel-global-arbol-links" aria-label="Secciones de Legacy">
+                <Link to="/arbol-genealogico" className="activo" onClick={() => setPanelArbolActivo(null)}>
+                  <i className="bi bi-diagram-3-fill"></i>
+                  <span><strong>Árbol Genealógico</strong><small>Pantalla principal</small></span>
+                </Link>
+                <Link to="/inicio" onClick={() => setPanelArbolActivo(null)}>
+                  <i className="bi bi-house-door"></i>
+                  <span><strong>Recuerdos</strong><small>Publicaciones e historia</small></span>
+                </Link>
+                <Link to="/red" onClick={() => setPanelArbolActivo(null)}>
+                  <i className="bi bi-people"></i>
+                  <span><strong>Personas</strong><small>Familia, amistades y conexiones</small></span>
+                </Link>
+                <Link to="/mensajes" onClick={() => setPanelArbolActivo(null)}>
+                  <i className="bi bi-chat-dots"></i>
+                  <span><strong>Mensajes</strong><small>{mensajesNoLeidos > 0 ? `${mensajesNoLeidos} sin leer` : 'Conversaciones'}</small></span>
+                </Link>
+                <Link to="/notificaciones" onClick={() => setPanelArbolActivo(null)}>
+                  <i className="bi bi-bell"></i>
+                  <span><strong>Notificaciones</strong><small>{totalNotificacionesNoLeidas > 0 ? `${totalNotificacionesNoLeidas} pendientes` : 'Sin pendientes'}</small></span>
+                </Link>
+              </nav>
+            )}
+
+            {panelArbolActivo === 'buscar' && (
+              <div className="panel-busqueda-tree-first">
+                <label htmlFor="busqueda-tree-first">Busca sin abandonar el árbol</label>
+                <div className="input-busqueda-tree-first">
+                  <i className="bi bi-search" aria-hidden="true"></i>
+                  <input
+                    id="busqueda-tree-first"
+                    type="search"
+                    value={textoBusqueda}
+                    placeholder="Familiares, personas o recuerdos..."
+                    onChange={(evento) => setTextoBusqueda(evento.target.value)}
+                    onKeyDown={(evento) => {
+                      if (evento.key === 'Enter') ejecutarBusquedaEnter();
+                    }}
+                    autoFocus
+                  />
+                  {textoBusqueda && (
+                    <button type="button" onClick={() => cerrarBuscador({ limpiarTexto: true })} aria-label="Limpiar búsqueda">
+                      <i className="bi bi-x-lg"></i>
+                    </button>
+                  )}
+                </div>
+                <div className="resultados-busqueda-tree-first">
+                  {renderContenidoBuscador()}
+                </div>
+              </div>
+            )}
+
+            {panelArbolActivo === 'actividad' && (
+              <div className="panel-actividad-tree-first">
+                <Link to="/mensajes" onClick={() => setPanelArbolActivo(null)}>
+                  <span className="icono-panel-tree-first"><i className="bi bi-chat-heart"></i></span>
+                  <span><strong>Mensajes</strong><small>{mensajesNoLeidos > 0 ? `${mensajesNoLeidos} conversación(es) con novedades` : 'No tienes mensajes nuevos'}</small></span>
+                  {mensajesNoLeidos > 0 && <b>{formatearCantidadIndicador(mensajesNoLeidos)}</b>}
+                </Link>
+                <Link to="/notificaciones" onClick={() => setPanelArbolActivo(null)}>
+                  <span className="icono-panel-tree-first"><i className="bi bi-bell"></i></span>
+                  <span><strong>Notificaciones</strong><small>{totalNotificacionesNoLeidas > 0 ? 'Tienes actividad pendiente' : 'Todo al día'}</small></span>
+                  {totalNotificacionesNoLeidas > 0 && <b>{formatearCantidadIndicador(totalNotificacionesNoLeidas)}</b>}
+                </Link>
+                <Link to="/red" onClick={() => setPanelArbolActivo(null)}>
+                  <span className="icono-panel-tree-first"><i className="bi bi-people"></i></span>
+                  <span><strong>Conexiones</strong><small>Solicitudes y actividad de personas</small></span>
+                  {totalIndicadoresRed > 0 && <b>{formatearCantidadIndicador(totalIndicadoresRed)}</b>}
+                </Link>
+                {invitacionesArbolPendientes > 0 && (
+                  <button type="button" onClick={() => setPanelArbolActivo(null)}>
+                    <span className="icono-panel-tree-first"><i className="bi bi-diagram-3"></i></span>
+                    <span><strong>Invitaciones familiares</strong><small>{invitacionesArbolPendientes} pendiente(s) en tus árboles</small></span>
+                    <b>{formatearCantidadIndicador(invitacionesArbolPendientes)}</b>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {panelArbolActivo === 'cuenta' && (
+              <div className="panel-cuenta-tree-first">
+                <div className="resumen-cuenta-tree-first">
+                  <img src={obtenerUrlImagenPerfil(usuarioLogueado?.imagenPerfil, usuarioLogueado?.nombreUsuario)} alt="" />
+                  <div>
+                    <strong>{usuarioLogueado?.nombreUsuario || 'Usuario'}</strong>
+                    <span>@{obtenerNicknameVisible(usuarioLogueado)}</span>
+                  </div>
+                </div>
+                <Link to="/perfil" onClick={() => setPanelArbolActivo(null)}><i className="bi bi-person"></i><span>Mi perfil</span></Link>
+                <Link to="/configuracion" onClick={() => setPanelArbolActivo(null)}><i className="bi bi-shield-lock"></i><span>Privacidad, seguridad y sucesión</span></Link>
+                <button type="button" onClick={abrirGuiaUso}><i className="bi bi-compass"></i><span>Volver a ver la guía de uso</span></button>
+                <button
+                  type="button"
+                  className="accion-salir-tree-first"
+                  onClick={() => {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('usuario');
+                    sessionStorage.removeItem(CLAVE_BIENVENIDA_SESION_PENDIENTE);
+                    window.location.href = '/login';
+                  }}
+                >
+                  <i className="bi bi-box-arrow-right"></i><span>Cerrar sesión</span>
+                </button>
+              </div>
+            )}
+
+            {panelArbolActivo === 'ayuda' && (
+              <div className="panel-ayuda-tree-first">
+                <div className="tarjeta-ayuda-tree-first">
+                  <i className="bi bi-diagram-3"></i>
+                  <div><strong>El árbol es tu inicio</strong><p>Selecciona una persona para agregar padre/madre, hijo/hija o pareja. Legacy calcula la generación, crea la línea y reacomoda la rama.</p></div>
+                </div>
+                <div className="tarjeta-ayuda-tree-first">
+                  <i className="bi bi-grid"></i>
+                  <div><strong>El resto es secundario</strong><p>Usa los controles de este costado para navegar, buscar, consultar actividad o abrir tu cuenta sin quitar espacio permanente al árbol.</p></div>
+                </div>
+                <button type="button" className="accion-panel-ayuda" onClick={abrirGuiaUso}>
+                  <i className="bi bi-play-circle"></i><span>Ver introducción completa</span>
+                </button>
+                <button type="button" className="accion-panel-ayuda" onClick={abrirModalSoporte}>
+                  <i className="bi bi-life-preserver"></i><span>Soporte y sugerencias</span>
+                </button>
+              </div>
+            )}
           </aside>
-          {menuArbolCompactoAbierto && <button type="button" className="backdrop-panel-arbol" onClick={() => setMenuArbolCompactoAbierto(false)} aria-label="Cerrar navegación"></button>}
-        </>
+
+          {panelArbolActivo && (
+            <button
+              type="button"
+              className="backdrop-panel-global-arbol"
+              onClick={() => setPanelArbolActivo(null)}
+              aria-label="Cerrar panel secundario"
+            ></button>
+          )}
+        </div>
       )}
 
       {/* CONTENEDOR PRINCIPAL */}
-      <div className="contenedor-contenido d-flex">
+      <div className={`contenedor-contenido d-flex ${esVistaArbol ? 'contenedor-contenido-arbol-total' : ''}`}>
         {/* --- SIDEBAR IZQUIERDA --- */}
         {!esVistaArbol && <aside className="sidebar-izquierda d-none d-xl-flex flex-column border-end py-4">
           <Link to="/inicio" className={`item-menu ${esActiva('/inicio') ? 'activo' : ''}`}><i className="bi bi-house-door"></i> Inicio</Link>
@@ -1148,7 +1352,8 @@ export default function Layout() {
           </button>
         </aside>}
 
-        {/* MENÚ INFERIOR MÓVIL */}
+        {/* MENÚ INFERIOR MÓVIL: solo en vistas secundarias */}
+        {!esVistaArbol && (
         <div className="navegacion-inferior-movil d-xl-none bg-white border-top w-100 position-fixed bottom-0 start-0 d-flex justify-content-around py-2" style={{ zIndex: 1000 }}>
           <Link to="/inicio" className={`${esActiva('/inicio') ? 'text-dark' : 'text-secondary'} d-flex flex-column align-items-center text-decoration-none`}>
             <i className={`bi bi-house-door${esActiva('/inicio') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/inicio') ? 'bold' : 'normal' }}>Inicio</span>
@@ -1192,6 +1397,7 @@ export default function Layout() {
             <i className={`bi bi-person${esActiva('/perfil') ? '-fill text-warning' : ''} fs-5`}></i><span style={{ fontSize: '0.7rem', fontWeight: esActiva('/perfil') ? 'bold' : 'normal' }}>Perfil</span>
           </Link>
         </div>
+        )}
 
         <main className={`contenido-central flex-grow-1 position-relative ${esVistaArbol ? 'contenido-central-arbol' : 'p-3 p-md-4 mb-5 mb-xl-0'}`}>
           <Outlet context={{ textoBusqueda }} />

@@ -850,4 +850,23 @@ html[data-theme="dark"] select.input-config {
   resize: vertical;
   min-height: 90px;
 }
-\n\n/* Resumen visible de seguridad y privacidad */\n.resumen-protecciones-legacy {\n  margin-top: 28px;\n  padding: 22px;\n  border: 1px solid var(--borde-color, #e5e7eb);\n  border-radius: 18px;\n  background: rgba(255, 193, 7, 0.06);\n}\n.resumen-protecciones-cabecera { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }\n.resumen-protecciones-cabecera > i { font-size: 1.6rem; color: #b8860b; }\n.resumen-protecciones-cabecera h5 { margin: 0 0 4px; font-weight: 800; }\n.resumen-protecciones-cabecera p, .resumen-protecciones-nota { margin: 0; color: var(--texto-secundario, #667085); font-size: .9rem; }\n.resumen-protecciones-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n.resumen-protecciones-grid > div { display: flex; gap: 10px; align-items: flex-start; padding: 13px; border-radius: 13px; background: var(--fondo-principal, #fff); }\n.resumen-protecciones-grid i { color: #b8860b; margin-top: 2px; }\n.resumen-protecciones-grid span { font-size: .88rem; line-height: 1.45; }\n.resumen-protecciones-nota { margin-top: 16px; }\n@media (max-width: 767.98px) { .resumen-protecciones-grid { grid-template-columns: 1fr; } }\n
+
+
+/* Resumen visible de seguridad y privacidad */
+.resumen-protecciones-legacy {
+  margin-top: 28px;
+  padding: 22px;
+  border: 1px solid var(--borde-color, #e5e7eb);
+  border-radius: 18px;
+  background: rgba(255, 193, 7, 0.06);
+}
+.resumen-protecciones-cabecera { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
+.resumen-protecciones-cabecera > i { font-size: 1.6rem; color: #b8860b; }
+.resumen-protecciones-cabecera h5 { margin: 0 0 4px; font-weight: 800; }
+.resumen-protecciones-cabecera p, .resumen-protecciones-nota { margin: 0; color: var(--texto-secundario, #667085); font-size: .9rem; }
+.resumen-protecciones-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.resumen-protecciones-grid > div { display: flex; gap: 10px; align-items: flex-start; padding: 13px; border-radius: 13px; background: var(--fondo-principal, #fff); }
+.resumen-protecciones-grid i { color: #b8860b; margin-top: 2px; }
+.resumen-protecciones-grid span { font-size: .88rem; line-height: 1.45; }
+.resumen-protecciones-nota { margin-top: 16px; }
+@media (max-width: 767.98px) { .resumen-protecciones-grid { grid-template-columns: 1fr; } }

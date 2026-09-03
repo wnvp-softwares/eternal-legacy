@@ -6936,84 +6936,330 @@ html[data-theme="dark"] .boton-camara-avatar-nodo {
         grid-template-columns: 1fr;
     }
 }
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> e3aa9df92abc103fcf92b33f2e0eae2ef371c2b3
 
-/* ===== Árbol a pantalla completa ===== */
+/* =========================================================
+   MINUTA 09/08/2026 · ÁRBOL = PANTALLA PRINCIPAL COMPLETA
+   ========================================================= */
+.layout-principal.vista-arbol-inmersiva .contenedor-arbol,
 .contenedor-arbol {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    min-height: 100%;
+    min-height: 0;
+    z-index: 10;
+    overflow: hidden;
+    background: var(--fondo-tarjeta);
 }
 
-/* La cabecera deja de consumir una franja grande del viewport. */
-.cabecera-arbol {
+/* La cabecera deja de ser una cabecera: ahora es un dock local del árbol. */
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol {
     position: absolute;
     top: 12px;
     left: 12px;
-    right: 230px;
-    z-index: 50;
+    right: auto;
+    bottom: auto;
+    z-index: 75;
     width: auto;
+    max-width: none;
     padding: 0;
+    margin: 0;
     pointer-events: none;
+    background: transparent;
 }
 
-.cabecera-arbol > * { pointer-events: auto; }
-.cabecera-arbol .antetitulo-familia,
-.cabecera-arbol .titulo-seccion { display: none; }
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol > * {
+    pointer-events: auto;
+}
 
-.barra-controles-superior {
-    display: inline-flex;
-    width: auto;
-    max-width: min(760px, calc(100vw - 280px));
-    gap: 6px;
-    padding: 6px;
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol > div:first-child,
+.layout-principal.vista-arbol-inmersiva .antetitulo-familia,
+.layout-principal.vista-arbol-inmersiva .titulo-seccion,
+.layout-principal.vista-arbol-inmersiva .cabecera-arbol .text-muted,
+.layout-principal.vista-arbol-inmersiva .leyenda-roles-superior {
+    display: none !important;
+}
+
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 5px;
     border: 1px solid color-mix(in srgb, var(--borde-color) 82%, transparent);
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--fondo-tarjeta) 91%, transparent);
-    box-shadow: 0 9px 28px rgba(15, 23, 42, .10);
-    backdrop-filter: blur(12px);
+    border-radius: 17px;
+    background: color-mix(in srgb, var(--fondo-tarjeta) 90%, transparent);
+    box-shadow: 0 11px 30px rgba(15, 23, 42, .12);
+    backdrop-filter: blur(15px);
 }
 
-.area-trabajo {
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .boton-accion-arbol {
+    position: relative;
+    width: 41px;
+    height: 41px;
+    min-width: 41px;
+    min-height: 41px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--texto-secundario);
+    font-size: 1.05rem;
+    cursor: pointer;
+}
+
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .boton-accion-arbol:hover,
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .boton-accion-arbol:focus-visible,
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .boton-accion-arbol.activo {
+    background: var(--hover-menu);
+    color: var(--texto-principal);
+}
+
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .boton-accion-arbol.activo {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dorado) 45%, transparent);
+}
+
+.layout-principal.vista-arbol-inmersiva .barra-controles-superior .texto-control-superior {
+    position: absolute;
+    left: calc(100% + 9px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    width: max-content;
+    max-width: 190px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--texto-principal) 91%, transparent);
+    color: var(--fondo-tarjeta);
+    font-size: .66rem;
+    font-weight: 700;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .layout-principal.vista-arbol-inmersiva .barra-controles-superior .boton-accion-arbol:hover .texto-control-superior,
+    .layout-principal.vista-arbol-inmersiva .barra-controles-superior .boton-accion-arbol:focus-visible .texto-control-superior {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(-50%) translateX(0);
+    }
+}
+
+/* El lienzo ocupa TODO el shell y ya no se presenta como tarjeta. */
+.layout-principal.vista-arbol-inmersiva .area-trabajo {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
+    min-height: 0;
     padding: 0;
     margin: 0 !important;
     gap: 0;
+    overflow: hidden;
 }
 
-.contenedor-lienzo {
+.layout-principal.vista-arbol-inmersiva .contenedor-lienzo {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
+    min-width: 0;
+    min-height: 0;
     border: 0;
     border-radius: 0;
+    background: var(--fondo-tarjeta);
+    overflow: hidden;
 }
 
-.lienzo-arbol {
+.layout-principal.vista-arbol-inmersiva .lienzo-arbol {
+    width: 100%;
+    height: 100%;
     min-width: 100%;
     min-height: 100%;
-    padding: 7rem 4rem 5rem;
+    padding: 5.5rem 5.75rem 5rem 5.5rem;
+    overflow: auto;
+    overscroll-behavior: contain;
 }
 
-@media (max-width: 991.98px) {
-    .cabecera-arbol { top: 8px; left: 8px; right: 178px; }
-    .barra-controles-superior { max-width: calc(100vw - 200px); overflow-x: auto; flex-wrap: nowrap; }
-    .leyenda-roles-superior { display: none; }
-    .lienzo-arbol { padding: 6rem 2rem 4rem; }
+/* Los paneles de edición/información se superponen; nunca reducen el lienzo. */
+.layout-principal.vista-arbol-inmersiva .panel-lateral-derecho {
+    position: absolute;
+    top: 12px;
+    right: 68px;
+    bottom: 12px;
+    z-index: 70;
+    width: min(360px, calc(100vw - 92px));
+    max-height: none;
+    border: 1px solid var(--borde-color);
+    border-radius: 20px;
+    box-shadow: 0 20px 55px rgba(15, 23, 42, .18);
+    background: color-mix(in srgb, var(--fondo-tarjeta) 97%, transparent);
+    backdrop-filter: blur(14px);
 }
 
-@media (max-width: 575.98px) {
-    .cabecera-arbol { right: 8px; top: 58px; }
-    .barra-controles-superior { max-width: calc(100vw - 16px); }
-    .lienzo-arbol { padding: 7rem 1rem 4rem; }
+/* Leyenda cerrada por defecto y controles locales discretos. */
+.layout-principal.vista-arbol-inmersiva .leyenda-estados-flotante {
+    left: 12px;
+    bottom: 12px;
+    z-index: 60;
+    border-width: 1px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .09);
 }
-<<<<<<< HEAD
-=======
-=======
->>>>>>> ff12bff02b5f522e89a7927d2515708e307c284d
->>>>>>> e3aa9df92abc103fcf92b33f2e0eae2ef371c2b3
+
+.layout-principal.vista-arbol-inmersiva .controles-zoom {
+    left: 12px;
+    bottom: 60px;
+    z-index: 62;
+    gap: 5px;
+}
+
+.layout-principal.vista-arbol-inmersiva .controles-mapa-izquierda.con-leyenda-abierta {
+    bottom: 205px;
+}
+
+.layout-principal.vista-arbol-inmersiva .controles-mapa-izquierda.con-leyenda-minimizada {
+    bottom: 60px;
+}
+
+.layout-principal.vista-arbol-inmersiva .control-exportar-flotante {
+    right: 68px;
+    bottom: 12px;
+    z-index: 64;
+}
+
+.layout-principal.vista-arbol-inmersiva .boton-zoom {
+    width: 39px;
+    height: 39px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--fondo-tarjeta) 94%, transparent) !important;
+    color: var(--texto-principal) !important;
+    border: 1px solid var(--borde-color);
+    box-shadow: 0 7px 20px rgba(15, 23, 42, .10);
+}
+
+.layout-principal.vista-arbol-inmersiva .boton-zoom:hover {
+    opacity: 1;
+    background: var(--hover-menu) !important;
+}
+
+/* El usuario principal debe funcionar como ancla visual. */
+.tarjeta-nodo-unificada.usuario-principal-arbol {
+    position: relative;
+    z-index: 8;
+    border-color: var(--dorado) !important;
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--dorado) 25%, transparent),
+        0 15px 34px rgba(15, 23, 42, .17) !important;
+}
+
+.tarjeta-nodo-unificada.usuario-principal-arbol::before {
+    content: 'Tú';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--dorado);
+    color: #fff;
+    font-size: .58rem;
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+/* Alta relacional: esta es la forma principal de sumar personas a un árbol existente. */
+.acciones-agregar-parentesco {
+    width: 100%;
+    padding: .8rem;
+    border: 1px solid color-mix(in srgb, var(--dorado) 38%, var(--borde-color));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--dorado) 7%, var(--fondo-tarjeta));
+}
+
+.acciones-agregar-parentesco > span {
+    display: block;
+    margin-bottom: .55rem;
+    color: var(--texto-secundario);
+    font-size: .72rem;
+    font-weight: 700;
+}
+
+.acciones-agregar-parentesco > div {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .4rem;
+}
+
+.acciones-agregar-parentesco button {
+    min-width: 0;
+    padding: .5rem .35rem !important;
+    justify-content: center;
+    gap: .3rem;
+    font-size: .7rem !important;
+}
+
+/* La pantalla de selección de árboles también ocupa el viewport completo. */
+.menu-arboles-contenedor,
+.menu-arboles-principal {
+    min-height: 100%;
+}
+
+@media (max-width: 767.98px) {
+    .layout-principal.vista-arbol-inmersiva .cabecera-arbol {
+        top: 8px;
+        left: 8px;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .barra-controles-superior {
+        flex-direction: row;
+        max-width: calc(100vw - 16px);
+        overflow-x: auto;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .barra-controles-superior .texto-control-superior {
+        display: none;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .lienzo-arbol {
+        padding: 4.8rem 1.25rem 5.5rem;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .panel-lateral-derecho {
+        top: 62px;
+        right: 8px;
+        bottom: 58px;
+        width: calc(100vw - 16px);
+        border-radius: 18px;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .control-exportar-flotante {
+        right: 8px;
+        bottom: 62px;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .leyenda-estados-flotante {
+        left: 8px;
+        bottom: 62px;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .controles-zoom {
+        left: auto;
+        right: 8px;
+        bottom: 112px;
+    }
+
+    .layout-principal.vista-arbol-inmersiva .controles-mapa-izquierda.con-leyenda-abierta,
+    .layout-principal.vista-arbol-inmersiva .controles-mapa-izquierda.con-leyenda-minimizada {
+        bottom: 112px;
+    }
+
+    .acciones-agregar-parentesco > div {
+        grid-template-columns: 1fr;
+    }
+}

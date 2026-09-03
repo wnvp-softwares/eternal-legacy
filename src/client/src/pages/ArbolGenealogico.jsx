@@ -1696,7 +1696,7 @@ export default function ArbolGenealogico() {
 
   const [esModoEdicion, establecerModoEdicion] = useState(false);
   const [nivelZoom, establecerNivelZoom] = useState(1);
-  const [leyendaAbierta, establecerLeyendaAbierta] = useState(true);
+  const [leyendaAbierta, establecerLeyendaAbierta] = useState(false);
 
   const [filtroVista, establecerFiltroVista] = useState(FILTROS_ARBOL_DEFECTO.vista);
   const [filtroRama, establecerFiltroRama] = useState(FILTROS_ARBOL_DEFECTO.rama);
@@ -3692,15 +3692,25 @@ export default function ArbolGenealogico() {
         return usuarioActualId && creadorId && String(creadorId) === String(usuarioActualId);
       }) || null;
 
+      const arbolesNormalizados = normalizarListaArboles(arboles, miArbol);
+
       establecerArbolPropio(miArbol);
-      establecerArbolesDisponibles(normalizarListaArboles(arboles, miArbol));
+      establecerArbolesDisponibles(arbolesNormalizados);
       establecerInvitacionesPendientes(invitaciones);
 
-      if (abrirArbolPropio && miArbol) {
-        await abrirArbol(miArbol);
-      } else {
-        establecerVistaActual('menu');
+      // La experiencia principal es siempre el árbol. Si el usuario aún no tiene
+      // uno propio pero pertenece a un árbol familiar, abrimos el más reciente
+      // directamente y dejamos el selector como una herramienta secundaria.
+      if (abrirArbolPropio) {
+        const arbolInicial = miArbol || arbolesNormalizados[0] || null;
+        if (arbolInicial) {
+          await abrirArbol(arbolInicial);
+          return;
+        }
       }
+
+      // Solo mostramos el gestor cuando todavía no existe ningún árbol accesible.
+      establecerVistaActual('menu');
     } catch (error) {
       console.error('Error al cargar menú de árboles:', error);
       establecerErrorArbol(error.message || 'No se pudo cargar el menú de árboles.');
@@ -7512,7 +7522,7 @@ La persona seguirá dentro del árbol como miembro normal.`
       >
         <div className={`etiqueta-generacion ${soloAgregar ? 'fantasma' : ''}`}>
           <span>{textoGeneracion}</span>
-          {esUsuarioAdmin && (
+          {esUsuarioAdmin && (puedeMoverAqui || nodos.length === 0) && (
             <button
               type="button"
               className={`boton-agregar-generacion ${puedeMoverAqui ? 'mover' : ''}`}
@@ -8090,10 +8100,10 @@ La persona seguirá dentro del árbol como miembro normal.`
             <span className="modal-accion-arbol-etiqueta">Instrucciones</span>
             <h3 id="titulo-ayuda-arbol">Cómo usar tu árbol genealógico</h3>
             <div className="lista-ayuda-edicion-rapida">
-              <div><i className="bi bi-grid-1x2"></i><span>Al entrar se abre automáticamente el árbol que creaste. Usa <strong>Ver mis árboles</strong> en los atajos superiores para crear, seleccionar o consultar otros árboles.</span></div>
+              <div><i className="bi bi-grid-1x2"></i><span>Al entrar se abre automáticamente tu árbol. Usa el <strong>dock compacto del árbol</strong> para consultar otros árboles sin convertirlos en la pantalla principal.</span></div>
               {esUsuarioAdmin && (
                 <>
-                  <div><i className="bi bi-plus-circle"></i><span>Usa el botón <strong>+</strong> de una generación para agregar familiares.</span></div>
+                  <div><i className="bi bi-person-plus"></i><span>Selecciona a una persona y usa <strong>Padre/Madre, Hijo/Hija o Pareja</strong>. Legacy crea el vínculo y calcula la ubicación automáticamente.</span></div>
                   <div><i className="bi bi-hand-index-thumb"></i><span>Mantén presionado un nodo y selecciona una <strong>casilla dorada</strong> para fijar su posición exacta dentro de una generación.</span></div>
                   <div><i className="bi bi-people"></i><span>Mantén presionado a cualquier integrante de una pareja para <strong>mover el bloque completo</strong> sin eliminar su relación.</span></div>
                   <div><i className="bi bi-caret-right-fill"></i><span>Usa la flecha del nodo para crear una relación.</span></div>
@@ -8325,17 +8335,6 @@ La persona seguirá dentro del árbol como miembro normal.`
               style={{ display: 'flex', transform: `scale(${nivelZoom})`, transformOrigin: 'top left', transition: 'transform 0.2s ease-out' }}
             >
 
-              {nodos.length > 0 && nodosFiltrados.length > 0 && esUsuarioAdmin && (
-                <>
-                  {renderColumnaGeneracion(
-                    generacionesFiltroDisponibles[0] - 1,
-                    'ANTEPASADOS',
-                    { soloAgregar: true }
-                  )}
-                  <div className="columna-conector columna-conector-nueva" style={{ height: `${ALTURA_LIENZO}px` }}></div>
-                </>
-              )}
-
               {nodosFiltrados.length > 0 && generacionesExistentes.map((generacion, index) => (
                 <React.Fragment key={`gen-${generacion}`}>
                   {renderColumnaGeneracion(generacion)}
@@ -8346,19 +8345,6 @@ La persona seguirá dentro del árbol como miembro normal.`
                   )}
                 </React.Fragment>
               ))}
-
-              {nodos.length > 0 && nodosFiltrados.length > 0 && esUsuarioAdmin && (
-                <>
-                  <div className="columna-conector" style={{ height: `${ALTURA_LIENZO}px` }}>
-                    {renderLineasGeneracion(generacionesExistentes[generacionesExistentes.length - 1])}
-                  </div>
-                  {renderColumnaGeneracion(
-                    generacionesFiltroDisponibles[generacionesFiltroDisponibles.length - 1] + 1,
-                    'DESCENDIENTES',
-                    { soloAgregar: true }
-                  )}
-                </>
-              )}
 
               {nodos.length === 0 && (
                 <div className="columna-generacion columna-generacion-vacia" style={{ height: `${ALTURA_LIENZO}px` }}>
